@@ -96,6 +96,10 @@ export const dashboardApi = {
   getVisitsByRep: () => api.get<{ rep_name: string; visits: number; rep_id: number }[]>('/dashboard/visits-by-rep').then(r => r.data),
   getSalesByBusinessLine: () => api.get<{ name: string; value: number; color: string }[]>('/dashboard/sales-by-business-line').then(r => r.data),
   getRepStats: (rep_id: number) => api.get<RepStats>(`/dashboard/rep/${rep_id}/stats`).then(r => r.data),
+  getDailyTracking: (date?: string) => api.get<{
+    date: string;
+    reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
+  }>('/dashboard/daily-tracking', { params: date ? { date } : {} }).then(r => r.data),
 };
 
 // AI Agent

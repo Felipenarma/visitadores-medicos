@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Stethoscope, Calendar, TrendingUp, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Stethoscope, Calendar, TrendingUp, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -7,7 +7,7 @@ import {
 import StatCard from '../../components/StatCard';
 import { dashboardApi, seedApi } from '../../api';
 import type { DashboardStats, TodayVisit } from '../../types';
-import { format } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function AdminDashboard() {
@@ -18,6 +18,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState('');
+  const [trackingDate, setTrackingDate] = useState(new Date());
+  const [dailyTracking, setDailyTracking] = useState<{
+    date: string;
+    reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
+  } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -39,7 +44,18 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadTracking = async (date: Date) => {
+    try {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const dt = await dashboardApi.getDailyTracking(dateStr);
+      setDailyTracking(dt);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => { load(); }, []);
+  useEffect(() => { loadTracking(trackingDate); }, [trackingDate]);
 
   const handleSeed = async () => {
     setSeeding(true);
@@ -205,6 +221,94 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Daily Tracking by Rep */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Seguimiento Diario por Visitador</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTrackingDate(d => subDays(d, 1))}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ChevronLeft size={18} className="text-gray-600" />
+            </button>
+            <span className="text-sm font-medium text-gray-700 min-w-[140px] text-center">
+              {format(trackingDate, "EEEE d MMM", { locale: es })}
+            </span>
+            <button
+              onClick={() => setTrackingDate(d => addDays(d, 1))}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ChevronRight size={18} className="text-gray-600" />
+            </button>
+            <button
+              onClick={() => setTrackingDate(new Date())}
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium ml-1"
+            >
+              Hoy
+            </button>
+          </div>
+        </div>
+
+        {!dailyTracking || dailyTracking.reps.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-6">No hay visitas programadas para este día</p>
+        ) : (
+          <div className="space-y-3">
+            {dailyTracking.reps.map((rep) => (
+              <div key={rep.rep_id} className="border border-gray-100 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-blue-700 font-semibold text-sm">{rep.rep_name.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">{rep.rep_name}</p>
+                      <p className="text-xs text-gray-500">{rep.completed} de {rep.total} visitas completadas</p>
+                    </div>
+                  </div>
+                  <span className={`text-lg font-bold ${
+                    rep.completion_rate === 100 ? 'text-green-600' :
+                    rep.completion_rate >= 50 ? 'text-yellow-600' :
+                    rep.completion_rate > 0 ? 'text-orange-500' : 'text-gray-400'
+                  }`}>
+                    {rep.completion_rate}%
+                  </span>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div className="flex h-2.5 rounded-full overflow-hidden">
+                    {rep.completed > 0 && (
+                      <div className="bg-green-500 h-full" style={{ width: `${(rep.completed / rep.total) * 100}%` }} />
+                    )}
+                    {rep.missed > 0 && (
+                      <div className="bg-red-400 h-full" style={{ width: `${(rep.missed / rep.total) * 100}%` }} />
+                    )}
+                  </div>
+                </div>
+                {/* Status pills */}
+                <div className="flex gap-3 mt-2 text-xs">
+                  {rep.completed > 0 && (
+                    <span className="flex items-center gap-1 text-green-700">
+                      <CheckCircle size={12} /> {rep.completed} completadas
+                    </span>
+                  )}
+                  {rep.pending > 0 && (
+                    <span className="flex items-center gap-1 text-blue-600">
+                      <Clock size={12} /> {rep.pending} pendientes
+                    </span>
+                  )}
+                  {rep.missed > 0 && (
+                    <span className="flex items-center gap-1 text-red-600">
+                      <XCircle size={12} /> {rep.missed} perdidas
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Today's visits */}
