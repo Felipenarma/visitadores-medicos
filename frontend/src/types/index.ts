@@ -22,6 +22,8 @@ export interface MedicalRep {
 export interface Doctor {
   id: number;
   name: string;
+  rut?: string;
+  medical_center?: string;
   specialty?: string;
   address?: string;
   phone?: string;
@@ -69,6 +71,8 @@ export interface Sale {
 export interface SalesSummaryItem {
   doctor_id?: number;
   doctor_name: string;
+  doctor_rut?: string;
+  total_units: number;
   total_sales: number;
   sales_count: number;
   visits_count: number;

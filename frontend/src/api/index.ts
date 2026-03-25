@@ -104,6 +104,42 @@ export const agentApi = {
     api.post<{ response: string; conversation_history: AgentMessage[] }>('/agent/chat', data).then(r => r.data),
 };
 
+// Knowledge Base
+export const knowledgeApi = {
+  getAll: (category?: string) => api.get('/knowledge', { params: category ? { category } : {} }).then(r => r.data),
+  getCategories: () => api.get('/knowledge/categories').then(r => r.data),
+  create: (data: any) => api.post('/knowledge', data).then(r => r.data),
+  update: (id: number, data: any) => api.put(`/knowledge/${id}`, data).then(r => r.data),
+  delete: (id: number) => api.delete(`/knowledge/${id}`).then(r => r.data),
+  upload: (file: File, category: string, businessLineId?: number) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('category', category);
+    if (businessLineId) formData.append('business_line_id', String(businessLineId));
+    return api.post('/knowledge/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+};
+
+// Images
+export const imagesApi = {
+  getAll: (category?: string) => api.get('/images', { params: category ? { category } : {} }).then(r => r.data),
+  upload: (file: File, name: string, description: string, category: string, businessLineId?: number) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', name);
+    formData.append('description', description);
+    formData.append('category', category);
+    if (businessLineId) formData.append('business_line_id', String(businessLineId));
+    return api.post('/images', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+  delete: (id: number) => api.delete(`/images/${id}`).then(r => r.data),
+  getUrl: (id: number) => `${API_URL}/images/${id}/file`,
+};
+
 // Seed
 export const seedApi = {
   seed: () => api.post('/seed').then(r => r.data),

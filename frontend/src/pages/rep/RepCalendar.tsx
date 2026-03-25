@@ -30,7 +30,7 @@ export default function RepCalendar() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ status: '', notes: '' });
+  const [form, setForm] = useState({ status: '', notes: '', scheduled_date: '', scheduled_time: '' });
   const [updating, setUpdating] = useState(false);
 
   const load = async () => {
@@ -53,7 +53,10 @@ export default function RepCalendar() {
   const handleEventClick = (info: any) => {
     const visit: Visit = info.event.extendedProps.visit;
     setSelectedVisit(visit);
-    setForm({ status: visit.status, notes: visit.notes || '' });
+    const dateObj = new Date(visit.scheduled_date);
+    const dateStr = dateObj.toISOString().slice(0, 10);
+    const timeStr = dateObj.toTimeString().slice(0, 5);
+    setForm({ status: visit.status, notes: visit.notes || '', scheduled_date: dateStr, scheduled_time: timeStr });
     setModalOpen(true);
   };
 
@@ -61,9 +64,13 @@ export default function RepCalendar() {
     if (!selectedVisit) return;
     setUpdating(true);
     try {
+      const newDate = form.scheduled_date && form.scheduled_time
+        ? `${form.scheduled_date}T${form.scheduled_time}:00`
+        : undefined;
       await visitsApi.update(selectedVisit.id, {
         status: form.status as Visit['status'],
         notes: form.notes,
+        scheduled_date: newDate,
         actual_date: form.status === 'completed' ? new Date().toISOString() : undefined,
       });
       setModalOpen(false);
@@ -161,6 +168,25 @@ export default function RepCalendar() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <label className="label">Reagendar fecha y hora</label>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  className="input"
+                  value={form.scheduled_date}
+                  onChange={e => setForm({ ...form, scheduled_date: e.target.value })}
+                />
+                <input
+                  type="time"
+                  className="input"
+                  value={form.scheduled_time}
+                  onChange={e => setForm({ ...form, scheduled_time: e.target.value })}
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Cambia la fecha u hora si necesitas reagendar esta visita</p>
             </div>
 
             <div>

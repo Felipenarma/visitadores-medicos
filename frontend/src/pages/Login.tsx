@@ -13,18 +13,34 @@ export default function Login() {
   const [repId, setRepId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [reps, setReps] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (role === 'rep') {
+      repsApi.getAll().then(setReps).catch(() => setReps([]));
+    }
+  }, [role]);
+
+  const handleRepSelect = (id: string) => {
+    setRepId(id);
+    const selected = reps.find(r => r.id === parseInt(id));
+    if (selected) {
+      setName(selected.name);
+      setEmail(selected.email || `${selected.name.toLowerCase().replace(/\s+/g, '.')}@empresa.com`);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!name.trim() || !email.trim()) {
+    if (role === 'admin' && (!name.trim() || !email.trim())) {
       setError('Por favor completa todos los campos');
       return;
     }
 
     if (role === 'rep' && !repId) {
-      setError('Selecciona tu ID de visitador');
+      setError('Selecciona tu perfil de visitador');
       return;
     }
 
@@ -86,42 +102,45 @@ export default function Login() {
             </div>
           </div>
 
-          <div>
-            <label className="label">Nombre completo</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="input"
-              placeholder="Tu nombre completo"
-            />
-          </div>
+          {role === 'admin' && (
+            <>
+              <div>
+                <label className="label">Nombre completo</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="input"
+                  placeholder="Tu nombre completo"
+                />
+              </div>
 
-          <div>
-            <label className="label">Correo electrónico</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="input"
-              placeholder="correo@empresa.com"
-            />
-          </div>
+              <div>
+                <label className="label">Correo electrónico</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="input"
+                  placeholder="correo@empresa.com"
+                />
+              </div>
+            </>
+          )}
 
           {role === 'rep' && (
             <div>
-              <label className="label">ID de Visitador</label>
-              <input
-                type="number"
+              <label className="label">Selecciona tu perfil</label>
+              <select
                 value={repId}
-                onChange={e => setRepId(e.target.value)}
+                onChange={e => handleRepSelect(e.target.value)}
                 className="input"
-                placeholder="ID asignado (ej. 1, 2, 3...)"
-                min="1"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Ingresa el ID numérico asignado por el administrador
-              </p>
+              >
+                <option value="">-- Selecciona tu nombre --</option>
+                {reps.map(r => (
+                  <option key={r.id} value={r.id}>{r.name} - {r.territory || 'Sin territorio'}</option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -145,7 +164,7 @@ export default function Login() {
           <p className="text-xs text-gray-500 font-medium mb-2">Accesos de demostración:</p>
           <div className="space-y-1 text-xs text-gray-500">
             <p>Admin: cualquier nombre + correo</p>
-            <p>Visitador: cualquier nombre + correo + ID 1, 2 o 3</p>
+            <p>Visitador: selecciona tu perfil de la lista</p>
           </div>
         </div>
       </div>

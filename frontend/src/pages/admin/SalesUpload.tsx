@@ -33,9 +33,9 @@ export default function SalesUpload() {
     }
   };
 
-  const topSellers = summary.filter(s => s.total_sales > 0).slice(0, 15);
-  const converting = summary.filter(s => s.total_sales > 0 && s.visits_count > 0);
-  const withVisitsNoSales = summary.filter(s => s.total_sales === 0 && s.visits_count > 0);
+  const topSellers = summary.filter(s => (s.total_units || 0) > 0).slice(0, 30);
+  const converting = summary.filter(s => (s.total_units || 0) > 0 && s.visits_count > 0);
+  const withVisitsNoSales = summary.filter(s => (s.total_units || 0) === 0 && s.visits_count > 0);
 
   return (
     <div className="space-y-6">
@@ -48,7 +48,7 @@ export default function SalesUpload() {
       <div className="card max-w-2xl">
         <h2 className="font-semibold text-gray-900 mb-2">Cargar Archivo de Ventas</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Columnas requeridas: <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">nombre_medico</span>, <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">producto</span>, <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">monto</span>, <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">fecha_venta</span>
+          El sistema detecta automáticamente columnas de RUT, nombre, producto, cantidad y fecha. El cruce con médicos se hace por <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">RUT</span> primero.
         </p>
 
         <div className="relative border-2 border-dashed rounded-xl p-8 text-center transition-colors border-gray-300 hover:border-blue-400">
@@ -133,9 +133,9 @@ export default function SalesUpload() {
           </div>
           <div className="card text-center">
             <p className="text-3xl font-bold text-blue-600">
-              ${summary.reduce((s, i) => s + i.total_sales, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              {summary.reduce((s, i) => s + (i.total_units || 0), 0).toLocaleString()}
             </p>
-            <p className="text-sm text-gray-500 mt-1">Ventas totales</p>
+            <p className="text-sm text-gray-500 mt-1">Unidades vendidas</p>
           </div>
         </div>
       )}
@@ -155,25 +155,27 @@ export default function SalesUpload() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Médico</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">RUT</th>
                   <th className="text-center py-3 px-4 text-gray-500 font-medium">Visitas</th>
-                  <th className="text-center py-3 px-4 text-gray-500 font-medium">Ventas (registros)</th>
-                  <th className="text-right py-3 px-4 text-gray-500 font-medium">Monto Total</th>
+                  <th className="text-center py-3 px-4 text-gray-500 font-medium">Unidades Vendidas</th>
+                  <th className="text-center py-3 px-4 text-gray-500 font-medium">Registros</th>
                   <th className="text-center py-3 px-4 text-gray-500 font-medium">Convirtiendo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {topSellers.map((item, i) => (
-                  <tr key={i} className={`hover:bg-gray-50 ${item.total_sales > 0 && item.visits_count > 0 ? 'bg-green-50/30' : ''}`}>
+                  <tr key={i} className={`hover:bg-gray-50 ${(item.total_units || 0) > 0 && item.visits_count > 0 ? 'bg-green-50/30' : ''}`}>
                     <td className="py-3 px-4 font-medium text-gray-900">{item.doctor_name}</td>
+                    <td className="py-3 px-4 text-gray-500 text-xs">{item.doctor_rut || '—'}</td>
                     <td className="py-3 px-4 text-center text-gray-600">{item.visits_count}</td>
-                    <td className="py-3 px-4 text-center text-gray-600">{item.sales_count}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-gray-900">
-                      ${item.total_sales.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    <td className="py-3 px-4 text-center font-semibold text-gray-900">
+                      {(item.total_units || 0).toLocaleString()}
                     </td>
+                    <td className="py-3 px-4 text-center text-gray-600">{item.sales_count}</td>
                     <td className="py-3 px-4 text-center">
-                      {item.total_sales > 0 && item.visits_count > 0 ? (
+                      {(item.total_units || 0) > 0 && item.visits_count > 0 ? (
                         <span className="badge-completed">Sí</span>
-                      ) : item.total_sales > 0 ? (
+                      ) : (item.total_units || 0) > 0 ? (
                         <span className="badge-scheduled">Solo ventas</span>
                       ) : item.visits_count > 0 ? (
                         <span className="badge-missed">Solo visitas</span>
@@ -185,7 +187,7 @@ export default function SalesUpload() {
                 ))}
                 {topSellers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-400">
+                    <td colSpan={6} className="text-center py-8 text-gray-400">
                       No hay datos de ventas cargados aún
                     </td>
                   </tr>

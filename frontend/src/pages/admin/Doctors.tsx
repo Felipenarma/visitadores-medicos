@@ -6,7 +6,7 @@ import type { Doctor, MedicalRep, BusinessLine } from '../../types';
 import { format } from 'date-fns';
 
 const emptyDoctor: Partial<Doctor> = {
-  name: '', specialty: '', address: '', phone: '', email: '', notes: '',
+  name: '', rut: '', medical_center: '', specialty: '', address: '', phone: '', email: '', notes: '',
   prescribes_products: '', visit_frequency: 30, is_active: true
 };
 
@@ -160,6 +160,8 @@ export default function Doctors() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Médico</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">RUT</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Centro Médico</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Especialidad</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Línea</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Visitador</th>
@@ -176,6 +178,8 @@ export default function Doctors() {
                       <div className="font-medium text-gray-900">{doc.name}</div>
                       {doc.phone && <div className="text-xs text-gray-400">{doc.phone}</div>}
                     </td>
+                    <td className="py-3 px-4 text-gray-500 text-xs">{doc.rut || '—'}</td>
+                    <td className="py-3 px-4 text-gray-600 text-xs">{doc.medical_center || '—'}</td>
                     <td className="py-3 px-4 text-gray-600">{doc.specialty || '—'}</td>
                     <td className="py-3 px-4">
                       {doc.business_line_name ? (
@@ -232,6 +236,14 @@ export default function Doctors() {
             <div className="col-span-2">
               <label className="label">Nombre completo *</label>
               <input className="input" value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Dr. Nombre Apellido" />
+            </div>
+            <div>
+              <label className="label">RUT</label>
+              <input className="input" value={form.rut || ''} onChange={e => setForm({ ...form, rut: e.target.value })} placeholder="12.345.678-9" />
+            </div>
+            <div>
+              <label className="label">Centro Médico</label>
+              <input className="input" value={form.medical_center || ''} onChange={e => setForm({ ...form, medical_center: e.target.value })} placeholder="Clínica, Hospital..." />
             </div>
             <div>
               <label className="label">Especialidad</label>

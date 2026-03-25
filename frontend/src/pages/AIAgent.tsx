@@ -1,8 +1,77 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Loader2, Download, ExternalLink } from 'lucide-react';
 import { agentApi, repsApi } from '../api';
 import { useAuth } from '../context/AuthContext';
 import type { AgentMessage, MedicalRep } from '../types';
+
+function RenderMessage({ content, isUser }: { content: string; isUser: boolean }) {
+  // Clean markdown bold/italic before processing
+  let cleaned = content.replace(/\*\*/g, '').replace(/\*/g, '');
+
+  // Find all URLs in text
+  const urlPattern = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
+  const imageApiPattern = /\/api\/images\/\d+\/file/;
+
+  const parts: { type: 'text' | 'url' | 'image'; value: string }[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = urlPattern.exec(cleaned)) !== null) {
+    // Add text before URL
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: cleaned.slice(lastIndex, match.index) });
+    }
+
+    const url = match[1].replace(/[)\].,;:!?]+$/, ''); // Clean trailing punctuation
+    const isImage = imageApiPattern.test(url) || /\.(png|jpg|jpeg|gif|webp)$/i.test(url);
+    parts.push({ type: isImage ? 'image' : 'url', value: url });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < cleaned.length) {
+    parts.push({ type: 'text', value: cleaned.slice(lastIndex) });
+  }
+
+  if (parts.length === 0) {
+    parts.push({ type: 'text', value: cleaned });
+  }
+
+  return (
+    <div className="whitespace-pre-wrap leading-relaxed break-words">
+      {parts.map((part, i) => {
+        if (part.type === 'image') {
+          return (
+            <div key={i} className="my-3">
+              <img src={part.value} alt="QR / Imagen" className="w-48 max-w-full rounded-lg border border-gray-200 shadow-sm" />
+              <div className="flex gap-2 mt-2">
+                <a href={part.value} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium">
+                  <ExternalLink size={14} /> Abrir
+                </a>
+                <a href={part.value} download="qr-code.png"
+                  className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 font-medium">
+                  <Download size={14} /> Descargar
+                </a>
+              </div>
+            </div>
+          );
+        }
+
+        if (part.type === 'url') {
+          return (
+            <a key={i} href={part.value} target="_blank" rel="noopener noreferrer"
+              className={`underline break-all ${isUser ? 'text-blue-100 hover:text-white' : 'text-blue-600 hover:text-blue-800'}`}>
+              {part.value.length > 50 ? part.value.slice(0, 50) + '...' : part.value}
+            </a>
+          );
+        }
+
+        return <span key={i}>{part.value}</span>;
+      })}
+    </div>
+  );
+}
 
 export default function AIAgent() {
   const { user } = useAuth();
@@ -163,7 +232,7 @@ export default function AIAgent() {
                     ? 'bg-blue-600 text-white rounded-tr-sm'
                     : 'bg-gray-100 text-gray-800 rounded-tl-sm'
                 }`}>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <RenderMessage content={msg.content} isUser={msg.role === 'user'} />
                 </div>
               </div>
             ))}
