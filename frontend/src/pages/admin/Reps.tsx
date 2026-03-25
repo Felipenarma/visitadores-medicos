@@ -65,9 +65,14 @@ export default function Reps() {
   };
 
   const handleDelete = async (rep: MedicalRep) => {
-    if (!confirm(`¿Eliminar a ${rep.name}?`)) return;
+    const doctorCount = rep.doctor_count ?? 0;
+    const msg = doctorCount > 0
+      ? `¿Eliminar a ${rep.name}?\n\nEsto desasignará ${doctorCount} médico(s) y eliminará todas sus visitas programadas. Esta acción no se puede deshacer.`
+      : `¿Eliminar a ${rep.name}? Esta acción no se puede deshacer.`;
+    if (!confirm(msg)) return;
     try {
-      await repsApi.delete(rep.id);
+      const res = await repsApi.delete(rep.id);
+      alert(res.message || 'Visitador eliminado');
       load();
     } catch (e: any) {
       alert(e.response?.data?.detail || 'No se pudo eliminar');
