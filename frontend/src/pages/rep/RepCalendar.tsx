@@ -4,12 +4,13 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
-import { visitsApi } from '../../api';
+import { visitsApi, doctorsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import type { Visit } from '../../types';
+import type { Visit, Doctor } from '../../types';
 import Modal from '../../components/Modal';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Plus, Search } from 'lucide-react';
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: '#3B82F6',
@@ -28,15 +29,24 @@ const STATUS_LABELS: Record<string, string> = {
 export default function RepCalendar() {
   const { user } = useAuth();
   const [visits, setVisits] = useState<Visit[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [form, setForm] = useState({ status: '', notes: '', scheduled_date: '', scheduled_time: '' });
+  const [createForm, setCreateForm] = useState({ doctor_id: 0, scheduled_date: '', scheduled_time: '09:00', notes: '' });
+  const [doctorSearch, setDoctorSearch] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const load = async () => {
     if (!user?.rep_id) return;
-    const v = await visitsApi.getAll({ rep_id: user.rep_id });
+    const [v, d] = await Promise.all([
+      visitsApi.getAll({ rep_id: user.rep_id }),
+      doctorsApi.getAll({ rep_id: user.rep_id, is_active: true }),
+    ]);
     setVisits(v);
+    setDoctors(d);
   };
 
   useEffect(() => { load(); }, [user?.rep_id]);
@@ -57,7 +67,13 @@ export default function RepCalendar() {
     const dateStr = dateObj.toISOString().slice(0, 10);
     const timeStr = dateObj.toTimeString().slice(0, 5);
     setForm({ status: visit.status, notes: visit.notes || '', scheduled_date: dateStr, scheduled_time: timeStr });
-    setModalOpen(true);
+    setEditModalOpen(true);
+  };
+
+  const handleDateClick = (info: any) => {
+    setCreateForm({ doctor_id: 0, scheduled_date: info.dateStr, scheduled_time: '09:00', notes: '' });
+    setDoctorSearch('');
+    setCreateModalOpen(true);
   };
 
   const handleUpdate = async () => {
@@ -73,11 +89,43 @@ export default function RepCalendar() {
         scheduled_date: newDate,
         actual_date: form.status === 'completed' ? new Date().toISOString() : undefined,
       });
-      setModalOpen(false);
+      setEditModalOpen(false);
       load();
     } catch { alert('Error al actualizar'); }
     finally { setUpdating(false); }
   };
+
+  const handleCreate = async () => {
+    if (!user?.rep_id || !createForm.doctor_id) return;
+    setCreating(true);
+    try {
+      await visitsApi.create({
+        doctor_id: createForm.doctor_id,
+        rep_id: user.rep_id,
+        scheduled_date: `${createForm.scheduled_date}T${createForm.scheduled_time}:00`,
+        status: 'scheduled',
+        notes: createForm.notes || undefined,
+      });
+      setCreateModalOpen(false);
+      load();
+    } catch { alert('Error al crear la cita'); }
+    finally { setCreating(false); }
+  };
+
+  const openCreateModal = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setCreateForm({ doctor_id: 0, scheduled_date: today, scheduled_time: '09:00', notes: '' });
+    setDoctorSearch('');
+    setCreateModalOpen(true);
+  };
+
+  const filteredDoctors = doctors.filter(d =>
+    d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+    (d.specialty || '').toLowerCase().includes(doctorSearch.toLowerCase()) ||
+    (d.medical_center || '').toLowerCase().includes(doctorSearch.toLowerCase())
+  );
+
+  const selectedDoctor = doctors.find(d => d.id === createForm.doctor_id);
 
   if (!user?.rep_id) {
     return (
@@ -89,9 +137,15 @@ export default function RepCalendar() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Mi Calendario</h1>
-        <p className="text-gray-500 text-sm mt-1">Tus visitas programadas</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Mi Calendario</h1>
+          <p className="text-gray-500 text-sm mt-1">Tus visitas programadas — haz click en un día para agendar</p>
+        </div>
+        <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
+          <Plus size={18} />
+          Nueva Cita
+        </button>
       </div>
 
       {/* Legend */}
@@ -115,6 +169,7 @@ export default function RepCalendar() {
           }}
           events={events}
           eventClick={handleEventClick}
+          dateClick={handleDateClick}
           height={620}
           locale="es"
           buttonText={{
@@ -125,7 +180,8 @@ export default function RepCalendar() {
         />
       </div>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Actualizar Visita">
+      {/* Modal Editar Visita */}
+      <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="Actualizar Visita">
         {selectedVisit && (
           <div className="space-y-4">
             <div className="bg-blue-50 rounded-lg p-4 space-y-2">
@@ -201,13 +257,115 @@ export default function RepCalendar() {
             </div>
 
             <div className="flex gap-3">
-              <button onClick={() => setModalOpen(false)} className="btn-secondary flex-1">Cancelar</button>
+              <button onClick={() => setEditModalOpen(false)} className="btn-secondary flex-1">Cancelar</button>
               <button onClick={handleUpdate} disabled={updating} className="btn-primary flex-1">
                 {updating ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal Crear Cita */}
+      <Modal isOpen={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Nueva Cita">
+        <div className="space-y-4">
+          {/* Doctor selector */}
+          <div>
+            <label className="label">Médico</label>
+            {selectedDoctor ? (
+              <div className="flex items-center justify-between bg-blue-50 rounded-lg p-3">
+                <div>
+                  <p className="font-semibold text-gray-900">{selectedDoctor.name}</p>
+                  <p className="text-sm text-gray-500">
+                    {[selectedDoctor.specialty, selectedDoctor.medical_center].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCreateForm({ ...createForm, doctor_id: 0 })}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    className="input pl-9 w-full"
+                    placeholder="Buscar médico por nombre, especialidad..."
+                    value={doctorSearch}
+                    onChange={e => setDoctorSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto border rounded-lg mt-2 divide-y">
+                  {filteredDoctors.length === 0 ? (
+                    <p className="text-sm text-gray-400 p-3 text-center">No se encontraron médicos</p>
+                  ) : (
+                    filteredDoctors.map(d => (
+                      <button
+                        key={d.id}
+                        onClick={() => { setCreateForm({ ...createForm, doctor_id: d.id }); setDoctorSearch(''); }}
+                        className="w-full text-left p-3 hover:bg-blue-50 transition-colors"
+                      >
+                        <p className="font-medium text-gray-900 text-sm">{d.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {[d.specialty, d.medical_center, d.city, d.commune].filter(Boolean).join(' · ')}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Fecha</label>
+              <input
+                type="date"
+                className="input w-full"
+                value={createForm.scheduled_date}
+                onChange={e => setCreateForm({ ...createForm, scheduled_date: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Hora</label>
+              <input
+                type="time"
+                className="input w-full"
+                value={createForm.scheduled_time}
+                onChange={e => setCreateForm({ ...createForm, scheduled_time: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="label">Notas (opcional)</label>
+            <textarea
+              className="input w-full"
+              rows={2}
+              value={createForm.notes}
+              onChange={e => setCreateForm({ ...createForm, notes: e.target.value })}
+              placeholder="Motivo de la visita, productos a presentar..."
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={() => setCreateModalOpen(false)} className="btn-secondary flex-1">Cancelar</button>
+            <button
+              onClick={handleCreate}
+              disabled={creating || !createForm.doctor_id || !createForm.scheduled_date}
+              className="btn-primary flex-1 disabled:opacity-50"
+            >
+              {creating ? 'Creando...' : 'Crear Cita'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
