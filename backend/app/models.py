@@ -37,6 +37,7 @@ class Doctor(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(150), nullable=False)
+    rut = Column(String(20), nullable=True, index=True)
     specialty = Column(String(100), nullable=True)
     address = Column(Text, nullable=True)
     phone = Column(String(20), nullable=True)
@@ -92,6 +93,11 @@ class Sale(Base):
     sale_date = Column(DateTime, nullable=True)
     upload_id = Column(Integer, ForeignKey("sales_uploads.id"), nullable=True)
     doctor_name_raw = Column(String(200), nullable=True)
+    rut_doctor = Column(String(20), nullable=True, index=True)
+    rut_paciente = Column(String(20), nullable=True)
+    nombre_paciente = Column(String(200), nullable=True)
+    categoria = Column(String(100), nullable=True)
+    external_id = Column(String(200), nullable=True, unique=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
     doctor = relationship("Doctor", back_populates="sales")

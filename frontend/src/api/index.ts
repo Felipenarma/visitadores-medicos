@@ -93,13 +93,30 @@ export const cardexApi = {
 export const dashboardApi = {
   getStats: () => api.get<DashboardStats>('/dashboard/stats').then(r => r.data),
   getTodayVisits: () => api.get<TodayVisit[]>('/dashboard/today').then(r => r.data),
-  getVisitsByRep: () => api.get<{ rep_name: string; visits: number; rep_id: number }[]>('/dashboard/visits-by-rep').then(r => r.data),
+  getVisitsByRep: (month?: number, year?: number) => api.get<{ rep_name: string; completed: number; total: number; rep_id: number }[]>('/dashboard/visits-by-rep', { params: { ...(month && { month }), ...(year && { year }) } }).then(r => r.data),
   getSalesByBusinessLine: () => api.get<{ name: string; value: number; color: string }[]>('/dashboard/sales-by-business-line').then(r => r.data),
   getRepStats: (rep_id: number) => api.get<RepStats>(`/dashboard/rep/${rep_id}/stats`).then(r => r.data),
   getDailyTracking: (date?: string) => api.get<{
     date: string;
     reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
   }>('/dashboard/daily-tracking', { params: date ? { date } : {} }).then(r => r.data),
+  getDoctorRanking: (month: number, year: number) =>
+    api.get('/dashboard/doctor-ranking', { params: { month, year } }).then(r => r.data),
+  getNewDoctors: (month: number, year: number) =>
+    api.get('/dashboard/new-doctors', { params: { month, year } }).then(r => r.data),
+  getRepCommissions: (month: number, year: number) =>
+    api.get('/dashboard/rep-commissions', { params: { month, year } }).then(r => r.data),
+};
+
+// Consolidated Sales
+export const consolidatedSalesApi = {
+  upload: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/sales/upload-consolidado', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(r => r.data);
+  },
 };
 
 // AI Agent
@@ -121,6 +138,15 @@ export const knowledgeApi = {
     formData.append('category', category);
     if (businessLineId) formData.append('business_line_id', String(businessLineId));
     return api.post('/knowledge/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+  uploadMultiple: (files: File[], category: string, businessLineId?: number) => {
+    const formData = new FormData();
+    files.forEach(f => formData.append('files', f));
+    formData.append('category', category);
+    if (businessLineId) formData.append('business_line_id', String(businessLineId));
+    return api.post('/knowledge/upload-multiple', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data);
   },

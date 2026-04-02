@@ -19,6 +19,8 @@ import RepDoctors from './pages/rep/RepDoctors';
 import AIAgent from './pages/AIAgent';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Images from './pages/admin/Images';
+import SalesRanking from './pages/admin/SalesRanking';
+import NewDoctors from './pages/admin/NewDoctors';
 
 function PrivateRoute({ children, role }: { children: React.ReactNode; role?: 'admin' | 'rep' }) {
   const { user } = useAuth();
@@ -52,6 +54,8 @@ function AppRoutes() {
               <Route path="agent" element={<AIAgent />} />
               <Route path="knowledge" element={<KnowledgeBase />} />
               <Route path="images" element={<Images />} />
+              <Route path="sales-ranking" element={<SalesRanking />} />
+              <Route path="new-doctors" element={<NewDoctors />} />
             </Routes>
           </Layout>
         </PrivateRoute>

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine
@@ -221,3 +221,209 @@ def get_rep_stats(rep_id: int, db: Session = Depends(get_db)):
         "missed_this_month": missed_month,
         "upcoming_visits": upcoming_list
     }
+
+
+@router.get("/doctor-ranking")
+def get_doctor_ranking(
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Ranking mensual de médicos por unidades vendidas."""
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+
+    from calendar import monthrange
+    _, last_day = monthrange(year, month)
+    period_start = datetime(year, month, 1)
+    period_end = datetime(year, month, last_day, 23, 59, 59)
+
+    sales = db.query(Sale).filter(
+        Sale.sale_date >= period_start,
+        Sale.sale_date <= period_end
+    ).all()
+
+    # Group by rut_doctor or doctor_id
+    doctor_map = {}
+    for s in sales:
+        key = s.rut_doctor or (f"id_{s.doctor_id}" if s.doctor_id else f"raw_{s.doctor_name_raw}")
+        if not key or key == "id_None":
+            continue
+        if key not in doctor_map:
+            doctor = db.query(Doctor).filter(Doctor.id == s.doctor_id).first() if s.doctor_id else None
+            rep = db.query(MedicalRep).filter(MedicalRep.id == doctor.rep_id).first() if doctor and doctor.rep_id else None
+            doctor_map[key] = {
+                "doctor_id": doctor.id if doctor else None,
+                "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
+                "rut_doctor": s.rut_doctor or "",
+                "specialty": doctor.specialty if doctor else None,
+                "rep_name": rep.name if rep else "Sin visitador",
+                "rep_id": rep.id if rep else None,
+                "units": 0,
+                "total_amount": 0.0,
+                "categorias": set(),
+            }
+        doctor_map[key]["units"] += 1
+        doctor_map[key]["total_amount"] += s.amount or 0
+        if s.categoria:
+            doctor_map[key]["categorias"].add(s.categoria)
+
+    result = []
+    for item in doctor_map.values():
+        item["categorias"] = list(item["categorias"])
+        result.append(item)
+
+    result.sort(key=lambda x: x["units"], reverse=True)
+    return result
+
+
+@router.get("/new-doctors")
+def get_new_doctors(
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Médicos que prescriben por primera vez en el período indicado."""
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+
+    from calendar import monthrange
+    _, last_day = monthrange(year, month)
+    period_start = datetime(year, month, 1)
+    period_end = datetime(year, month, last_day, 23, 59, 59)
+
+    # Ventas del período
+    period_sales = db.query(Sale).filter(
+        Sale.sale_date >= period_start,
+        Sale.sale_date <= period_end
+    ).all()
+
+    result = []
+    seen_ruts = set()
+
+    for s in period_sales:
+        key = s.rut_doctor or (f"id_{s.doctor_id}" if s.doctor_id else None)
+        if not key or key in seen_ruts:
+            continue
+        seen_ruts.add(key)
+
+        # Check if this doctor had ANY sale before this period
+        if s.rut_doctor:
+            prior = db.query(Sale).filter(
+                Sale.rut_doctor == s.rut_doctor,
+                Sale.sale_date < period_start
+            ).first()
+        elif s.doctor_id:
+            prior = db.query(Sale).filter(
+                Sale.doctor_id == s.doctor_id,
+                Sale.sale_date < period_start
+            ).first()
+        else:
+            continue
+
+        if prior:
+            continue  # No es nuevo
+
+        doctor = db.query(Doctor).filter(Doctor.id == s.doctor_id).first() if s.doctor_id else None
+        rep = db.query(MedicalRep).filter(MedicalRep.id == doctor.rep_id).first() if doctor and doctor.rep_id else None
+
+        # All sales of this doctor in this period
+        if s.rut_doctor:
+            doc_sales = db.query(Sale).filter(
+                Sale.rut_doctor == s.rut_doctor,
+                Sale.sale_date >= period_start,
+                Sale.sale_date <= period_end
+            ).all()
+        else:
+            doc_sales = db.query(Sale).filter(
+                Sale.doctor_id == s.doctor_id,
+                Sale.sale_date >= period_start,
+                Sale.sale_date <= period_end
+            ).all()
+
+        first_sale_date = min((x.sale_date for x in doc_sales if x.sale_date), default=None)
+        productos = list(set(x.product for x in doc_sales if x.product))
+        total = sum(x.amount or 0 for x in doc_sales)
+
+        result.append({
+            "rut_doctor": s.rut_doctor or "",
+            "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
+            "specialty": doctor.specialty if doctor else None,
+            "primera_venta": first_sale_date.isoformat() if first_sale_date else None,
+            "rep_name": rep.name if rep else None,
+            "rep_id": rep.id if rep else None,
+            "productos": productos,
+            "total_amount": total,
+        })
+
+    result.sort(key=lambda x: x["primera_venta"] or "")
+    return result
+
+
+@router.get("/rep-commissions")
+def get_rep_commissions(
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Resumen de ventas y médicos nuevos por visitador para cálculo de comisiones."""
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+
+    from calendar import monthrange
+    _, last_day = monthrange(year, month)
+    period_start = datetime(year, month, 1)
+    period_end = datetime(year, month, last_day, 23, 59, 59)
+
+    reps = db.query(MedicalRep).filter(MedicalRep.is_active == True).all()
+    result = []
+
+    for rep in reps:
+        rep_doctor_ids = [d.id for d in db.query(Doctor).filter(
+            Doctor.rep_id == rep.id, Doctor.is_active == True
+        ).all()]
+
+        sales_period = db.query(Sale).filter(
+            Sale.doctor_id.in_(rep_doctor_ids),
+            Sale.sale_date >= period_start,
+            Sale.sale_date <= period_end
+        ).all() if rep_doctor_ids else []
+
+        doctors_with_sales = len(set(s.doctor_id for s in sales_period if s.doctor_id))
+        total_amount = sum(s.amount or 0 for s in sales_period)
+        sales_count = len(sales_period)
+
+        # New doctors this period assigned to this rep
+        new_docs = []
+        for doc_id in set(s.doctor_id for s in sales_period if s.doctor_id):
+            prior = db.query(Sale).filter(
+                Sale.doctor_id == doc_id,
+                Sale.sale_date < period_start
+            ).first()
+            if not prior:
+                doc = db.query(Doctor).filter(Doctor.id == doc_id).first()
+                if doc:
+                    new_docs.append(doc.name)
+
+        # Category breakdown
+        cat_breakdown = {}
+        for s in sales_period:
+            cat = s.categoria or "Sin categoría"
+            cat_breakdown[cat] = cat_breakdown.get(cat, 0) + 1
+
+        result.append({
+            "rep_id": rep.id,
+            "rep_name": rep.name,
+            "doctors_with_sales": doctors_with_sales,
+            "new_doctors": new_docs,
+            "new_doctors_count": len(new_docs),
+            "total_amount": total_amount,
+            "sales_count": sales_count,
+            "categories": cat_breakdown,
+        })
+
+    result.sort(key=lambda x: x["total_amount"], reverse=True)
+    return result
