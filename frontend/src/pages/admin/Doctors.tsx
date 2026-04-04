@@ -6,7 +6,7 @@ import type { Doctor, MedicalRep, BusinessLine } from '../../types';
 import { format } from 'date-fns';
 
 const emptyDoctor: Partial<Doctor> = {
-  name: '', rut: '', medical_center: '', specialty: '', address: '', phone: '', email: '', notes: '',
+  name: '', rut: '', medical_center: '', specialty: '', city: '', commune: '', address: '', phone: '', email: '', notes: '',
   prescribes_products: '', visit_frequency: 30, is_active: true
 };
 
@@ -162,6 +162,8 @@ export default function Doctors() {
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Médico</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">RUT</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Centro Médico</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Ciudad</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Comuna</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Especialidad</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Línea</th>
                   <th className="text-left py-3 px-4 text-gray-500 font-medium">Visitador</th>
@@ -180,6 +182,8 @@ export default function Doctors() {
                     </td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{doc.rut || '—'}</td>
                     <td className="py-3 px-4 text-gray-600 text-xs">{doc.medical_center || '—'}</td>
+                    <td className="py-3 px-4 text-gray-600 text-xs">{doc.city || '—'}</td>
+                    <td className="py-3 px-4 text-gray-600 text-xs">{doc.commune || '—'}</td>
                     <td className="py-3 px-4 text-gray-600">{doc.specialty || '—'}</td>
                     <td className="py-3 px-4">
                       {doc.business_line_name ? (
@@ -253,9 +257,17 @@ export default function Doctors() {
               <label className="label">Teléfono</label>
               <input className="input" value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555-0000" />
             </div>
+            <div>
+              <label className="label">Ciudad</label>
+              <input className="input" value={form.city || ''} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="Santiago, Viña del Mar..." />
+            </div>
+            <div>
+              <label className="label">Comuna</label>
+              <input className="input" value={form.commune || ''} onChange={e => setForm({ ...form, commune: e.target.value })} placeholder="Providencia, Las Condes..." />
+            </div>
             <div className="col-span-2">
               <label className="label">Dirección</label>
-              <input className="input" value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Calle, Colonia, Ciudad" />
+              <input className="input" value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Calle, número..." />
             </div>
             <div>
               <label className="label">Correo electrónico</label>

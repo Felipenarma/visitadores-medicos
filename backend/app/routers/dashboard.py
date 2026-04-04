@@ -362,6 +362,81 @@ def get_new_doctors(
     return result
 
 
+@router.get("/sales-by-doctor")
+def get_sales_by_doctor(
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    top: int = Query(default=20),
+    db: Session = Depends(get_db)
+):
+    """Unidades vendidas por médico: mes seleccionado vs mes anterior."""
+    from calendar import monthrange
+
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+
+    _, last_day = monthrange(year, month)
+    period_start = datetime(year, month, 1)
+    period_end = datetime(year, month, last_day, 23, 59, 59)
+
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    _, prev_last_day = monthrange(prev_year, prev_month)
+    prev_start = datetime(prev_year, prev_month, 1)
+    prev_end = datetime(prev_year, prev_month, prev_last_day, 23, 59, 59)
+
+    current_sales = db.query(Sale).filter(
+        Sale.sale_date >= period_start,
+        Sale.sale_date <= period_end
+    ).all()
+
+    prev_sales = db.query(Sale).filter(
+        Sale.sale_date >= prev_start,
+        Sale.sale_date <= prev_end
+    ).all()
+
+    def build_map(sales):
+        m = {}
+        for s in sales:
+            key = s.rut_doctor or (f"id_{s.doctor_id}" if s.doctor_id else None)
+            if not key:
+                continue
+            if key not in m:
+                doctor = db.query(Doctor).filter(Doctor.id == s.doctor_id).first() if s.doctor_id else None
+                rep = db.query(MedicalRep).filter(MedicalRep.id == doctor.rep_id).first() if doctor and doctor.rep_id else None
+                m[key] = {
+                    "doctor_name": (doctor.name if doctor else None) or s.doctor_name_raw or "Sin nombre",
+                    "rut": s.rut_doctor or "",
+                    "rep_name": rep.name if rep else "Sin visitador",
+                    "units": 0,
+                    "amount": 0.0,
+                }
+            m[key]["units"] += 1
+            m[key]["amount"] += s.amount or 0
+        return m
+
+    current_map = build_map(current_sales)
+    prev_map = build_map(prev_sales)
+
+    result = []
+    for key in current_map.keys():
+        c = current_map[key]
+        p = prev_map.get(key, {"units": 0, "amount": 0.0})
+        result.append({
+            "doctor_name": c["doctor_name"],
+            "rut": c["rut"],
+            "rep_name": c["rep_name"],
+            "units_current": c["units"],
+            "units_prev": p["units"],
+            "amount_current": round(c["amount"], 2),
+            "amount_prev": round(p["amount"], 2),
+        })
+
+    result.sort(key=lambda x: x["units_current"], reverse=True)
+    return result[:top]
+
+
 @router.get("/rep-commissions")
 def get_rep_commissions(
     month: int = Query(default=None),

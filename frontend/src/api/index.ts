@@ -106,6 +106,10 @@ export const dashboardApi = {
     api.get('/dashboard/new-doctors', { params: { month, year } }).then(r => r.data),
   getRepCommissions: (month: number, year: number) =>
     api.get('/dashboard/rep-commissions', { params: { month, year } }).then(r => r.data),
+  getSalesByDoctor: (month: number, year: number, top = 20) =>
+    api.get<{ doctor_name: string; rut: string; rep_name: string; units_current: number; units_prev: number; amount_current: number; amount_prev: number }[]>(
+      '/dashboard/sales-by-doctor', { params: { month, year, top } }
+    ).then(r => r.data),
 };
 
 // Consolidated Sales

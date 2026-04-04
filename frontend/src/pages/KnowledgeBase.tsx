@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, BookOpen, Search, X, Upload, FileText, File, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, BookOpen, Search, X, Upload, FileText, File, CheckCircle, AlertCircle, FolderOpen } from 'lucide-react';
 import { knowledgeApi, businessLinesApi } from '../api';
 
 interface KBEntry {
@@ -45,6 +45,8 @@ export default function KnowledgeBase() {
   const [uploading, setUploading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   const loadData = async () => {
     try {
@@ -90,24 +92,47 @@ export default function KnowledgeBase() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const SUPPORTED_EXT = ['.pdf', '.docx', '.xlsx', '.xls', '.csv', '.txt', '.md', '.json'];
+
+  const filterSupported = (files: File[]) =>
+    files.filter(f => SUPPORTED_EXT.some(ext => f.name.toLowerCase().endsWith(ext)));
+
+  const uploadFiles = async (files: File[]) => {
+    const supported = filterSupported(files);
+    if (supported.length === 0) {
+      setUploadResult({ success: false, message: `Ninguno de los ${files.length} archivos tiene formato soportado (PDF, Word, Excel, CSV, TXT)` });
+      return;
+    }
     setUploading(true);
     setUploadResult(null);
+    setUploadProgress(`Procesando ${supported.length} archivo(s)...`);
     try {
       const blId = uploadBL ? parseInt(uploadBL) : undefined;
-      const result = await knowledgeApi.upload(file, uploadCategory, blId);
-      setUploadResult(result);
-      if (result.success) {
-        loadData();
+      if (supported.length === 1) {
+        const result = await knowledgeApi.upload(supported[0], uploadCategory, blId);
+        setUploadResult(result);
+      } else {
+        const result = await knowledgeApi.uploadMultiple(supported, uploadCategory, blId);
+        if (supported.length < files.length) {
+          result.message += ` (${files.length - supported.length} archivos ignorados por formato no soportado)`;
+        }
+        setUploadResult(result);
       }
+      loadData();
     } catch (err: any) {
-      setUploadResult({ success: false, message: err?.response?.data?.detail || 'Error al procesar archivo' });
+      setUploadResult({ success: false, message: err?.response?.data?.detail || 'Error al procesar archivo(s)' });
     } finally {
       setUploading(false);
+      setUploadProgress('');
       if (fileRef.current) fileRef.current.value = '';
+      if (folderRef.current) folderRef.current.value = '';
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    await uploadFiles(Array.from(fileList));
   };
 
   const handleEdit = (entry: KBEntry) => {
@@ -250,40 +275,73 @@ export default function KnowledgeBase() {
                 </div>
               </div>
 
-              <div>
-                <label className="label">Seleccionar archivo</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 transition-colors cursor-pointer" onClick={() => fileRef.current?.click()}>
-                  <File size={32} className="mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">Haz clic para seleccionar un archivo</p>
-                  <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, CSV o texto</p>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept={ACCEPTED_FORMATS}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Archivos</label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center hover:border-blue-400 transition-colors cursor-pointer" onClick={() => fileRef.current?.click()}>
+                    <File size={28} className="mx-auto text-gray-400 mb-1" />
+                    <p className="text-sm text-gray-600">Seleccionar archivos</p>
+                    <p className="text-xs text-gray-400 mt-1">Uno o varios</p>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept={ACCEPTED_FORMATS}
+                      onChange={handleFileUpload}
+                      multiple
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Carpeta completa</label>
+                  <div className="border-2 border-dashed border-orange-300 rounded-xl p-5 text-center hover:border-orange-400 transition-colors cursor-pointer" onClick={() => folderRef.current?.click()}>
+                    <FolderOpen size={28} className="mx-auto text-orange-400 mb-1" />
+                    <p className="text-sm text-gray-600">Seleccionar carpeta</p>
+                    <p className="text-xs text-gray-400 mt-1">Todos los archivos</p>
+                    <input
+                      ref={folderRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      {...{ webkitdirectory: '', directory: '' } as any}
+                    />
+                  </div>
                 </div>
               </div>
 
               {uploading && (
                 <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent" />
-                  <p className="text-sm text-blue-700">Procesando archivo...</p>
+                  <p className="text-sm text-blue-700">{uploadProgress || 'Procesando...'}</p>
                 </div>
               )}
 
               {uploadResult && (
                 <div className={`flex items-start gap-3 rounded-xl p-4 ${uploadResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                   {uploadResult.success ? <CheckCircle size={20} className="text-green-500 mt-0.5" /> : <AlertCircle size={20} className="text-red-500 mt-0.5" />}
-                  <div>
+                  <div className="flex-1">
                     <p className={`text-sm font-medium ${uploadResult.success ? 'text-green-800' : 'text-red-800'}`}>
                       {uploadResult.message}
                     </p>
-                    {uploadResult.success && (
+                    {uploadResult.entries_created != null && (
                       <p className="text-xs text-green-600 mt-1">
-                        {uploadResult.entries_created} entrada(s) creada(s) · {uploadResult.total_characters?.toLocaleString()} caracteres extraídos
+                        {uploadResult.entries_created} entrada(s) creada(s) · {uploadResult.total_characters?.toLocaleString()} caracteres
                       </p>
+                    )}
+                    {uploadResult.total_entries_created != null && (
+                      <p className="text-xs text-green-600 mt-1">
+                        {uploadResult.total_entries_created} entrada(s) creada(s) · {uploadResult.total_characters?.toLocaleString()} caracteres
+                      </p>
+                    )}
+                    {uploadResult.files && (
+                      <div className="mt-2 space-y-1">
+                        {uploadResult.files.map((f: any, i: number) => (
+                          <div key={i} className={`text-xs flex items-center gap-1 ${f.success ? 'text-green-700' : 'text-red-700'}`}>
+                            {f.success ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                            {f.filename} {f.success ? `(${f.entries_created} entradas)` : `- ${f.message}`}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

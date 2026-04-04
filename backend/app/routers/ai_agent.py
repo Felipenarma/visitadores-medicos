@@ -276,7 +276,7 @@ def chat(request: AgentChatRequest, db: Session = Depends(get_db)):
     while iteration < max_iterations:
         iteration += 1
         response = client.messages.create(
-            model="claude-opus-4-5",
+            model="claude-sonnet-4-5-20241022",
             max_tokens=2048,
             system=system_with_context,
             tools=TOOLS,
