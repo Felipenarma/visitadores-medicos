@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -111,3 +111,19 @@ class CardexUpload(Base):
     filename = Column(String(255), nullable=False)
     upload_date = Column(DateTime, server_default=func.now())
     rows_processed = Column(Integer, default=0)
+
+
+class ImageFile(Base):
+    __tablename__ = "image_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    filename = Column(String(255), nullable=False)
+    category = Column(String(50), default="general")  # qr, product, general
+    business_line_id = Column(Integer, ForeignKey("business_lines.id"), nullable=True)
+    content_type = Column(String(100), default="image/png")
+    data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    business_line = relationship("BusinessLine")
