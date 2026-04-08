@@ -431,10 +431,51 @@ def _run_normalization(db: Session) -> dict:
             doc.name = c["name"]
     db.commit()
 
+    # ── 6. Fusionar doctors duplicados por nombre (mismo nombre, distinto id) ─
+    # Cubre el caso donde un doctor sin RUT tiene el mismo nombre que uno con RUT
+    all_docs2 = db.query(Doctor).all()
+    name_to_docs: dict = defaultdict(list)
+    for d in all_docs2:
+        key = d.name.strip().lower()
+        name_to_docs[key].append(d)
+
+    name_merged = 0
+    for name_key, docs in name_to_docs.items():
+        if len(docs) <= 1:
+            continue
+        # Canónico: el que tiene RUT, o el con más ventas (más alto id)
+        canonical_doc = next((d for d in docs if d.rut), None) or max(docs, key=lambda d: d.id)
+        for doc in docs:
+            if doc.id == canonical_doc.id:
+                continue
+            # Reasignar ventas y visitas al canónico
+            db.query(Sale).filter(Sale.doctor_id == doc.id).update(
+                {"doctor_id": canonical_doc.id}, synchronize_session=False
+            )
+            db.query(Visit).filter(Visit.doctor_id == doc.id).update(
+                {"doctor_id": canonical_doc.id}, synchronize_session=False
+            )
+            doc.is_active = False
+            name_merged += 1
+        db.commit()
+
+    # ── 7. Después de fusionar por nombre, re-sincronizar rut en ventas ──────
+    # Las ventas del doctor canónico con rut que no tenían rut_doctor → asignarles el rut
+    docs_with_rut = {d.id: d.rut for d in db.query(Doctor).filter(Doctor.rut.isnot(None)).all()}
+    rut_synced = 0
+    sales_no_rut = db.query(Sale).filter(Sale.rut_doctor.is_(None), Sale.doctor_id.isnot(None)).all()
+    for s in sales_no_rut:
+        rut = docs_with_rut.get(s.doctor_id)
+        if rut:
+            s.rut_doctor = rut
+            rut_synced += 1
+    db.commit()
+
     return {
         "ruts_procesados": len(canonical),
         "ventas_actualizadas": sales_updated,
-        "medicos_fusionados": doctors_merged,
+        "medicos_fusionados": doctors_merged + name_merged,
+        "rut_sincronizados": rut_synced,
     }
 
 
