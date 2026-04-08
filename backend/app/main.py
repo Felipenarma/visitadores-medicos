@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import datetime, timedelta
 import random
 
@@ -10,6 +11,32 @@ from .routers import business_lines, reps, doctors, visits, sales, cardex, dashb
 
 # Create tables (checkfirst=True avoids errors if tables already exist)
 Base.metadata.create_all(bind=engine, checkfirst=True)
+
+# Migración segura: agregar columnas nuevas si no existen
+def run_migrations():
+    migrations = [
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS rut_doctor VARCHAR(20)",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS rut_paciente VARCHAR(20)",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS nombre_paciente VARCHAR(200)",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS categoria VARCHAR(100)",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS external_id VARCHAR(200)",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS rut VARCHAR(20)",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS medical_center VARCHAR(200)",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS commune VARCHAR(100)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_sales_external_id ON sales (external_id) WHERE external_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS ix_sales_rut_doctor ON sales (rut_doctor) WHERE rut_doctor IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS ix_doctors_rut ON doctors (rut) WHERE rut IS NOT NULL",
+    ]
+    with engine.connect() as conn:
+        for stmt in migrations:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                pass
+        conn.commit()
+
+run_migrations()
 
 app = FastAPI(title="Visitadores Médicos API", version="1.0.0")
 
