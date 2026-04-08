@@ -38,6 +38,17 @@ def run_migrations():
 
 run_migrations()
 
+def clean_nan_values():
+    """Limpia valores NaN guardados como float en PostgreSQL."""
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("UPDATE sales SET amount = NULL WHERE amount = 'NaN'::float"))
+            conn.commit()
+        except Exception:
+            pass
+
+clean_nan_values()
+
 app = FastAPI(title="Visitadores Médicos API", version="1.0.0")
 
 app.add_middleware(

@@ -1,6 +1,14 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, case
+import math
+
+def safe_float(v):
+    try:
+        f = float(v or 0)
+        return 0.0 if math.isnan(f) or math.isinf(f) else f
+    except Exception:
+        return 0.0
 from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine
@@ -91,7 +99,7 @@ def get_sales_by_business_line(db: Session = Depends(get_db)):
         )).join(
             Doctor, Sale.doctor_id == Doctor.id
         ).filter(Doctor.business_line_id == bl.id).scalar() or 0
-        result.append({"name": bl.name, "value": float(total or 0), "color": bl.color})
+        result.append({"name": bl.name, "value": safe_float(total), "color": bl.color})
     return result
 
 
@@ -266,7 +274,7 @@ def get_doctor_ranking(
                 "categorias": set(),
             }
         doctor_map[key]["units"] += 1
-        doctor_map[key]["total_amount"] += s.amount or 0
+        doctor_map[key]["total_amount"] += safe_float(s.amount)
         if s.categoria:
             doctor_map[key]["categorias"].add(s.categoria)
 
@@ -346,7 +354,7 @@ def get_new_doctors(
 
         first_sale_date = min((x.sale_date for x in doc_sales if x.sale_date), default=None)
         productos = list(set(x.product for x in doc_sales if x.product))
-        total = sum(x.amount or 0 for x in doc_sales)
+        total = sum(safe_float(x.amount) for x in doc_sales)
 
         result.append({
             "rut_doctor": s.rut_doctor or "",
@@ -414,7 +422,7 @@ def get_sales_by_doctor(
                     "amount": 0.0,
                 }
             m[key]["units"] += 1
-            m[key]["amount"] += s.amount or 0
+            m[key]["amount"] += safe_float(s.amount)
         return m
 
     current_map = build_map(current_sales)
@@ -469,7 +477,7 @@ def get_rep_commissions(
         ).all() if rep_doctor_ids else []
 
         doctors_with_sales = len(set(s.doctor_id for s in sales_period if s.doctor_id))
-        total_amount = sum(s.amount or 0 for s in sales_period)
+        total_amount = sum(safe_float(s.amount) for s in sales_period)
         sales_count = len(sales_period)
 
         # New doctors this period assigned to this rep
