@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, case
 from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine
@@ -86,11 +86,12 @@ def get_sales_by_business_line(db: Session = Depends(get_db)):
     bls = db.query(BusinessLine).all()
     result = []
     for bl in bls:
-        # Sum sales for doctors in this business line
-        total = db.query(func.sum(Sale.amount)).join(
+        total = db.query(func.sum(
+            case((Sale.amount.isnot(None), Sale.amount), else_=0)
+        )).join(
             Doctor, Sale.doctor_id == Doctor.id
         ).filter(Doctor.business_line_id == bl.id).scalar() or 0
-        result.append({"name": bl.name, "value": total, "color": bl.color})
+        result.append({"name": bl.name, "value": float(total or 0), "color": bl.color})
     return result
 
 

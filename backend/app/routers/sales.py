@@ -288,7 +288,7 @@ def get_sales_summary(db: Session = Depends(get_db)):
     result = []
 
     for doctor in doctors:
-        total_sales = db.query(func.sum(Sale.amount)).filter(Sale.doctor_id == doctor.id).scalar() or 0
+        total_sales = float(db.query(func.sum(Sale.amount)).filter(Sale.doctor_id == doctor.id, Sale.amount.isnot(None)).scalar() or 0)
         sales_count = db.query(func.count(Sale.id)).filter(Sale.doctor_id == doctor.id).scalar()
         visits_count = db.query(func.count(Visit.id)).filter(
             Visit.doctor_id == doctor.id,
