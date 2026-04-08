@@ -151,6 +151,8 @@ class SaleOut(BaseModel):
 class SalesSummaryItem(BaseModel):
     doctor_id: Optional[int] = None
     doctor_name: str
+    doctor_rut: Optional[str] = None
+    total_units: int = 0
     total_sales: float
     sales_count: int
     visits_count: int

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
-import { salesApi } from '../../api';
+import { salesApi, consolidatedSalesApi } from '../../api';
 import type { SalesSummaryItem } from '../../types';
 
 export default function SalesUpload() {
@@ -23,7 +23,7 @@ export default function SalesUpload() {
     if (!file) return;
     setUploading(true); setError(''); setResult(null);
     try {
-      const res = await salesApi.upload(file);
+      const res = await consolidatedSalesApi.upload(file);
       setResult(res);
       loadSummary();
     } catch (e: any) {
@@ -48,7 +48,7 @@ export default function SalesUpload() {
       <div className="card max-w-2xl">
         <h2 className="font-semibold text-gray-900 mb-2">Cargar Archivo de Ventas</h2>
         <p className="text-sm text-gray-500 mb-4">
-          El sistema detecta automáticamente columnas de RUT, nombre, producto, cantidad y fecha. El cruce con médicos se hace por <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">RUT</span> primero.
+          Carga el archivo consolidado de ventas. El cruce con médicos se hace por <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">RUT Doctor</span>. Los registros duplicados se omiten automáticamente.
         </p>
 
         <div className="relative border-2 border-dashed rounded-xl p-8 text-center transition-colors border-gray-300 hover:border-blue-400">
@@ -108,12 +108,12 @@ export default function SalesUpload() {
                 <p className="text-xs text-gray-500">Médicos emparejados</p>
               </div>
               <div className="bg-white rounded-lg p-3 text-center border border-green-100">
-                <p className="text-xl font-bold text-orange-500">{result.unmatched_doctors}</p>
-                <p className="text-xs text-gray-500">Sin emparejar</p>
+                <p className="text-xl font-bold text-blue-600">{result.new_doctors_created ?? 0}</p>
+                <p className="text-xs text-gray-500">Médicos nuevos creados</p>
               </div>
               <div className="bg-white rounded-lg p-3 text-center border border-green-100">
-                <p className="text-xl font-bold text-red-500">{result.errors?.length ?? 0}</p>
-                <p className="text-xs text-gray-500">Errores</p>
+                <p className="text-xl font-bold text-gray-400">{result.duplicates_skipped ?? 0}</p>
+                <p className="text-xs text-gray-500">Duplicados omitidos</p>
               </div>
             </div>
           </div>
