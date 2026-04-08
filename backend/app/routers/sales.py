@@ -459,8 +459,21 @@ def _run_normalization(db: Session) -> dict:
             name_merged += 1
         db.commit()
 
-    # ── 7. Después de fusionar por nombre, re-sincronizar rut en ventas ──────
-    # Las ventas del doctor canónico con rut que no tenían rut_doctor → asignarles el rut
+    # ── 7. Sincronizar RUT: ventas → doctors y doctors → ventas ─────────────
+    # 7a. Poblar rut en tabla doctors desde las ventas (para doctors sin rut)
+    docs_without_rut = db.query(Doctor).filter(Doctor.rut.is_(None), Doctor.is_active == True).all()
+    rut_to_doc_synced = 0
+    for doc in docs_without_rut:
+        sale_with_rut = db.query(Sale).filter(
+            Sale.doctor_id == doc.id,
+            Sale.rut_doctor.isnot(None)
+        ).first()
+        if sale_with_rut:
+            doc.rut = sale_with_rut.rut_doctor
+            rut_to_doc_synced += 1
+    db.commit()
+
+    # 7b. Poblar rut_doctor en ventas desde tabla doctors
     docs_with_rut = {d.id: d.rut for d in db.query(Doctor).filter(Doctor.rut.isnot(None)).all()}
     rut_synced = 0
     sales_no_rut = db.query(Sale).filter(Sale.rut_doctor.is_(None), Sale.doctor_id.isnot(None)).all()

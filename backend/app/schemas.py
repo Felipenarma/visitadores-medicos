@@ -58,6 +58,7 @@ class MedicalRepOut(MedicalRepBase):
 # Doctor schemas
 class DoctorBase(BaseModel):
     name: str
+    rut: Optional[str] = None
     specialty: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
