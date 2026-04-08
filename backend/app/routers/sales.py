@@ -279,6 +279,9 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
         db.bulk_save_objects(sales_to_add)
         db.commit()
 
+    # Normalización automática post-carga
+    norm_result = _run_normalization(db)
+
     return {
         "message": "Consolidado cargado exitosamente",
         "upload_id": upload.id,
@@ -286,6 +289,7 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
         "matched_doctors": matched,
         "new_doctors_created": new_doctors_count,
         "duplicates_skipped": duplicates,
+        "normalized": norm_result,
         "errors": []
     }
 
@@ -319,23 +323,20 @@ def get_sales_summary(db: Session = Depends(get_db)):
     return result
 
 
-@router.post("/normalize-doctors")
-def normalize_doctors(db: Session = Depends(get_db)):
+def _run_normalization(db: Session) -> dict:
     """
-    Normaliza médicos duplicados en la BD:
-    - Mismo RUT con distintos formatos o nombres → unifica al nombre con más ventas
-    - Actualiza sales.doctor_name_raw, sales.rut_doctor, sales.doctor_id
-    - Reasigna visitas y desactiva médicos duplicados en tabla doctors
+    Función reutilizable de normalización de médicos duplicados.
+    Se llama automáticamente tras cada carga de ventas y también
+    está disponible manualmente via POST /normalize-doctors.
     """
     from collections import defaultdict
 
     # ── 1. Cargar todas las ventas con rut ──────────────────────────────────
     all_sales = db.query(Sale).all()
 
-    # Contadores por rut normalizado
-    rut_name_count:   dict = defaultdict(lambda: defaultdict(int))
-    rut_docid_count:  dict = defaultdict(lambda: defaultdict(int))
-    rut_raw_count:    dict = defaultdict(lambda: defaultdict(int))
+    rut_name_count:  dict = defaultdict(lambda: defaultdict(int))
+    rut_docid_count: dict = defaultdict(lambda: defaultdict(int))
+    rut_raw_count:   dict = defaultdict(lambda: defaultdict(int))
 
     for s in all_sales:
         nr = _norm_rut(s.rut_doctor)
@@ -359,7 +360,7 @@ def normalize_doctors(db: Session = Depends(get_db)):
 
     # ── 3. Actualizar ventas ────────────────────────────────────────────────
     sales_updated = 0
-    batch = []
+    batch_count = 0
     for s in all_sales:
         nr = _norm_rut(s.rut_doctor)
         if not nr or nr not in canonical:
@@ -377,14 +378,14 @@ def normalize_doctors(db: Session = Depends(get_db)):
             changed = True
         if changed:
             sales_updated += 1
-        if len(batch) >= 500:
+            batch_count += 1
+        if batch_count >= 500:
             db.commit()
-            batch = []
+            batch_count = 0
     db.commit()
 
     # ── 4. Fusionar médicos duplicados en tabla doctors ─────────────────────
     all_docs = db.query(Doctor).all()
-    # Construir mapa norm_rut → lista de doctors
     rut_to_docs: dict = defaultdict(list)
     for d in all_docs:
         nr = _norm_rut(d.rut)
@@ -397,12 +398,10 @@ def normalize_doctors(db: Session = Depends(get_db)):
             continue
         c = canonical.get(nr)
         if not c or not c["doctor_id"]:
-            # Elegir el de mayor id (más completo) como canónico
             canonical_doc = max(docs, key=lambda d: d.id)
         else:
             canonical_doc = next((d for d in docs if d.id == c["doctor_id"]), docs[0])
 
-        # Actualizar nombre canónico si está disponible
         if c and c["name"]:
             canonical_doc.name = c["name"]
         if c and c["raw_rut"]:
@@ -411,23 +410,19 @@ def normalize_doctors(db: Session = Depends(get_db)):
         for doc in docs:
             if doc.id == canonical_doc.id:
                 continue
-            # Reasignar visitas al médico canónico
             db.query(Visit).filter(Visit.doctor_id == doc.id).update(
                 {"doctor_id": canonical_doc.id}, synchronize_session=False
             )
-            # Reasignar ventas huérfanas (sin rut) al médico canónico
             db.query(Sale).filter(
                 Sale.doctor_id == doc.id,
                 Sale.rut_doctor.is_(None)
             ).update({"doctor_id": canonical_doc.id}, synchronize_session=False)
-            # Desactivar duplicado
             doc.is_active = False
             doctors_merged += 1
 
         db.commit()
 
-    # ── 5. Actualizar nombre en tabla doctors para activos sin ventas ───────
-    # (médicos cargados por cardex que también existen en ventas con nombre canónico)
+    # ── 5. Actualizar nombre en tabla doctors ───────────────────────────────
     for nr, c in canonical.items():
         if not c["doctor_id"] or not c["name"]:
             continue
@@ -437,8 +432,14 @@ def normalize_doctors(db: Session = Depends(get_db)):
     db.commit()
 
     return {
-        "message": "Normalización completada",
         "ruts_procesados": len(canonical),
         "ventas_actualizadas": sales_updated,
         "medicos_fusionados": doctors_merged,
     }
+
+
+@router.post("/normalize-doctors")
+def normalize_doctors(db: Session = Depends(get_db)):
+    """Normaliza médicos duplicados manualmente (también se ejecuta automáticamente tras cada carga)."""
+    result = _run_normalization(db)
+    return {"message": "Normalización completada", **result}
