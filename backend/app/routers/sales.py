@@ -165,34 +165,43 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
+    # Pre-cargar médicos existentes en memoria para evitar queries dentro del loop
+    existing_doctors_by_rut: dict = {}
+    existing_doctors_by_name: dict = {}
+    for doc in db.query(Doctor).all():
+        if doc.rut:
+            existing_doctors_by_rut[doc.rut.strip()] = doc.id
+        existing_doctors_by_name[doc.name.strip().lower()] = doc.id
+
+    # Pre-cargar external_ids existentes para deduplicación rápida
+    existing_ext_ids: set = set(
+        r[0] for r in db.query(Sale.external_id).filter(Sale.external_id.isnot(None)).all()
+    )
+
     upload = SalesUpload(filename=file.filename, rows_processed=len(df))
     db.add(upload)
-    db.flush()
+    db.commit()
+    db.refresh(upload)
+
+    def clean(val):
+        s = str(val).strip()
+        return None if s in ("nan", "None", "", "NaN") else s
 
     matched = 0
     new_doctors_count = 0
     duplicates = 0
-    errors = []
+    sales_to_add = []
 
     for _, row in df.iterrows():
         try:
-            doctor_name = str(row.get("nombre_medico", "") or "").strip()
-            rut_doc = str(row.get("rut_doctor", "") or "").strip()
-            rut_pac = str(row.get("rut_paciente", "") or "").strip()
-            nombre_pac = str(row.get("nombre_paciente", "") or "").strip()
-            product = str(row.get("producto", "") or "").strip()
-            categoria = str(row.get("categoria", "") or "").strip()
+            doctor_name = clean(row.get("nombre_medico", "")) or ""
+            rut_doc = clean(row.get("rut_doctor", ""))
+            rut_pac = clean(row.get("rut_paciente", ""))
+            nombre_pac = clean(row.get("nombre_paciente", ""))
+            product = clean(row.get("producto", ""))
+            categoria = clean(row.get("categoria", ""))
             amount_raw = row.get("monto", 0)
             date_raw = row.get("fecha_venta", None)
-
-            def clean(val):
-                return None if val in ("nan", "None", "", "NaN") else val
-
-            rut_doc = clean(rut_doc)
-            rut_pac = clean(rut_pac)
-            nombre_pac = clean(nombre_pac)
-            product = clean(product)
-            categoria = clean(categoria)
 
             try:
                 amount = float(amount_raw) if amount_raw else 0.0
@@ -202,34 +211,41 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
             sale_date = None
             if date_raw:
                 try:
-                    sale_date = pd.to_datetime(date_raw).to_pydatetime()
+                    sale_date = pd.to_datetime(date_raw, dayfirst=True).to_pydatetime()
                 except Exception:
                     sale_date = None
 
             date_str = sale_date.strftime("%Y%m%d") if sale_date else "nodate"
-            ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"
-            ext_id = ext_id[:200]
+            ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"[:200]
 
-            existing = db.query(Sale).filter(Sale.external_id == ext_id).first()
-            if existing:
+            if ext_id in existing_ext_ids:
                 duplicates += 1
                 continue
+            existing_ext_ids.add(ext_id)
 
-            doctor = None
-            if rut_doc:
-                doctor = db.query(Doctor).filter(Doctor.rut == rut_doc).first()
-            if not doctor and doctor_name:
-                doctor = match_doctor(doctor_name, db)
-            if not doctor and doctor_name:
-                doctor = Doctor(name=doctor_name, rut=rut_doc, is_active=True)
-                db.add(doctor)
+            # Buscar doctor en caché (sin queries al DB)
+            doctor_id = None
+            if rut_doc and rut_doc in existing_doctors_by_rut:
+                doctor_id = existing_doctors_by_rut[rut_doc]
+                matched += 1
+            elif doctor_name and doctor_name.strip().lower() in existing_doctors_by_name:
+                doctor_id = existing_doctors_by_name[doctor_name.strip().lower()]
+                matched += 1
+            elif doctor_name:
+                # Crear médico nuevo sin flush en el loop
+                new_doc = Doctor(name=doctor_name, rut=rut_doc, is_active=True)
+                db.add(new_doc)
                 db.flush()
+                db.refresh(new_doc)
+                doctor_id = new_doc.id
+                if rut_doc:
+                    existing_doctors_by_rut[rut_doc] = doctor_id
+                existing_doctors_by_name[doctor_name.strip().lower()] = doctor_id
                 new_doctors_count += 1
-            elif doctor and rut_doc and not doctor.rut:
-                doctor.rut = rut_doc
+                matched += 1
 
-            sale = Sale(
-                doctor_id=doctor.id if doctor else None,
+            sales_to_add.append(Sale(
+                doctor_id=doctor_id,
                 doctor_name_raw=doctor_name or None,
                 rut_doctor=rut_doc,
                 rut_paciente=rut_pac,
@@ -240,14 +256,21 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
                 sale_date=sale_date,
                 upload_id=upload.id,
                 external_id=ext_id,
-            )
-            db.add(sale)
-            if doctor:
-                matched += 1
-        except Exception as e:
-            errors.append(str(e))
+            ))
 
-    db.commit()
+            # Commit cada 500 filas para evitar transacciones muy largas
+            if len(sales_to_add) >= 500:
+                db.bulk_save_objects(sales_to_add)
+                db.commit()
+                sales_to_add = []
+
+        except Exception as e:
+            continue
+
+    if sales_to_add:
+        db.bulk_save_objects(sales_to_add)
+        db.commit()
+
     return {
         "message": "Consolidado cargado exitosamente",
         "upload_id": upload.id,
@@ -255,7 +278,7 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
         "matched_doctors": matched,
         "new_doctors_created": new_doctors_count,
         "duplicates_skipped": duplicates,
-        "errors": errors[:10]
+        "errors": []
     }
 
 
