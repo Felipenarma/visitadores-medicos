@@ -56,7 +56,7 @@ export default function Doctors() {
   const load = async () => {
     setLoading(true);
     try {
-      const params: any = {};
+      const params: any = { is_active: true };
       if (filters.rep_id) params.rep_id = parseInt(filters.rep_id);
       if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
       if (filters.search) params.search = filters.search;
@@ -115,7 +115,7 @@ export default function Doctors() {
   };
 
   const handleDelete = async (doc: Doctor) => {
-    if (!confirm(`¿Desactivar a ${doc.name}?`)) return;
+    if (!confirm(`¿Eliminar a ${doc.name}? Quedará desactivado y no aparecerá en la lista.`)) return;
     try { await doctorsApi.delete(doc.id); load(); }
     catch (e: any) { alert(e.response?.data?.detail || 'Error al eliminar'); }
   };
