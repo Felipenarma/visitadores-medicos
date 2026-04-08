@@ -253,19 +253,24 @@ def get_doctor_ranking(
         Sale.sale_date <= period_end
     ).all()
 
-    # Group by rut_doctor or doctor_id
+    # Pre-cargar doctors y reps en memoria
+    all_doctors = {d.id: d for d in db.query(Doctor).all()}
+    all_reps = {r.id: r for r in db.query(MedicalRep).all()}
+
+    # Clave: doctor_id si existe, si no rut_doctor, si no nombre raw
+    # Esto evita duplicados cuando el mismo doctor tiene ventas con y sin rut
     doctor_map = {}
     for s in sales:
-        key = s.rut_doctor or (f"id_{s.doctor_id}" if s.doctor_id else f"raw_{s.doctor_name_raw}")
-        if not key or key == "id_None":
+        key = s.doctor_id or s.rut_doctor or s.doctor_name_raw
+        if not key:
             continue
         if key not in doctor_map:
-            doctor = db.query(Doctor).filter(Doctor.id == s.doctor_id).first() if s.doctor_id else None
-            rep = db.query(MedicalRep).filter(MedicalRep.id == doctor.rep_id).first() if doctor and doctor.rep_id else None
+            doctor = all_doctors.get(s.doctor_id) if s.doctor_id else None
+            rep = all_reps.get(doctor.rep_id) if doctor and doctor.rep_id else None
             doctor_map[key] = {
                 "doctor_id": doctor.id if doctor else None,
                 "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
-                "rut_doctor": s.rut_doctor or "",
+                "rut_doctor": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
                 "specialty": doctor.specialty if doctor else None,
                 "rep_name": rep.name if rep else "Sin visitador",
                 "rep_id": rep.id if rep else None,
@@ -309,24 +314,29 @@ def get_new_doctors(
         Sale.sale_date <= period_end
     ).all()
 
+    # Pre-cargar doctors y reps en memoria
+    all_doctors = {d.id: d for d in db.query(Doctor).all()}
+    all_reps = {r.id: r for r in db.query(MedicalRep).all()}
+
     result = []
-    seen_ruts = set()
+    seen_keys = set()
 
     for s in period_sales:
-        key = s.rut_doctor or (f"id_{s.doctor_id}" if s.doctor_id else None)
-        if not key or key in seen_ruts:
+        # Clave principal: doctor_id, luego rut_doctor
+        key = s.doctor_id or s.rut_doctor or s.doctor_name_raw
+        if not key or key in seen_keys:
             continue
-        seen_ruts.add(key)
+        seen_keys.add(key)
 
-        # Check if this doctor had ANY sale before this period
-        if s.rut_doctor:
-            prior = db.query(Sale).filter(
-                Sale.rut_doctor == s.rut_doctor,
-                Sale.sale_date < period_start
-            ).first()
-        elif s.doctor_id:
+        # Verificar si tuvo ventas antes del período (usando doctor_id como principal)
+        if s.doctor_id:
             prior = db.query(Sale).filter(
                 Sale.doctor_id == s.doctor_id,
+                Sale.sale_date < period_start
+            ).first()
+        elif s.rut_doctor:
+            prior = db.query(Sale).filter(
+                Sale.rut_doctor == s.rut_doctor,
                 Sale.sale_date < period_start
             ).first()
         else:
@@ -335,29 +345,21 @@ def get_new_doctors(
         if prior:
             continue  # No es nuevo
 
-        doctor = db.query(Doctor).filter(Doctor.id == s.doctor_id).first() if s.doctor_id else None
-        rep = db.query(MedicalRep).filter(MedicalRep.id == doctor.rep_id).first() if doctor and doctor.rep_id else None
+        doctor = all_doctors.get(s.doctor_id) if s.doctor_id else None
+        rep = all_reps.get(doctor.rep_id) if doctor and doctor.rep_id else None
 
-        # All sales of this doctor in this period
-        if s.rut_doctor:
-            doc_sales = db.query(Sale).filter(
-                Sale.rut_doctor == s.rut_doctor,
-                Sale.sale_date >= period_start,
-                Sale.sale_date <= period_end
-            ).all()
+        # Todas las ventas de este médico en el período
+        if s.doctor_id:
+            doc_sales = [x for x in period_sales if x.doctor_id == s.doctor_id]
         else:
-            doc_sales = db.query(Sale).filter(
-                Sale.doctor_id == s.doctor_id,
-                Sale.sale_date >= period_start,
-                Sale.sale_date <= period_end
-            ).all()
+            doc_sales = [x for x in period_sales if x.rut_doctor == s.rut_doctor]
 
         first_sale_date = min((x.sale_date for x in doc_sales if x.sale_date), default=None)
         productos = list(set(x.product for x in doc_sales if x.product))
         total = sum(safe_float(x.amount) for x in doc_sales)
 
         result.append({
-            "rut_doctor": s.rut_doctor or "",
+            "rut_doctor": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
             "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
             "specialty": doctor.specialty if doctor else None,
             "primera_venta": first_sale_date.isoformat() if first_sale_date else None,
@@ -405,18 +407,23 @@ def get_sales_by_doctor(
         Sale.sale_date <= prev_end
     ).all()
 
+    # Pre-cargar doctors y reps en memoria para evitar N+1 queries
+    all_doctors = {d.id: d for d in db.query(Doctor).all()}
+    all_reps = {r.id: r for r in db.query(MedicalRep).all()}
+
     def build_map(sales):
         m = {}
         for s in sales:
-            key = s.rut_doctor or (f"id_{s.doctor_id}" if s.doctor_id else None)
+            # Usar doctor_id como clave principal para evitar duplicados
+            key = s.doctor_id or s.rut_doctor or s.doctor_name_raw
             if not key:
                 continue
             if key not in m:
-                doctor = db.query(Doctor).filter(Doctor.id == s.doctor_id).first() if s.doctor_id else None
-                rep = db.query(MedicalRep).filter(MedicalRep.id == doctor.rep_id).first() if doctor and doctor.rep_id else None
+                doctor = all_doctors.get(s.doctor_id) if s.doctor_id else None
+                rep = all_reps.get(doctor.rep_id) if doctor and doctor.rep_id else None
                 m[key] = {
                     "doctor_name": (doctor.name if doctor else None) or s.doctor_name_raw or "Sin nombre",
-                    "rut": s.rut_doctor or "",
+                    "rut": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
                     "rep_name": rep.name if rep else "Sin visitador",
                     "units": 0,
                     "amount": 0.0,
