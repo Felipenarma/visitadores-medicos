@@ -27,11 +27,11 @@ def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
     p = product.lower()
     t = (tipo_producto or "").lower()
 
-    # Producto Terminado — marcas comerciales específicas (va ANTES que Hormonas)
+    # Producto Terminado — marcas comerciales (va ANTES que Hormonas)
     terminado_kw = [
         "hormogel", "lenzetto", "estreva", "duphaston", "progendo",
         "bonavid", "blissel", "ginoderm", "ovestin", "colpotrophine",
-        "colpotrofine", "vacidox", "recetario magistral terminado",
+        "colpotrofine", "vacidox",
     ]
     if any(k in p for k in terminado_kw):
         return "Producto Terminado"
@@ -39,6 +39,17 @@ def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
         return "Producto Terminado"
     if "terminado" in t:
         return "Producto Terminado"
+
+    # Pelo — va antes que Hormonas para no colisionar
+    pelo_kw = ["minoxidil", "finasteride", "finasterida", "dutasteride", "dutasterida"]
+    if any(k in p for k in pelo_kw):
+        return "Pelo"
+
+    # Fertilidad
+    fertilidad_kw = ["clomifeno", "clomifene", "clomiphene", "coenzima q10", "coenzima q 10",
+                     "coq10", "co-q10"]
+    if any(k in p for k in fertilidad_kw):
+        return "Fertilidad"
 
     # Cannabis Medicinal
     cannabis_kw = ["cbd", "thc", "cannabis", "canavis", "cáñamo", "vaporizable",
@@ -53,21 +64,19 @@ def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
     if any(k in p for k in hormonas_kw):
         return "Hormonas"
 
-    # Dermatología
-    derma_kw = ["derma", "crema tópica", "unguento", "retinol",
-                "ácido hialurónico", "hidratante", "acné"]
+    # Dermatología — solo si hay productos específicos cargados
+    derma_kw = ["derma", "retinol", "ácido hialurónico", "acné", "acne"]
     if any(k in p for k in derma_kw):
         return "Dermatología"
 
-    # Control de Peso
+    # Control de Peso — solo si hay productos específicos cargados
     peso_kw = ["semaglutida", "ozempic", "saxenda", "liraglutida", "tirzepatida",
-               "metformina", "orlistat", "peso", "obesidad"]
+               "metformina", "orlistat"]
     if any(k in p for k in peso_kw):
         return "Control de Peso"
 
-    # Suero Terapia
-    suero_kw = ["suero", "jarabe", "vitamina", "glutatión", "nac ", "magnesio",
-                "zinc", "b12", "coenzima"]
+    # Suero Terapia — solo si hay productos específicos cargados
+    suero_kw = ["suero", "glutatión", "nac ", "vitamina c", "vitamina d", "b12"]
     if any(k in p for k in suero_kw):
         return "Suero Terapia"
 
