@@ -158,18 +158,45 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error al leer archivo: {str(e)}")
 
-    df.columns = [c.lower().strip().replace(" ", "_") for c in df.columns]
+    # Normalizar nombres de columnas: minúsculas, sin espacios, sin tildes básicas
+    def norm_col(c):
+        c = c.lower().strip()
+        c = c.replace(" ", "_").replace("°", "").replace("n_", "n")
+        c = c.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").replace("ü","u")
+        return c
+    df.columns = [norm_col(c) for c in df.columns]
+
+    # Concatenar nombre + apellido del profesional si vienen separados
+    if "nombre_profesional" in df.columns and "apellido_profesional" in df.columns:
+        df["nombre_medico"] = (
+            df["nombre_profesional"].fillna("").astype(str).str.strip()
+            + " " +
+            df["apellido_profesional"].fillna("").astype(str).str.strip()
+        ).str.strip()
+    # Concatenar nombre + apellido del titular/paciente si vienen separados
+    if "nombre_titular" in df.columns and "apellido_titular" in df.columns:
+        df["nombre_paciente"] = (
+            df["nombre_titular"].fillna("").astype(str).str.strip()
+            + " " +
+            df["apellido_titular"].fillna("").astype(str).str.strip()
+        ).str.strip()
+
+    # Filtrar solo ventas pagadas si existe la columna estado
+    if "estado_cotizacion" in df.columns:
+        df = df[df["estado_cotizacion"].astype(str).str.lower().str.contains("pagad", na=False)]
 
     col_map = {
-        "nombre_doctor": "nombre_medico", "nombre_profesional": "nombre_medico",
+        "nombre_doctor": "nombre_medico",
         "doctor": "nombre_medico", "medico": "nombre_medico",
         "rut_profesional": "rut_doctor",
         "rut_usuario": "rut_paciente",
         "nombre_titular": "nombre_paciente",
         "precio_total": "monto", "amount": "monto", "total": "monto",
+        "precio_productos": "monto",
         "fecha_ingresado": "fecha_venta", "fecha_y_hora": "fecha_venta",
         "fecha": "fecha_venta", "fecha_pago": "fecha_venta",
-        "categoría": "categoria",
+        "categoria": "categoria", "tipo_producto": "categoria",
+        "n_orden": "n_orden",
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
@@ -224,7 +251,12 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
                     sale_date = None
 
             date_str = sale_date.strftime("%Y%m%d") if sale_date else "nodate"
-            ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"[:200]
+            # Si hay N° de orden úsalo como external_id para máxima precisión
+            n_orden = clean(row.get("n_orden", ""))
+            if n_orden:
+                ext_id = f"orden_{n_orden}"[:200]
+            else:
+                ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"[:200]
 
             if ext_id in existing_ext_ids:
                 duplicates += 1
