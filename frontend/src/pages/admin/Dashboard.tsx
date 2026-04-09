@@ -276,7 +276,7 @@ export default function AdminDashboard() {
 
         {/* Sales by business line */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Ventas por Línea de Negocio</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Unidades por Línea de Negocio</h2>
           {salesByLine.filter(s => s.value > 0).length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -294,7 +294,7 @@ export default function AdminDashboard() {
                     <Cell key={index} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} />
+                <Tooltip formatter={(v: number) => [`${v.toLocaleString()} unidades`]} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

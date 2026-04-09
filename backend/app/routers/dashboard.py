@@ -94,12 +94,10 @@ def get_sales_by_business_line(db: Session = Depends(get_db)):
     bls = db.query(BusinessLine).all()
     result = []
     for bl in bls:
-        total = db.query(func.sum(
-            case((Sale.amount.isnot(None), Sale.amount), else_=0)
-        )).join(
+        count = db.query(func.count(Sale.id)).join(
             Doctor, Sale.doctor_id == Doctor.id
         ).filter(Doctor.business_line_id == bl.id).scalar() or 0
-        result.append({"name": bl.name, "value": safe_float(total), "color": bl.color})
+        result.append({"name": bl.name, "value": int(count), "color": bl.color})
     return result
 
 

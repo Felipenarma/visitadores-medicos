@@ -127,7 +127,6 @@ export default function SalesRanking() {
                   <th className="text-left px-4 py-3 text-white font-semibold hidden lg:table-cell">Visitador</th>
                   <th className="text-left px-4 py-3 text-white font-semibold hidden lg:table-cell">Categorías</th>
                   <th className="text-center px-4 py-3 text-white font-semibold">Unidades</th>
-                  <th className="text-right px-4 py-3 text-white font-semibold hidden sm:table-cell">Monto Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -172,9 +171,6 @@ export default function SalesRanking() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="text-lg font-bold" style={{ color: '#0F1E2D' }}>{item.units}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-700 hidden sm:table-cell">
-                      ${item.total_amount.toLocaleString('es-CL')}
                     </td>
                   </tr>
                 ))}
