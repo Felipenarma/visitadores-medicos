@@ -20,6 +20,64 @@ def _norm_rut(r):
     return re.sub(r'[\.\-\s]', '', str(r)).upper().strip()
 
 
+def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
+    """Infiere la categoría de negocio a partir del nombre del producto."""
+    if not product:
+        return None
+    p = product.lower()
+    t = (tipo_producto or "").lower()
+
+    # Producto Terminado — marcas comerciales específicas (va ANTES que Hormonas)
+    terminado_kw = [
+        "hormogel", "lenzetto", "estreva", "duphaston", "progendo",
+        "bonavid", "blissel", "ginoderm", "ovestin", "colpotrophine",
+        "colpotrofine", "vacidox", "recetario magistral terminado",
+    ]
+    if any(k in p for k in terminado_kw):
+        return "Producto Terminado"
+    if "comercial" in t:
+        return "Producto Terminado"
+    if "terminado" in t:
+        return "Producto Terminado"
+
+    # Cannabis Medicinal
+    cannabis_kw = ["cbd", "thc", "cannabis", "canavis", "cáñamo", "vaporizable",
+                   "vaporizador", "batería", "aceite sublingual", "aceite veterinario",
+                   "full spectrum", "broad spectrum", "og kush", "amnesia"]
+    if any(k in p for k in cannabis_kw):
+        return "Cannabis Medicinal"
+
+    # Hormonas — magistrales hormonales
+    hormonas_kw = ["testosterona", "progesterona", "pregnenolona", "estradiol",
+                   "dhea", "crema trh", "trh", "hormona", "estriol", "estrógeno"]
+    if any(k in p for k in hormonas_kw):
+        return "Hormonas"
+
+    # Dermatología
+    derma_kw = ["derma", "crema tópica", "unguento", "retinol",
+                "ácido hialurónico", "hidratante", "acné"]
+    if any(k in p for k in derma_kw):
+        return "Dermatología"
+
+    # Control de Peso
+    peso_kw = ["semaglutida", "ozempic", "saxenda", "liraglutida", "tirzepatida",
+               "metformina", "orlistat", "peso", "obesidad"]
+    if any(k in p for k in peso_kw):
+        return "Control de Peso"
+
+    # Suero Terapia
+    suero_kw = ["suero", "jarabe", "vitamina", "glutatión", "nac ", "magnesio",
+                "zinc", "b12", "coenzima"]
+    if any(k in p for k in suero_kw):
+        return "Suero Terapia"
+
+    # Magistral a confeccionar sin otro match → Cannabis (mayoría en Narma)
+    if "magistral" in t:
+        return "Cannabis Medicinal"
+
+    return None
+
+
 def match_doctor(name: str, db: Session) -> Optional[Doctor]:
     """Try to match a doctor by name (fuzzy)."""
     if not name:
@@ -234,7 +292,8 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
             rut_pac = clean(row.get("rut_paciente", ""))
             nombre_pac = clean(row.get("nombre_paciente", ""))
             product = clean(row.get("producto", ""))
-            categoria = clean(row.get("categoria", ""))
+            tipo_prod = clean(row.get("tipo_producto", "")) or ""
+            categoria = clean(row.get("categoria", "")) or _infer_categoria(product or "", tipo_prod)
             amount_raw = row.get("monto", 0)
             date_raw = row.get("fecha_venta", None)
 
