@@ -59,8 +59,8 @@ def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
         return "Cannabis Medicinal"
 
     # Hormonas — magistrales hormonales
-    hormonas_kw = ["testosterona", "progesterona", "pregnenolona", "estradiol",
-                   "dhea", "crema trh", "trh", "hormona", "estriol", "estrógeno"]
+    hormonas_kw = ["testosterona", "progesterona", "dhea", "estradiol", "estriol", "pregnenolona",
+                   "crema trh", "trh"]
     if any(k in p for k in hormonas_kw):
         return "Hormonas"
 
