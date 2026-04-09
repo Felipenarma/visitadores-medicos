@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, DollarSign, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { dashboardApi } from '../../api';
 
 interface CategoryBreakdown {
@@ -24,9 +24,10 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Hormonas': 'bg-purple-100 text-purple-700',
   'Fertilidad': 'bg-pink-100 text-pink-700',
   'Pelo': 'bg-yellow-100 text-yellow-700',
-  'Naltrexona': 'bg-blue-100 text-blue-700',
   'Producto Terminado': 'bg-gray-100 text-gray-700',
-  'Recetario Magistral': 'bg-orange-100 text-orange-700',
+  'Dermatología': 'bg-orange-100 text-orange-700',
+  'Control de Peso': 'bg-red-100 text-red-700',
+  'Suero Terapia': 'bg-blue-100 text-blue-700',
 };
 
 function StatPill({ label, value, color }: { label: string; value: string | number; color: string }) {
@@ -38,9 +39,10 @@ function StatPill({ label, value, color }: { label: string; value: string | numb
   );
 }
 
-function RepCard({ item, rank }: { item: RepCommissionItem; rank: number }) {
+function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: number; totalUnits: number }) {
   const [expanded, setExpanded] = useState(false);
   const catEntries = Object.entries(item.categories).sort((a, b) => b[1] - a[1]);
+  const pct = totalUnits > 0 ? ((item.sales_count / totalUnits) * 100).toFixed(1) : '0';
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -57,34 +59,32 @@ function RepCard({ item, rank }: { item: RepCommissionItem; rank: number }) {
         {/* Name */}
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-gray-900 text-base truncate">{item.rep_name}</h3>
-          <p className="text-xs text-gray-400">{item.sales_count} ventas · {item.doctors_with_sales} médicos activos</p>
+          <p className="text-xs text-gray-400">{item.doctors_with_sales} médicos activos</p>
         </div>
 
-        {/* Total amount */}
+        {/* Units */}
         <div className="text-right flex-shrink-0">
-          <p className="text-xl font-bold" style={{ color: '#0F1E2D' }}>
-            ${item.total_amount.toLocaleString('es-CL')}
-          </p>
-          <p className="text-xs text-gray-400">monto total</p>
+          <p className="text-2xl font-bold" style={{ color: '#0F1E2D' }}>{item.sales_count.toLocaleString('es-CL')}</p>
+          <p className="text-xs text-gray-400">{pct}% del total</p>
         </div>
       </div>
 
       {/* Stats row */}
       <div className="px-4 pb-3 flex gap-2 flex-wrap">
         <StatPill
+          label="Unidades"
+          value={item.sales_count}
+          color="bg-blue-50 text-blue-700"
+        />
+        <StatPill
           label="Médicos activos"
           value={item.doctors_with_sales}
-          color="bg-blue-50 text-blue-700"
+          color="bg-indigo-50 text-indigo-700"
         />
         <StatPill
           label="Médicos nuevos"
           value={item.new_doctors_count}
           color={item.new_doctors_count > 0 ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-400'}
-        />
-        <StatPill
-          label="Ventas"
-          value={item.sales_count}
-          color="bg-indigo-50 text-indigo-700"
         />
       </div>
 
@@ -96,7 +96,7 @@ function RepCard({ item, rank }: { item: RepCommissionItem; rank: number }) {
               key={cat}
               className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[cat] || 'bg-gray-100 text-gray-600'}`}
             >
-              {cat}: {count}
+              {cat}: {count} u
             </span>
           ))}
         </div>
@@ -155,9 +155,9 @@ export default function RepCommissions() {
       .finally(() => setLoading(false));
   }, [month, year]);
 
-  const totalAmount = data.reduce((s, r) => s + r.total_amount, 0);
+  const totalUnits = data.reduce((s, r) => s + r.sales_count, 0);
   const totalNewDoctors = data.reduce((s, r) => s + r.new_doctors_count, 0);
-  const totalSales = data.reduce((s, r) => s + r.sales_count, 0);
+  const totalDoctors = data.reduce((s, r) => s + r.doctors_with_sales, 0);
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
@@ -165,11 +165,11 @@ export default function RepCommissions() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#0F1E2D' }}>
-            <DollarSign size={20} className="text-white" />
+            <BarChart2 size={20} className="text-white" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Comisiones por Visitador</h1>
-            <p className="text-sm text-gray-500">Rendimiento mensual y base de comisiones</p>
+            <p className="text-sm text-gray-500">Rendimiento mensual en unidades vendidas</p>
           </div>
         </div>
 
@@ -193,16 +193,16 @@ export default function RepCommissions() {
           <div className="rounded-xl p-4 text-white shadow-sm" style={{ backgroundColor: '#0F1E2D' }}>
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp size={16} className="opacity-70" />
-              <p className="text-sm opacity-70">Venta total del mes</p>
+              <p className="text-sm opacity-70">Unidades totales del mes</p>
             </div>
-            <p className="text-2xl font-bold">${totalAmount.toLocaleString('es-CL')}</p>
+            <p className="text-2xl font-bold">{totalUnits.toLocaleString('es-CL')}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Users size={16} className="text-gray-400" />
-              <p className="text-sm text-gray-500">Total ventas</p>
+              <p className="text-sm text-gray-500">Médicos activos (con ventas)</p>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{totalSales.toLocaleString('es-CL')}</p>
+            <p className="text-2xl font-bold text-gray-900">{totalDoctors.toLocaleString('es-CL')}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
@@ -221,7 +221,7 @@ export default function RepCommissions() {
         </div>
       ) : data.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
-          <DollarSign size={40} className="mx-auto mb-3 opacity-30" />
+          <BarChart2 size={40} className="mx-auto mb-3 opacity-30" />
           <p>No hay datos de ventas para este período</p>
         </div>
       ) : (
@@ -237,10 +237,9 @@ export default function RepCommissions() {
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">#</th>
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Visitador</th>
-                    <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Ventas</th>
+                    <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Unidades</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos activos</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos nuevos</th>
-                    <th className="text-right px-4 py-2.5 text-gray-500 font-medium">Monto Total</th>
                     <th className="text-right px-4 py-2.5 text-gray-500 font-medium hidden sm:table-cell">% del Total</th>
                   </tr>
                 </thead>
@@ -249,7 +248,7 @@ export default function RepCommissions() {
                     <tr key={item.rep_id} className={`border-t border-gray-100 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-4 py-3 font-bold text-gray-400">{idx + 1}</td>
                       <td className="px-4 py-3 font-semibold text-gray-900">{item.rep_name}</td>
-                      <td className="px-4 py-3 text-center">{item.sales_count}</td>
+                      <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{item.sales_count}</td>
                       <td className="px-4 py-3 text-center">{item.doctors_with_sales}</td>
                       <td className="px-4 py-3 text-center">
                         {item.new_doctors_count > 0 ? (
@@ -260,11 +259,8 @@ export default function RepCommissions() {
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold" style={{ color: '#0F1E2D' }}>
-                        ${item.total_amount.toLocaleString('es-CL')}
-                      </td>
                       <td className="px-4 py-3 text-right text-gray-500 hidden sm:table-cell">
-                        {totalAmount > 0 ? ((item.total_amount / totalAmount) * 100).toFixed(1) : 0}%
+                        {totalUnits > 0 ? ((item.sales_count / totalUnits) * 100).toFixed(1) : 0}%
                       </td>
                     </tr>
                   ))}
@@ -272,12 +268,9 @@ export default function RepCommissions() {
                 <tfoot>
                   <tr className="border-t-2 border-gray-200" style={{ backgroundColor: '#E8F4F8' }}>
                     <td colSpan={2} className="px-4 py-3 font-bold text-gray-700">TOTAL</td>
-                    <td className="px-4 py-3 text-center font-bold text-gray-700">{totalSales}</td>
+                    <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{totalUnits}</td>
                     <td className="px-4 py-3 text-center font-bold text-gray-700">—</td>
                     <td className="px-4 py-3 text-center font-bold text-green-700">{totalNewDoctors}</td>
-                    <td className="px-4 py-3 text-right font-bold" style={{ color: '#0F1E2D' }}>
-                      ${totalAmount.toLocaleString('es-CL')}
-                    </td>
                     <td className="px-4 py-3 text-right font-bold text-gray-700 hidden sm:table-cell">100%</td>
                   </tr>
                 </tfoot>
@@ -290,7 +283,7 @@ export default function RepCommissions() {
             <h2 className="font-semibold text-gray-700 mb-3">Detalle por Visitador</h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {data.map((item, idx) => (
-                <RepCard key={item.rep_id} item={item} rank={idx + 1} />
+                <RepCard key={item.rep_id} item={item} rank={idx + 1} totalUnits={totalUnits} />
               ))}
             </div>
           </div>
