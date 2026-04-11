@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, TrendingUp, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import { salesApi, consolidatedSalesApi } from '../../api';
 import type { SalesSummaryItem } from '../../types';
 
@@ -10,6 +10,7 @@ export default function SalesUpload() {
   const [error, setError] = useState('');
   const [summary, setSummary] = useState<SalesSummaryItem[]>([]);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [lastUpload, setLastUpload] = useState<{ id: number; filename: string; upload_date: string; rows_processed: number } | null>(null);
 
   const loadSummary = async () => {
     setLoadingSummary(true);
@@ -17,7 +18,12 @@ export default function SalesUpload() {
     finally { setLoadingSummary(false); }
   };
 
-  useEffect(() => { loadSummary(); }, []);
+  const loadLastUpload = async () => {
+    try { setLastUpload(await consolidatedSalesApi.getLastUpload()); }
+    catch { /* silencioso */ }
+  };
+
+  useEffect(() => { loadSummary(); loadLastUpload(); }, []);
 
   const handleUpload = async () => {
     if (!file) return;
@@ -26,6 +32,7 @@ export default function SalesUpload() {
       const res = await consolidatedSalesApi.upload(file);
       setResult(res);
       loadSummary();
+      loadLastUpload();
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Error al cargar el archivo');
     } finally {
@@ -43,6 +50,26 @@ export default function SalesUpload() {
         <h1 className="text-2xl font-bold text-gray-900">Ventas</h1>
         <p className="text-gray-500 text-sm mt-1">Carga archivos de ventas y visualiza la correlación con visitas</p>
       </div>
+
+      {/* Último archivo cargado */}
+      {lastUpload && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <FileText size={18} className="text-blue-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-blue-800 truncate">
+              Último archivo cargado: <span className="font-semibold">{lastUpload.filename}</span>
+            </p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              {new Date(lastUpload.upload_date).toLocaleString('es-CL', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+              })}
+              {' · '}
+              {lastUpload.rows_processed.toLocaleString()} filas procesadas
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Upload section */}
       <div className="card max-w-2xl">

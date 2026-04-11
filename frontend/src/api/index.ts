@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type {
   BusinessLine, MedicalRep, Doctor, Visit, Sale, SalesSummaryItem,
-  DashboardStats, TodayVisit, RepStats, AgentMessage
+  DashboardStats, TodayVisit, RepStats, RepDetail, AgentMessage
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -96,6 +96,7 @@ export const dashboardApi = {
   getVisitsByRep: (month?: number, year?: number) => api.get<{ rep_name: string; completed: number; total: number; rep_id: number }[]>('/dashboard/visits-by-rep', { params: { ...(month && { month }), ...(year && { year }) } }).then(r => r.data),
   getSalesByBusinessLine: () => api.get<{ name: string; value: number; color: string }[]>('/dashboard/sales-by-business-line').then(r => r.data),
   getRepStats: (rep_id: number) => api.get<RepStats>(`/dashboard/rep/${rep_id}/stats`).then(r => r.data),
+  getRepDetail: (rep_id: number) => api.get<RepDetail>(`/dashboard/rep/${rep_id}/detail`).then(r => r.data),
   getDailyTracking: (date?: string) => api.get<{
     date: string;
     reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
@@ -121,6 +122,7 @@ export const consolidatedSalesApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(r => r.data);
   },
+  getLastUpload: () => api.get<{ id: number; filename: string; upload_date: string; rows_processed: number } | null>('/sales/uploads/last').then(r => r.data),
 };
 
 // AI Agent

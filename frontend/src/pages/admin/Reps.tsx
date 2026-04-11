@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Users, MapPin } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, MapPin, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/Modal';
 import { repsApi } from '../../api';
 import type { MedicalRep } from '../../types';
@@ -9,6 +10,7 @@ const emptyRep: Partial<MedicalRep> = {
 };
 
 export default function Reps() {
+  const navigate = useNavigate();
   const [reps, setReps] = useState<MedicalRep[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -139,10 +141,16 @@ export default function Reps() {
                 </div>
               </div>
 
-              <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <span className={`text-xs font-medium px-2 py-1 rounded-full ${rep.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                   {rep.is_active ? 'Activo' : 'Inactivo'}
                 </span>
+                <button
+                  onClick={() => navigate(`/admin/reps/${rep.id}`)}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors"
+                >
+                  Ver detalle <ChevronRight size={13} />
+                </button>
               </div>
             </div>
           ))}

@@ -121,6 +121,45 @@ export interface UpcomingVisit {
   status: string;
 }
 
+export interface RepDetailVisit {
+  visit_id: number;
+  doctor_id?: number;
+  doctor_name: string;
+  doctor_specialty?: string;
+  doctor_address?: string;
+  scheduled_date: string;
+  actual_date?: string;
+  status: 'scheduled' | 'completed' | 'missed' | 'cancelled';
+  notes?: string;
+}
+
+export interface RepDetailPeriod {
+  start: string;
+  end: string;
+  total: number;
+  completed: number;
+  missed: number;
+  pending: number;
+  cancelled: number;
+  completion_rate: number;
+  visits: RepDetailVisit[];
+}
+
+export interface RepDetail {
+  rep: {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string;
+    territory?: string;
+    zone?: string;
+    is_active: boolean;
+    doctor_count: number;
+  };
+  week: RepDetailPeriod;
+  month: RepDetailPeriod;
+}
+
 export interface AgentMessage {
   role: 'user' | 'assistant';
   content: string;

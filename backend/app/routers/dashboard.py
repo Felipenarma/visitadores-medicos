@@ -451,6 +451,93 @@ def get_sales_by_doctor(
     return result[:top]
 
 
+@router.get("/rep/{rep_id}/detail")
+def get_rep_detail(rep_id: int, db: Session = Depends(get_db)):
+    """Resumen detallado de un visitador: visitas y médicos por semana y mes."""
+    rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
+    if not rep:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Visitador no encontrado")
+
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Semana actual (lunes a domingo)
+    week_start = today_start - timedelta(days=today_start.weekday())
+    week_end = week_start + timedelta(days=7)
+
+    # Mes actual
+    month_start = today_start.replace(day=1)
+    from calendar import monthrange
+    _, last_day = monthrange(today_start.year, today_start.month)
+    month_end = today_start.replace(day=last_day, hour=23, minute=59, second=59)
+
+    def build_period_summary(start, end):
+        visits = db.query(Visit).filter(
+            Visit.rep_id == rep_id,
+            Visit.scheduled_date >= start,
+            Visit.scheduled_date < end
+        ).order_by(Visit.scheduled_date.asc()).all()
+
+        total = len(visits)
+        completed = sum(1 for v in visits if v.status == "completed")
+        missed = sum(1 for v in visits if v.status == "missed")
+        pending = sum(1 for v in visits if v.status == "scheduled")
+        cancelled = sum(1 for v in visits if v.status == "cancelled")
+        completion_rate = round((completed / total) * 100) if total > 0 else 0
+
+        visits_list = []
+        for v in visits:
+            visits_list.append({
+                "visit_id": v.id,
+                "doctor_id": v.doctor_id,
+                "doctor_name": v.doctor.name if v.doctor else "N/A",
+                "doctor_specialty": v.doctor.specialty if v.doctor else None,
+                "doctor_address": v.doctor.address if v.doctor else None,
+                "scheduled_date": v.scheduled_date.isoformat() if v.scheduled_date else None,
+                "actual_date": v.actual_date.isoformat() if v.actual_date else None,
+                "status": v.status,
+                "notes": v.notes,
+            })
+
+        return {
+            "total": total,
+            "completed": completed,
+            "missed": missed,
+            "pending": pending,
+            "cancelled": cancelled,
+            "completion_rate": completion_rate,
+            "visits": visits_list,
+        }
+
+    week_summary = build_period_summary(week_start, week_end)
+    month_summary = build_period_summary(month_start, month_end + timedelta(seconds=1))
+
+    return {
+        "rep": {
+            "id": rep.id,
+            "name": rep.name,
+            "email": rep.email,
+            "phone": rep.phone,
+            "territory": rep.territory,
+            "zone": rep.zone,
+            "is_active": rep.is_active,
+            "doctor_count": db.query(func.count(Doctor.id)).filter(
+                Doctor.rep_id == rep_id, Doctor.is_active == True
+            ).scalar(),
+        },
+        "week": {
+            "start": week_start.strftime("%Y-%m-%d"),
+            "end": (week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
+            **week_summary,
+        },
+        "month": {
+            "start": month_start.strftime("%Y-%m-%d"),
+            "end": month_end.strftime("%Y-%m-%d"),
+            **month_summary,
+        },
+    }
+
+
 @router.get("/rep-commissions")
 def get_rep_commissions(
     month: int = Query(default=None),
@@ -497,11 +584,40 @@ def get_rep_commissions(
                 if doc:
                     new_docs.append(doc.name)
 
-        # Category breakdown
+        # Category breakdown global
         cat_breakdown = {}
         for s in sales_period:
             cat = s.categoria or "Sin categoría"
             cat_breakdown[cat] = cat_breakdown.get(cat, 0) + 1
+
+        # Detalle por médico
+        doctor_detail_map = {}
+        for s in sales_period:
+            if not s.doctor_id:
+                continue
+            key = s.doctor_id
+            if key not in doctor_detail_map:
+                doc = db.query(Doctor).filter(Doctor.id == s.doctor_id).first()
+                doctor_detail_map[key] = {
+                    "doctor_id": s.doctor_id,
+                    "doctor_name": doc.name if doc else (s.doctor_name_raw or "Sin nombre"),
+                    "rut": (doc.rut if doc and doc.rut else None) or "",
+                    "specialty": doc.specialty if doc else None,
+                    "is_new": doc.name in new_docs if doc else False,
+                    "units": 0,
+                    "amount": 0.0,
+                    "categories": {},
+                }
+            doctor_detail_map[key]["units"] += 1
+            doctor_detail_map[key]["amount"] += safe_float(s.amount)
+            cat = s.categoria or "Sin categoría"
+            doctor_detail_map[key]["categories"][cat] = doctor_detail_map[key]["categories"].get(cat, 0) + 1
+
+        doctors_detail = sorted(
+            [{"amount": round(v["amount"], 2), **{k: val for k, val in v.items() if k != "amount"}} for v in doctor_detail_map.values()],
+            key=lambda x: x["units"],
+            reverse=True,
+        )
 
         result.append({
             "rep_id": rep.id,
@@ -512,6 +628,7 @@ def get_rep_commissions(
             "total_amount": total_amount,
             "sales_count": sales_count,
             "categories": cat_breakdown,
+            "doctors_detail": doctors_detail,
         })
 
     result.sort(key=lambda x: x["total_amount"], reverse=True)

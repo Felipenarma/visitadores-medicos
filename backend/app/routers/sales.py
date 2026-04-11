@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -209,7 +209,7 @@ async def upload_sales(file: UploadFile = File(...), db: Session = Depends(get_d
 
 
 @router.post("/upload-consolidado")
-async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Carga el archivo consolidado de ventas con RUT doctor/paciente y categoría."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No se proporcionó archivo")
@@ -240,6 +240,7 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
             + " " +
             df["apellido_profesional"].fillna("").astype(str).str.strip()
         ).str.strip()
+        df = df.drop(columns=["nombre_profesional", "apellido_profesional"], errors="ignore")
     # Concatenar nombre + apellido del titular/paciente si vienen separados
     if "nombre_titular" in df.columns and "apellido_titular" in df.columns:
         df["nombre_paciente"] = (
@@ -247,10 +248,28 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
             + " " +
             df["apellido_titular"].fillna("").astype(str).str.strip()
         ).str.strip()
+        # Eliminar columnas fuente para que col_map no genere duplicados
+        df = df.drop(columns=["nombre_titular", "apellido_titular"], errors="ignore")
 
     # Filtrar solo ventas pagadas si existe la columna estado
     if "estado_cotizacion" in df.columns:
         df = df[df["estado_cotizacion"].astype(str).str.lower().str.contains("pagad", na=False)]
+
+    # ── Preprocessing: resolver conflictos de prioridad entre columnas ──────
+    # Guardar tipo_producto original antes de que sea renombrado a categoria
+    if "tipo_producto" in df.columns:
+        df["_tipo_producto_raw"] = df["tipo_producto"]
+    # Preferir fecha_pago (fecha real de pago) sobre fecha_y_hora (creación)
+    if "fecha_pago" in df.columns and "fecha_y_hora" in df.columns:
+        df = df.drop(columns=["fecha_y_hora"])
+    # Preferir precio_total (con descuentos aplicados) sobre precio_productos
+    if "precio_total" in df.columns and "precio_productos" in df.columns:
+        df = df.drop(columns=["precio_productos"])
+    # rut_titular es el RUT del paciente real; unificarlo con rut_usuario
+    if "rut_titular" in df.columns and "rut_usuario" not in df.columns:
+        df = df.rename(columns={"rut_titular": "rut_usuario"})
+    elif "rut_titular" in df.columns:
+        df["rut_usuario"] = df["rut_titular"].fillna(df["rut_usuario"])
 
     col_map = {
         "nombre_doctor": "nombre_medico",
@@ -301,8 +320,17 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
             rut_pac = clean(row.get("rut_paciente", ""))
             nombre_pac = clean(row.get("nombre_paciente", ""))
             product = clean(row.get("producto", ""))
-            tipo_prod = clean(row.get("tipo_producto", "")) or ""
-            categoria = clean(row.get("categoria", "")) or _infer_categoria(product or "", tipo_prod)
+            if product and len(product) > 200:
+                product = product[:197] + "..."
+            # _tipo_producto_raw se preservó antes del rename; categoria puede venir directo
+            tipo_prod = clean(row.get("_tipo_producto_raw", "")) or clean(row.get("tipo_producto", "")) or ""
+            categoria_raw = clean(row.get("categoria", ""))
+            # Si categoria_raw es un tipo genérico (ej. "Recetario Magistral a Confeccionar"), usar inferencia
+            tipos_genericos = {"recetario magistral a confeccionar", "recetario magistral terminado", "comercial"}
+            if categoria_raw and categoria_raw.lower() not in tipos_genericos:
+                categoria = categoria_raw
+            else:
+                categoria = _infer_categoria(product or "", tipo_prod)
             amount_raw = row.get("monto", 0)
             date_raw = row.get("fecha_venta", None)
 
@@ -319,9 +347,12 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
                     sale_date = None
 
             date_str = sale_date.strftime("%Y%m%d") if sale_date else "nodate"
-            # Si hay N° de orden úsalo como external_id para máxima precisión
-            n_orden = clean(row.get("n_orden", ""))
-            if n_orden:
+            # Prioridad: N° Cotización > N° Orden > hash compuesto
+            ncot = clean(row.get("ncotizacion", ""))
+            n_orden = clean(row.get("n_orden", "")) or clean(row.get("norden", ""))
+            if ncot:
+                ext_id = f"cot_{ncot}"[:200]
+            elif n_orden:
                 ext_id = f"orden_{n_orden}"[:200]
             else:
                 ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"[:200]
@@ -379,8 +410,8 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
         db.bulk_save_objects(sales_to_add)
         db.commit()
 
-    # Normalización automática post-carga
-    norm_result = _run_normalization(db)
+    # Normalización automática en background (no bloquea la respuesta)
+    background_tasks.add_task(_run_normalization, db)
 
     return {
         "message": "Consolidado cargado exitosamente",
@@ -389,8 +420,21 @@ async def upload_consolidado(file: UploadFile = File(...), db: Session = Depends
         "matched_doctors": matched,
         "new_doctors_created": new_doctors_count,
         "duplicates_skipped": duplicates,
-        "normalized": norm_result,
+        "normalized": "en proceso (background)",
         "errors": []
+    }
+
+
+@router.get("/uploads/last")
+def get_last_upload(db: Session = Depends(get_db)):
+    upload = db.query(SalesUpload).order_by(SalesUpload.id.desc()).first()
+    if not upload:
+        return None
+    return {
+        "id": upload.id,
+        "filename": upload.filename,
+        "upload_date": upload.upload_date,
+        "rows_processed": upload.rows_processed,
     }
 
 
