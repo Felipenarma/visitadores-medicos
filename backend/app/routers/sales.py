@@ -385,6 +385,11 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
                 ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"[:200]
 
             if ext_id in existing_ext_ids:
+                # Aunque sea duplicado, actualizar doctor_name_raw si el nuevo nombre es más largo
+                if doctor_name:
+                    existing_sale = db.query(Sale).filter(Sale.external_id == ext_id).first()
+                    if existing_sale and len(doctor_name) > len(existing_sale.doctor_name_raw or ""):
+                        existing_sale.doctor_name_raw = doctor_name
                 duplicates += 1
                 continue
             existing_ext_ids.add(ext_id)
