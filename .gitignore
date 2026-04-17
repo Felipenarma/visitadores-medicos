@@ -5,3 +5,9 @@ __pycache__/
 visitadores.db
 dist/
 .vite/
+.DS_Store
+.claude/
+visitadores-medicos-backup-*/
+Informe_Tecnico_Visitadores_Medicos.docx
+backend/.DS_Store
+frontend/.DS_Store
