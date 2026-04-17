@@ -357,6 +357,7 @@ def get_new_doctors(
         total = sum(safe_float(x.amount) for x in doc_sales)
 
         result.append({
+            "doctor_id": doctor.id if doctor else None,
             "rut_doctor": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
             "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
             "specialty": doctor.specialty if doctor else None,
