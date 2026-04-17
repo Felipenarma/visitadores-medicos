@@ -470,6 +470,34 @@ def get_last_upload(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/uploads")
+def list_uploads(db: Session = Depends(get_db)):
+    uploads = db.query(SalesUpload).order_by(SalesUpload.upload_date.desc()).all()
+    result = []
+    for u in uploads:
+        sales_count = db.query(func.count(Sale.id)).filter(Sale.upload_id == u.id).scalar()
+        result.append({
+            "id": u.id,
+            "filename": u.filename,
+            "upload_date": u.upload_date,
+            "rows_processed": u.rows_processed,
+            "sales_count": sales_count,
+        })
+    return result
+
+
+@router.delete("/uploads/{upload_id}")
+def delete_upload(upload_id: int, db: Session = Depends(get_db)):
+    upload = db.query(SalesUpload).filter(SalesUpload.id == upload_id).first()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload no encontrado")
+    # Eliminar ventas asociadas
+    db.query(Sale).filter(Sale.upload_id == upload_id).delete()
+    db.delete(upload)
+    db.commit()
+    return {"ok": True, "deleted_upload_id": upload_id}
+
+
 @router.get("/summary")
 def get_sales_summary(db: Session = Depends(get_db)):
     doctors = db.query(Doctor).filter(Doctor.is_active == True).all()

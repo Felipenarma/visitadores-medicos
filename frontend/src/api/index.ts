@@ -123,6 +123,8 @@ export const consolidatedSalesApi = {
     }).then(r => r.data);
   },
   getLastUpload: () => api.get<{ id: number; filename: string; upload_date: string; rows_processed: number } | null>('/sales/uploads/last').then(r => r.data),
+  getUploads: () => api.get<{ id: number; filename: string; upload_date: string; rows_processed: number; sales_count: number }[]>('/sales/uploads').then(r => r.data),
+  deleteUpload: (id: number) => api.delete(`/sales/uploads/${id}`).then(r => r.data),
 };
 
 // AI Agent
