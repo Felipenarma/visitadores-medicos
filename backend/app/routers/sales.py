@@ -522,9 +522,11 @@ def _run_normalization(db: Session) -> dict:
             rut_raw_count[nr][s.rut_doctor] += 1
 
     # ── 2. Calcular canónico por rut normalizado ────────────────────────────
+    # Para el nombre: preferir el más largo (más completo) que aparezca al menos 1 vez.
+    # Esto asegura que "Juan Pérez" gane sobre "Juan" aunque haya menos registros nuevos.
     canonical: dict = {}
     for nr in rut_name_count:
-        best_name   = max(rut_name_count[nr],  key=lambda k: rut_name_count[nr][k])  if rut_name_count[nr]  else None
+        best_name   = max(rut_name_count[nr],  key=lambda k: len(k))                  if rut_name_count[nr]  else None
         best_did    = max(rut_docid_count[nr],  key=lambda k: rut_docid_count[nr][k]) if rut_docid_count[nr] else None
         best_rawrut = max(rut_raw_count[nr],    key=lambda k: rut_raw_count[nr][k])   if rut_raw_count[nr]   else None
         canonical[nr] = {"name": best_name, "doctor_id": best_did, "raw_rut": best_rawrut}
