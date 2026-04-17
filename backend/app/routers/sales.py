@@ -440,7 +440,7 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
 
     if sales_to_add:
         db.bulk_save_objects(sales_to_add)
-        db.commit()
+    db.commit()  # Commit siempre: cubre nuevas filas y actualizaciones de duplicados
 
     # Normalización automática en background (no bloquea la respuesta)
     background_tasks.add_task(_run_normalization, db)
