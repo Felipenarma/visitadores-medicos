@@ -233,7 +233,9 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         return c
     df.columns = [norm_col(c) for c in df.columns]
 
-    # Concatenar nombre + apellido del profesional si vienen separados
+    # Concatenar nombre + apellido del doctor/profesional si vienen separados
+    # Soporta: nombre_profesional/apellido_profesional (fuente original)
+    #          nombre_doctor/apellido_doctor (archivo normalizado)
     if "nombre_profesional" in df.columns and "apellido_profesional" in df.columns:
         df["nombre_medico"] = (
             df["nombre_profesional"].fillna("").astype(str).str.strip()
@@ -241,15 +243,31 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
             df["apellido_profesional"].fillna("").astype(str).str.strip()
         ).str.strip()
         df = df.drop(columns=["nombre_profesional", "apellido_profesional"], errors="ignore")
+    elif "nombre_doctor" in df.columns and "apellido_doctor" in df.columns:
+        df["nombre_medico"] = (
+            df["nombre_doctor"].fillna("").astype(str).str.strip()
+            + " " +
+            df["apellido_doctor"].fillna("").astype(str).str.strip()
+        ).str.strip()
+        df = df.drop(columns=["nombre_doctor", "apellido_doctor"], errors="ignore")
+
     # Concatenar nombre + apellido del titular/paciente si vienen separados
+    # Soporta: nombre_titular/apellido_titular (fuente original)
+    #          nombre_usuario/apellido_usuario (archivo normalizado)
     if "nombre_titular" in df.columns and "apellido_titular" in df.columns:
         df["nombre_paciente"] = (
             df["nombre_titular"].fillna("").astype(str).str.strip()
             + " " +
             df["apellido_titular"].fillna("").astype(str).str.strip()
         ).str.strip()
-        # Eliminar columnas fuente para que col_map no genere duplicados
         df = df.drop(columns=["nombre_titular", "apellido_titular"], errors="ignore")
+    elif "nombre_usuario" in df.columns and "apellido_usuario" in df.columns:
+        df["nombre_paciente"] = (
+            df["nombre_usuario"].fillna("").astype(str).str.strip()
+            + " " +
+            df["apellido_usuario"].fillna("").astype(str).str.strip()
+        ).str.strip()
+        df = df.drop(columns=["nombre_usuario", "apellido_usuario"], errors="ignore")
 
     # Filtrar solo ventas pagadas si existe la columna estado
     if "estado_cotizacion" in df.columns:
@@ -272,16 +290,25 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         df["rut_usuario"] = df["rut_titular"].fillna(df["rut_usuario"])
 
     col_map = {
+        # Doctor
         "nombre_doctor": "nombre_medico",
         "doctor": "nombre_medico", "medico": "nombre_medico",
         "rut_profesional": "rut_doctor",
-        "rut_usuario": "rut_paciente",
+        # Paciente
+        "rut_usuario": "rut_paciente",          # fuente original
+        "rut_usuario_1": "rut_paciente",         # por si viene renombrado
         "nombre_titular": "nombre_paciente",
+        "nombre_usuario": "nombre_paciente",     # archivo normalizado
+        # Montos
         "precio_total": "monto", "amount": "monto", "total": "monto",
         "precio_productos": "monto",
+        # Fechas
         "fecha_ingresado": "fecha_venta", "fecha_y_hora": "fecha_venta",
         "fecha": "fecha_venta", "fecha_pago": "fecha_venta",
+        # Categoría — incluye columna del archivo normalizado
         "categoria": "categoria", "tipo_producto": "categoria",
+        "categoria_producto": "categoria",       # archivo normalizado
+        # Orden
         "n_orden": "n_orden",
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
