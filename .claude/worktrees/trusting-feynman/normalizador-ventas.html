@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Normalizador de Ventas — Visitadores Médicos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f1f5f9; }
+    .drop-zone { border: 2px dashed #cbd5e1; transition: all .2s; }
+    .drop-zone.drag-over { border-color: #3b82f6; background: #eff6ff; }
+    .badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:9999px; font-size:.75rem; font-weight:600; }
+    .table-wrap { overflow-x:auto; max-height:380px; overflow-y:auto; }
+    table { border-collapse:collapse; width:100%; }
+    th { position:sticky; top:0; background:#f8fafc; z-index:1; }
+    th, td { padding:6px 12px; border:1px solid #e2e8f0; white-space:nowrap; font-size:.8rem; }
+    tr:hover td { background:#f0f9ff; }
+    .spinner { width:20px;height:20px;border:3px solid #dbeafe;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    select[multiple] { min-height:90px; }
+    .tag { display:inline-block; background:#dbeafe; color:#1d4ed8; border-radius:4px; padding:1px 7px; font-size:.72rem; margin:1px; }
+    .tag.cannabis { background:#d1fae5; color:#065f46; }
+    .tag.hormonas { background:#fce7f3; color:#9d174d; }
+    .tag.pelo { background:#fef3c7; color:#92400e; }
+    .tag.peso { background:#ffedd5; color:#9a3412; }
+    .tag.piel { background:#ede9fe; color:#5b21b6; }
+    .tag.suero { background:#cffafe; color:#164e63; }
+    .tag.terminado { background:#f1f5f9; color:#475569; }
+    .tag.fertilidad { background:#fdf4ff; color:#7e22ce; }
+    .tag.unknown { background:#f1f5f9; color:#94a3b8; }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xl font-bold">N</div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-800">Normalizador de Ventas</h1>
+          <p class="text-sm text-slate-500">Carga, filtra y descarga el consolidado normalizado para Visitadores Médicos</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload zone -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <h2 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        Archivo de ventas
+      </h2>
+      <div id="dropZone" class="drop-zone rounded-xl p-10 text-center cursor-pointer hover:bg-slate-50 transition">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+        <div id="dropContent">
+          <svg class="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <p class="text-slate-600 font-medium">Arrastra tu archivo aquí</p>
+          <p class="text-slate-400 text-sm mt-1">o <span class="text-blue-500 underline">haz clic para seleccionar</span></p>
+          <p class="text-xs text-slate-400 mt-2">Soporta .xlsx, .xls, .csv</p>
+        </div>
+        <div id="fileInfo" class="hidden">
+          <svg class="w-10 h-10 text-green-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <p id="fileName" class="font-semibold text-slate-700"></p>
+          <p id="fileStats" class="text-sm text-slate-500 mt-1"></p>
+          <button id="clearFile" class="mt-3 text-xs text-red-400 hover:text-red-600">Quitar archivo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div id="filterSection" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <h2 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+        Filtros
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- Rango de fechas -->
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-2">Rango de fechas</label>
+          <div class="flex gap-2 items-center">
+            <input type="date" id="dateFrom" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            <span class="text-slate-400 text-sm">a</span>
+            <input type="date" id="dateTo" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div class="flex gap-2 mt-2 flex-wrap">
+            <button onclick="setDatePreset('month')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-md">Este mes</button>
+            <button onclick="setDatePreset('lastmonth')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-md">Mes anterior</button>
+            <button onclick="setDatePreset('year')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-md">Este año</button>
+            <button onclick="setDatePreset('all')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-md">Todos</button>
+          </div>
+        </div>
+
+        <!-- Estado -->
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-2">Estado de la venta</label>
+          <div class="space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" value="pagado" class="estado-check w-4 h-4 accent-blue-500" checked />
+              <span class="text-sm text-slate-700">Pagado</span>
+              <span id="cnt-pagado" class="badge bg-green-100 text-green-700 ml-auto">0</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" value="cotizado" class="estado-check w-4 h-4 accent-blue-500" />
+              <span class="text-sm text-slate-700">Cotizado</span>
+              <span id="cnt-cotizado" class="badge bg-yellow-100 text-yellow-700 ml-auto">0</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" value="ingresado" class="estado-check w-4 h-4 accent-blue-500" />
+              <span class="text-sm text-slate-700">Ingresado</span>
+              <span id="cnt-ingresado" class="badge bg-blue-100 text-blue-700 ml-auto">0</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Categorías -->
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-2">Categorías de producto</label>
+          <div class="grid grid-cols-2 gap-1">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Cannabis Medicinal" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Cannabis Medicinal</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Hormonas" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Hormonas</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Producto Terminado" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Producto Terminado</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Pelo" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Pelo</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Control de Peso" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Control de Peso</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Piel" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Piel</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Suero Terapia" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Suero Terapia</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="Fertilidad" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Fertilidad</span></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="" class="cat-check w-4 h-4 accent-blue-500" checked /><span class="text-xs text-slate-700">Sin categoría</span></label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Stats + Preview -->
+    <div id="previewSection" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h2 class="font-semibold text-slate-700 flex items-center gap-2">
+          <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Vista previa
+        </h2>
+        <div class="flex items-center gap-3 flex-wrap">
+          <span id="previewCount" class="text-sm text-slate-500"></span>
+          <button id="downloadBtn" onclick="downloadExcel()"
+            class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow-sm transition text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Descargar Excel
+          </button>
+        </div>
+      </div>
+
+      <!-- Stat cards -->
+      <div id="statCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+
+      <!-- Category breakdown -->
+      <div id="catBreakdown" class="flex flex-wrap gap-1 mb-4"></div>
+
+      <!-- Table -->
+      <div class="table-wrap rounded-lg border border-slate-200">
+        <table id="previewTable">
+          <thead id="previewHead"></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Mostrando primeras 100 filas. El Excel descargado contiene todos los registros filtrados.</p>
+    </div>
+
+    <!-- Columnas detectadas -->
+    <div id="colMapSection" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <h2 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+        Columnas detectadas en el archivo
+      </h2>
+      <div id="colMapList" class="flex flex-wrap gap-2 text-xs"></div>
+    </div>
+
+  </div>
+
+  <script>
+  // ─── State ───────────────────────────────────────────────────────────────────
+  let rawRows = [];       // parsed rows from file (array of objects, keys normalized)
+  let filteredRows = [];  // after applying filters
+  let originalCols = [];  // column names as they appear in file
+
+  // ─── Normalizer helpers ──────────────────────────────────────────────────────
+  function normCol(c) {
+    return String(c)
+      .toLowerCase().trim()
+      .replace(/\s+/g, '_')
+      .replace(/[°ºª]/g, '')
+      .replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ü/g,'u').replace(/ñ/g,'n')
+      .replace(/[^a-z0-9_]/g, '');
+  }
+
+  function clean(val) {
+    const s = String(val === null || val === undefined ? '' : val).trim();
+    return ['nan', 'none', 'null', '', 'undefined'].includes(s.toLowerCase()) ? '' : s;
+  }
+
+  function normRut(r) {
+    return String(r || '').replace(/[\.\-\s]/g,'').toUpperCase().trim();
+  }
+
+  // ─── Category inference ──────────────────────────────────────────────────────
+  const CATEGORIES = {
+    'Producto Terminado': ['hormogel','lenzetto','estreva','duphaston','progendo','bonavid','blissel','ginoderm','ovestin','colpotrophine','colpotrofine','vacidox'],
+    'Pelo':               ['minoxidil','finasteride','finasterida','dutasteride','dutasterida'],
+    'Fertilidad':         ['clomifeno','clomifene','clomiphene','coenzima q10','coenzima q 10','coq10','co-q10'],
+    'Cannabis Medicinal': ['cbd','thc','cannabis','canavis','canamo','vaporizable','vaporizador','bateria','aceite sublingual','aceite veterinario','full spectrum','broad spectrum','og kush','amnesia'],
+    'Hormonas':           ['testosterona','progesterona','dhea','estradiol','estriol','pregnenolona','crema trh','trh'],
+    'Piel':               ['derma','retinol','acido hialuronico','acne','acné'],
+    'Control de Peso':    ['semaglutida','ozempic','saxenda','liraglutida','tirzepatida','metformina','orlistat'],
+    'Suero Terapia':      ['suero','glutation','nac ','vitamina c','vitamina d','b12'],
+  };
+
+  function inferCategoria(product, tipoProducto) {
+    const p = (product||'').toLowerCase()
+      .replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u');
+    const t = (tipoProducto||'').toLowerCase();
+
+    // Producto Terminado: comercial/terminado en tipo
+    if (t.includes('comercial') || t.includes('terminado')) return 'Producto Terminado';
+
+    for (const [cat, kws] of Object.entries(CATEGORIES)) {
+      if (kws.some(k => p.includes(k))) return cat;
+    }
+    // magistral sin match → Cannabis
+    if (t.includes('magistral')) return 'Cannabis Medicinal';
+    return '';
+  }
+
+  // ─── Column mapping ──────────────────────────────────────────────────────────
+  // Possible input column aliases → standard key
+  const COL_ALIASES = {
+    // Doctor
+    'nombre_profesional': 'doc_nombre',
+    'nombre_medico':      'doc_nombre',
+    'nombre_doctor':      'doc_nombre',
+    'medico':             'doc_nombre',
+    'doctor':             'doc_nombre',
+    'apellido_profesional': 'doc_apellido',
+    'apellido_medico':    'doc_apellido',
+    'apellido_doctor':    'doc_apellido',
+    'rut_profesional':    'doc_rut',
+    'rut_doctor':         'doc_rut',
+    'rut_medico':         'doc_rut',
+    'correo_profesional': 'doc_correo',
+    'email_profesional':  'doc_correo',
+    'correo_doctor':      'doc_correo',
+    'email_doctor':       'doc_correo',
+    'telefono_profesional': 'doc_telefono',
+    'fono_profesional':   'doc_telefono',
+    'telefono_doctor':    'doc_telefono',
+    'centro_medico':      'doc_centro',
+    'centro':             'doc_centro',
+    'clinica':            'doc_centro',
+    // Usuario/Paciente
+    'nombre_titular':     'usr_nombre',
+    'nombre_paciente':    'usr_nombre',
+    'nombre_usuario':     'usr_nombre',
+    'nombre':             'usr_nombre',
+    'apellido_titular':   'usr_apellido',
+    'apellido_paciente':  'usr_apellido',
+    'apellido_usuario':   'usr_apellido',
+    'apellido':           'usr_apellido',
+    'rut_titular':        'usr_rut',
+    'rut_usuario':        'usr_rut',
+    'rut_paciente':       'usr_rut',
+    'correo_titular':     'usr_correo',
+    'email_titular':      'usr_correo',
+    'correo_usuario':     'usr_correo',
+    'email_usuario':      'usr_correo',
+    'correo':             'usr_correo',
+    'email':              'usr_correo',
+    'telefono_titular':   'usr_telefono',
+    'fono_titular':       'usr_telefono',
+    'telefono_usuario':   'usr_telefono',
+    'telefono_paciente':  'usr_telefono',
+    'telefono':           'usr_telefono',
+    // Producto
+    'producto':           'producto',
+    'nombre_producto':    'producto',
+    'descripcion':        'producto',
+    'cantidad':           'cantidad',
+    'unidades':           'cantidad',
+    'qty':                'cantidad',
+    // Venta
+    'precio_total':       'monto',
+    'precio_productos':   'monto',
+    'monto':              'monto',
+    'total':              'monto',
+    'amount':             'monto',
+    'fecha_pago':         'fecha',
+    'fecha_y_hora':       'fecha',
+    'fecha_ingresado':    'fecha',
+    'fecha_venta':        'fecha',
+    'fecha':              'fecha',
+    'tipo_producto':      'tipo_producto',
+    'tipo':               'tipo_producto',
+    'categoria':          'categoria_raw',
+    // Estado
+    'estado_cotizacion':  'estado',
+    'estado_orden':       'estado',
+    'estado':             'estado',
+    'n_cotizacion':       'ncotizacion',
+    'ncotizacion':        'ncotizacion',
+    'numero_cotizacion':  'ncotizacion',
+    'n_orden':            'n_orden',
+    'numero_orden':       'n_orden',
+  };
+
+  function mapRow(rawRow) {
+    // rawRow keys are already normCol'd
+    const r = {};
+    for (const [raw, std] of Object.entries(COL_ALIASES)) {
+      if (raw in rawRow && !(std in r)) r[std] = rawRow[raw];
+    }
+    // Also capture any unmapped cols
+    for (const [k, v] of Object.entries(rawRow)) {
+      if (!Object.keys(COL_ALIASES).includes(k)) r['_' + k] = v;
+    }
+    return r;
+  }
+
+  function parseDate(val) {
+    if (!val) return null;
+    // SheetJS may give a JS Date or a serial number
+    if (val instanceof Date) return isNaN(val) ? null : val;
+    // Excel serial number
+    if (typeof val === 'number') {
+      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+      return isNaN(d) ? null : d;
+    }
+    const d = new Date(String(val));
+    return isNaN(d) ? null : d;
+  }
+
+  function fmtDate(d) {
+    if (!d) return '';
+    return d.toISOString().slice(0,10);
+  }
+
+  // ─── Normalize to output row ─────────────────────────────────────────────────
+  function toOutputRow(r) {
+    const fecha = parseDate(r.fecha);
+
+    // Doctor: may come as one combined field or split
+    let docNombre = clean(r.doc_nombre || '');
+    let docApellido = clean(r.doc_apellido || '');
+    if (docNombre && !docApellido) {
+      // try to split — last word is apellido
+      const parts = docNombre.trim().split(/\s+/);
+      if (parts.length > 1) {
+        docApellido = parts.slice(1).join(' ');
+        docNombre = parts[0];
+      }
+    }
+
+    // User: same logic
+    let usrNombre = clean(r.usr_nombre || '');
+    let usrApellido = clean(r.usr_apellido || '');
+    if (usrNombre && !usrApellido) {
+      const parts = usrNombre.trim().split(/\s+/);
+      if (parts.length > 1) {
+        usrApellido = parts.slice(1).join(' ');
+        usrNombre = parts[0];
+      }
+    }
+
+    // Category
+    const tipoRaw = clean(r.tipo_producto || '');
+    const catRaw  = clean(r.categoria_raw || '');
+    const tiposGenericos = ['recetario magistral a confeccionar','recetario magistral terminado','comercial'];
+    let categoria;
+    if (catRaw && !tiposGenericos.includes(catRaw.toLowerCase())) {
+      categoria = catRaw;
+    } else {
+      categoria = inferCategoria(clean(r.producto || ''), tipoRaw || catRaw);
+    }
+
+    // Estado normalizado
+    const estadoRaw = clean(r.estado || '').toLowerCase();
+    let estado = estadoRaw;
+    if (estadoRaw.includes('pagad')) estado = 'Pagado';
+    else if (estadoRaw.includes('cotiz')) estado = 'Cotizado';
+    else if (estadoRaw.includes('ingresar') || estadoRaw.includes('ingresad')) estado = 'Ingresado';
+    else if (estadoRaw) estado = estadoRaw.charAt(0).toUpperCase() + estadoRaw.slice(1);
+
+    return {
+      'Fecha':               fmtDate(fecha),
+      'Estado':              estado,
+      'RUT Usuario':         normRut(r.usr_rut || ''),
+      'Correo Usuario':      clean(r.usr_correo || ''),
+      'Nombre Usuario':      usrNombre,
+      'Apellido Usuario':    usrApellido,
+      'Teléfono Usuario':    clean(r.usr_telefono || ''),
+      'RUT Doctor':          normRut(r.doc_rut || ''),
+      'Nombre Doctor':       docNombre,
+      'Apellido Doctor':     docApellido,
+      'Correo Doctor':       clean(r.doc_correo || ''),
+      'Teléfono Doctor':     clean(r.doc_telefono || ''),
+      'Centro Médico':       clean(r.doc_centro || ''),
+      'Categoría Producto':  categoria,
+      'Producto':            clean(r.producto || ''),
+      'Cantidad':            clean(r.cantidad || '1'),
+      // internal
+      _fecha: fecha,
+      _estadoRaw: estadoRaw,
+    };
+  }
+
+  // ─── File parsing ─────────────────────────────────────────────────────────────
+  function parseFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      let wb;
+      try {
+        wb = XLSX.read(data, { type: 'array', cellDates: false, raw: false });
+      } catch(err) {
+        alert('No se pudo leer el archivo: ' + err.message);
+        return;
+      }
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
+
+      if (!json.length) { alert('El archivo está vacío.'); return; }
+
+      originalCols = Object.keys(json[0]);
+
+      // Normalize column names
+      rawRows = json.map(row => {
+        const out = {};
+        for (const [k, v] of Object.entries(row)) out[normCol(k)] = v;
+        return out;
+      });
+
+      showFileInfo(file.name, rawRows.length);
+      showColMap();
+      updateStateCounts();
+      applyFilters();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function showFileInfo(name, count) {
+    document.getElementById('dropContent').classList.add('hidden');
+    document.getElementById('fileInfo').classList.remove('hidden');
+    document.getElementById('fileName').textContent = name;
+    document.getElementById('fileStats').textContent = `${count.toLocaleString()} filas encontradas`;
+    document.getElementById('filterSection').classList.remove('hidden');
+  }
+
+  function showColMap() {
+    const section = document.getElementById('colMapSection');
+    const list    = document.getElementById('colMapList');
+    section.classList.remove('hidden');
+    list.innerHTML = '';
+    originalCols.forEach(c => {
+      const norm = normCol(c);
+      const mapped = COL_ALIASES[norm];
+      const span = document.createElement('span');
+      span.className = 'px-2 py-1 rounded text-xs font-mono ' + (mapped ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500');
+      span.textContent = c + (mapped ? ` → ${mapped}` : ' (ignorada)');
+      list.appendChild(span);
+    });
+  }
+
+  function updateStateCounts() {
+    const counts = { pagado: 0, cotizado: 0, ingresado: 0 };
+    rawRows.forEach(rr => {
+      const mapped = mapRow(rr);
+      const out    = toOutputRow(mapped);
+      const e      = out._estadoRaw;
+      if (e.includes('pagad'))      counts.pagado++;
+      else if (e.includes('cotiz')) counts.cotizado++;
+      else if (e.includes('ingresar')||e.includes('ingresad')) counts.ingresado++;
+    });
+    document.getElementById('cnt-pagado').textContent   = counts.pagado.toLocaleString();
+    document.getElementById('cnt-cotizado').textContent = counts.cotizado.toLocaleString();
+    document.getElementById('cnt-ingresado').textContent= counts.ingresado.toLocaleString();
+  }
+
+  // ─── Filters ─────────────────────────────────────────────────────────────────
+  function getSelectedEstados() {
+    return [...document.querySelectorAll('.estado-check:checked')].map(c => c.value);
+  }
+
+  function getSelectedCats() {
+    return [...document.querySelectorAll('.cat-check:checked')].map(c => c.value);
+  }
+
+  function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo   = document.getElementById('dateTo').value;
+    const estados  = getSelectedEstados();
+    const cats     = getSelectedCats();
+
+    filteredRows = rawRows
+      .map(rr => toOutputRow(mapRow(rr)))
+      .filter(row => {
+        // Date filter
+        if (dateFrom && row._fecha && row._fecha < new Date(dateFrom)) return false;
+        if (dateTo   && row._fecha && row._fecha > new Date(dateTo + 'T23:59:59')) return false;
+        // Estado filter
+        const e = row._estadoRaw;
+        let matchEstado = false;
+        if (estados.includes('pagado')    && e.includes('pagad'))      matchEstado = true;
+        if (estados.includes('cotizado')  && e.includes('cotiz'))      matchEstado = true;
+        if (estados.includes('ingresado') && (e.includes('ingresar')||e.includes('ingresad'))) matchEstado = true;
+        // If no estado column in file, include all
+        if (!e) matchEstado = true;
+        if (!matchEstado) return false;
+        // Category filter
+        const cat = row['Categoría Producto'];
+        if (!cats.includes(cat)) return false;
+        return true;
+      });
+
+    renderPreview();
+  }
+
+  // ─── Preview rendering ────────────────────────────────────────────────────────
+  const OUTPUT_COLS = [
+    'Fecha','Estado','RUT Usuario','Correo Usuario','Nombre Usuario','Apellido Usuario',
+    'Teléfono Usuario','RUT Doctor','Nombre Doctor','Apellido Doctor','Correo Doctor',
+    'Teléfono Doctor','Centro Médico','Categoría Producto','Producto','Cantidad'
+  ];
+
+  const CAT_CLASSES = {
+    'Cannabis Medicinal': 'cannabis',
+    'Hormonas':           'hormonas',
+    'Pelo':               'pelo',
+    'Control de Peso':    'peso',
+    'Piel':               'piel',
+    'Suero Terapia':      'suero',
+    'Producto Terminado': 'terminado',
+    'Fertilidad':         'fertilidad',
+  };
+
+  function renderPreview() {
+    const section = document.getElementById('previewSection');
+    section.classList.remove('hidden');
+
+    // Count info
+    document.getElementById('previewCount').textContent =
+      `${filteredRows.length.toLocaleString()} registros filtrados de ${rawRows.length.toLocaleString()} totales`;
+
+    // Stat cards
+    const catCounts = {};
+    filteredRows.forEach(r => {
+      const c = r['Categoría Producto'] || 'Sin categoría';
+      catCounts[c] = (catCounts[c] || 0) + 1;
+    });
+
+    const statCards = document.getElementById('statCards');
+    statCards.innerHTML = `
+      <div class="bg-blue-50 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-blue-700">${filteredRows.length.toLocaleString()}</div>
+        <div class="text-xs text-blue-500 mt-1">Registros totales</div>
+      </div>
+      <div class="bg-green-50 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-green-700">${new Set(filteredRows.map(r=>r['RUT Doctor']).filter(Boolean)).size}</div>
+        <div class="text-xs text-green-500 mt-1">Doctores únicos</div>
+      </div>
+      <div class="bg-purple-50 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-purple-700">${new Set(filteredRows.map(r=>r['RUT Usuario']).filter(Boolean)).size}</div>
+        <div class="text-xs text-purple-500 mt-1">Usuarios únicos</div>
+      </div>
+      <div class="bg-amber-50 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-amber-700">${Object.keys(catCounts).length}</div>
+        <div class="text-xs text-amber-500 mt-1">Categorías</div>
+      </div>
+    `;
+
+    // Category breakdown
+    const breakdown = document.getElementById('catBreakdown');
+    breakdown.innerHTML = Object.entries(catCounts)
+      .sort((a,b) => b[1]-a[1])
+      .map(([cat, cnt]) => {
+        const cls = CAT_CLASSES[cat] || 'unknown';
+        return `<span class="tag ${cls}">${cat || 'Sin categoría'}: ${cnt}</span>`;
+      }).join('');
+
+    // Table header
+    const thead = document.getElementById('previewHead');
+    thead.innerHTML = '<tr>' + OUTPUT_COLS.map(c => `<th class="text-left font-semibold text-slate-600">${c}</th>`).join('') + '</tr>';
+
+    // Table body (first 100 rows)
+    const tbody = document.getElementById('previewBody');
+    const preview = filteredRows.slice(0, 100);
+    tbody.innerHTML = preview.map(row => {
+      const cells = OUTPUT_COLS.map(col => {
+        let val = row[col] || '';
+        if (col === 'Categoría Producto') {
+          const cls = CAT_CLASSES[val] || 'unknown';
+          val = `<span class="tag ${cls}">${val||'—'}</span>`;
+        }
+        return `<td>${val}</td>`;
+      });
+      return '<tr>' + cells.join('') + '</tr>';
+    }).join('');
+  }
+
+  // ─── Excel download ───────────────────────────────────────────────────────────
+  function downloadExcel() {
+    if (!filteredRows.length) { alert('No hay filas para descargar.'); return; }
+
+    const data = filteredRows.map(row => {
+      const out = {};
+      OUTPUT_COLS.forEach(c => { out[c] = row[c] || ''; });
+      return out;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data, { header: OUTPUT_COLS });
+
+    // Column widths
+    const colWidths = OUTPUT_COLS.map(c => ({ wch: Math.max(c.length, 15) }));
+    ws['!cols'] = colWidths;
+
+    // Style header row (bold)
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (!ws[addr]) continue;
+      ws[addr].s = { font: { bold: true }, fill: { fgColor: { rgb: 'EFF6FF' } } };
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ventas Normalizadas');
+
+    const today = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `ventas_normalizadas_${today}.xlsx`);
+  }
+
+  // ─── Date presets ─────────────────────────────────────────────────────────────
+  function setDatePreset(preset) {
+    const now = new Date();
+    let from, to;
+    if (preset === 'month') {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to   = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    } else if (preset === 'lastmonth') {
+      from = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      to   = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else if (preset === 'year') {
+      from = new Date(now.getFullYear(), 0, 1);
+      to   = new Date(now.getFullYear(), 11, 31);
+    } else {
+      document.getElementById('dateFrom').value = '';
+      document.getElementById('dateTo').value   = '';
+      applyFilters();
+      return;
+    }
+    document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
+    document.getElementById('dateTo').value   = to.toISOString().slice(0,10);
+    applyFilters();
+  }
+
+  // ─── Event listeners ──────────────────────────────────────────────────────────
+  const dropZone  = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropZone.addEventListener('click', (e) => {
+    if (!e.target.closest('#clearFile')) fileInput.click();
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) parseFile(e.target.files[0]);
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) parseFile(f);
+  });
+
+  document.getElementById('clearFile').addEventListener('click', (e) => {
+    e.stopPropagation();
+    rawRows = []; filteredRows = [];
+    document.getElementById('dropContent').classList.remove('hidden');
+    document.getElementById('fileInfo').classList.add('hidden');
+    document.getElementById('filterSection').classList.add('hidden');
+    document.getElementById('previewSection').classList.add('hidden');
+    document.getElementById('colMapSection').classList.add('hidden');
+    fileInput.value = '';
+  });
+
+  // Re-filter on any filter change
+  document.getElementById('dateFrom').addEventListener('change', applyFilters);
+  document.getElementById('dateTo').addEventListener('change', applyFilters);
+  document.querySelectorAll('.estado-check').forEach(c => c.addEventListener('change', applyFilters));
+  document.querySelectorAll('.cat-check').forEach(c => c.addEventListener('change', applyFilters));
+  </script>
+</body>
+</html>
