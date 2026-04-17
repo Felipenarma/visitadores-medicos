@@ -9,4 +9,4 @@ COPY backend/ .
 
 EXPOSE 8000
 
-ENTRYPOINT ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["python", "start_server.py"]
