@@ -52,7 +52,9 @@ def get_doctors(
     if is_active is not None:
         query = query.filter(Doctor.is_active == is_active)
     if search:
-        query = query.filter(Doctor.name.ilike(f"%{search}%"))
+        query = query.filter(
+            Doctor.name.ilike(f"%{search}%") | Doctor.rut.ilike(f"%{search}%")
+        )
 
     doctors = query.all()
 
