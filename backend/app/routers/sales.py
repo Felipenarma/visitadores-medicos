@@ -324,11 +324,14 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
     # Pre-cargar médicos existentes en memoria para evitar queries dentro del loop
+    # Usamos RUT normalizado como clave para que "18655133-8" y "186551338" sean iguales
     existing_doctors_by_rut: dict = {}
     existing_doctors_by_name: dict = {}
     for doc in db.query(Doctor).all():
         if doc.rut:
-            existing_doctors_by_rut[doc.rut.strip()] = doc.id
+            nr = _norm_rut(doc.rut)
+            if nr:
+                existing_doctors_by_rut[nr] = doc.id
         existing_doctors_by_name[doc.name.strip().lower()] = doc.id
 
     # Pre-cargar external_ids existentes para deduplicación rápida
@@ -404,10 +407,11 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
                 continue
             existing_ext_ids.add(ext_id)
 
-            # Buscar doctor en caché (sin queries al DB)
+            # Buscar doctor en caché usando RUT normalizado
             doctor_id = None
-            if rut_doc and rut_doc in existing_doctors_by_rut:
-                doctor_id = existing_doctors_by_rut[rut_doc]
+            rut_doc_norm = _norm_rut(rut_doc) if rut_doc else None
+            if rut_doc_norm and rut_doc_norm in existing_doctors_by_rut:
+                doctor_id = existing_doctors_by_rut[rut_doc_norm]
                 matched += 1
             elif doctor_name and doctor_name.strip().lower() in existing_doctors_by_name:
                 doctor_id = existing_doctors_by_name[doctor_name.strip().lower()]
@@ -419,8 +423,8 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
                 db.flush()
                 db.refresh(new_doc)
                 doctor_id = new_doc.id
-                if rut_doc:
-                    existing_doctors_by_rut[rut_doc] = doctor_id
+                if rut_doc_norm:
+                    existing_doctors_by_rut[rut_doc_norm] = doctor_id
                 existing_doctors_by_name[doctor_name.strip().lower()] = doctor_id
                 new_doctors_count += 1
                 matched += 1
