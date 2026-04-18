@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -45,6 +45,15 @@ export default function Doctors() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: '' });
+
+  // Merge modal state
+  const [mergeSource, setMergeSource]   = useState<Doctor | null>(null);
+  const [mergeSearch, setMergeSearch]   = useState('');
+  const [mergeTarget, setMergeTarget]   = useState<Doctor | null>(null);
+  const [mergeResults, setMergeResults] = useState<Doctor[]>([]);
+  const [merging, setMerging]           = useState(false);
+  const [mergeError, setMergeError]     = useState('');
+  const mergeSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Analítica state
   const [salesMonth, setSalesMonth] = useState(new Date().getMonth() + 1);
@@ -118,6 +127,40 @@ export default function Doctors() {
     if (!confirm(`¿Eliminar a ${doc.name}? Quedará desactivado y no aparecerá en la lista.`)) return;
     try { await doctorsApi.delete(doc.id); load(); }
     catch (e: any) { alert(e.response?.data?.detail || 'Error al eliminar'); }
+  };
+
+  const openMerge = (doc: Doctor) => {
+    setMergeSource(doc);
+    setMergeTarget(null);
+    setMergeSearch('');
+    setMergeResults([]);
+    setMergeError('');
+  };
+
+  const handleMergeSearch = (q: string) => {
+    setMergeSearch(q);
+    setMergeTarget(null);
+    if (mergeSearchRef.current) clearTimeout(mergeSearchRef.current);
+    if (q.trim().length < 2) { setMergeResults([]); return; }
+    mergeSearchRef.current = setTimeout(async () => {
+      const results = await doctorsApi.getAll({ search: q, is_active: true });
+      setMergeResults(results.filter(d => d.id !== mergeSource?.id));
+    }, 300);
+  };
+
+  const handleMerge = async () => {
+    if (!mergeSource || !mergeTarget) return;
+    setMerging(true);
+    setMergeError('');
+    try {
+      await doctorsApi.mergeInto(mergeSource.id, mergeTarget.id);
+      setMergeSource(null);
+      load();
+    } catch (e: any) {
+      setMergeError(e.response?.data?.detail || 'Error al fusionar');
+    } finally {
+      setMerging(false);
+    }
   };
 
   return (
@@ -229,10 +272,13 @@ export default function Doctors() {
                             <button onClick={() => openAssign(doc)} title="Asignar visitador" className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
                               <UserCheck size={15} />
                             </button>
-                            <button onClick={() => openEdit(doc)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                            <button onClick={() => openEdit(doc)} title="Editar" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                               <Edit2 size={15} />
                             </button>
-                            <button onClick={() => handleDelete(doc)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <button onClick={() => openMerge(doc)} title="Fusionar con otro médico" className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
+                              <GitMerge size={15} />
+                            </button>
+                            <button onClick={() => handleDelete(doc)} title="Eliminar" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                               <Trash2 size={15} />
                             </button>
                           </div>
@@ -479,6 +525,113 @@ export default function Doctors() {
           </div>
         </div>
       </Modal>
+
+      {/* ── Merge Modal ── */}
+      {mergeSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100">
+              <div className="flex items-center gap-2 mb-1">
+                <GitMerge size={18} className="text-purple-600" />
+                <h2 className="text-lg font-bold text-gray-900">Fusionar médico</h2>
+              </div>
+              <p className="text-sm text-gray-500">El médico origen se desactivará y todas sus ventas y visitas pasarán al destino.</p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Origen */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Origen (se eliminará)</p>
+                <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-red-600 font-bold text-sm">{mergeSource.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">{mergeSource.name}</p>
+                    <p className="text-xs text-gray-400">{mergeSource.rut || 'Sin RUT'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Destino */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Destino (se conservará)</p>
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    placeholder="Buscar médico destino..."
+                    value={mergeSearch}
+                    onChange={e => handleMergeSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Resultados búsqueda */}
+                {mergeResults.length > 0 && !mergeTarget && (
+                  <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-sm">
+                    {mergeResults.map(doc => (
+                      <button
+                        key={doc.id}
+                        onClick={() => { setMergeTarget(doc); setMergeResults([]); setMergeSearch(doc.name); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-purple-50 text-left transition-colors border-b border-gray-50 last:border-0"
+                      >
+                        <div className="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-purple-600 font-semibold text-xs">{doc.name.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{doc.name}</p>
+                          <p className="text-xs text-gray-400">{doc.rut || 'Sin RUT'}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Destino seleccionado */}
+                {mergeTarget && (
+                  <div className="flex items-center gap-3 p-3 mt-1 bg-purple-50 border border-purple-200 rounded-xl">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">{mergeTarget.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-sm">{mergeTarget.name}</p>
+                      <p className="text-xs text-gray-400">{mergeTarget.rut || 'Sin RUT'}</p>
+                    </div>
+                    <button onClick={() => { setMergeTarget(null); setMergeSearch(''); }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Warning */}
+              {mergeTarget && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                  <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+                  <span>Todas las ventas y visitas de <strong>{mergeSource.name}</strong> pasarán a <strong>{mergeTarget.name}</strong>. Esta acción no se puede deshacer.</span>
+                </div>
+              )}
+
+              {mergeError && <p className="text-sm text-red-500">{mergeError}</p>}
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setMergeSource(null)} disabled={merging} className="flex-1 px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleMerge}
+                disabled={!mergeTarget || merging}
+                className="flex-1 px-4 py-2 text-sm rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 disabled:opacity-40 flex items-center justify-center gap-2 transition-colors"
+              >
+                <GitMerge size={15} />
+                {merging ? 'Fusionando...' : 'Fusionar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Assign rep modal */}
       <Modal isOpen={assignModal} onClose={() => setAssignModal(false)} title="Asignar Visitador" size="sm">

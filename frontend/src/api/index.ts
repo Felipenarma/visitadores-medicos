@@ -43,6 +43,7 @@ export const doctorsApi = {
   update: (id: number, data: Partial<Doctor>) => api.put<Doctor>(`/doctors/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/doctors/${id}`).then(r => r.data),
   assignRep: (id: number, rep_id: number) => api.put<Doctor>(`/doctors/${id}/assign-rep`, { rep_id }).then(r => r.data),
+  mergeInto: (fromId: number, toId: number) => api.post(`/doctors/${fromId}/merge-into/${toId}`).then(r => r.data),
 };
 
 // Visits
