@@ -288,6 +288,12 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         df = df.rename(columns={"rut_titular": "rut_usuario"})
     elif "rut_titular" in df.columns:
         df["rut_usuario"] = df["rut_titular"].fillna(df["rut_usuario"])
+    # Evitar columna categoria duplicada: si viene categoria_producto, tiene prioridad
+    if "categoria_producto" in df.columns and "categoria" in df.columns:
+        df = df.drop(columns=["categoria"])
+    # Si viene tipo_producto Y categoria, quedarse con categoria
+    if "tipo_producto" in df.columns and "categoria" in df.columns:
+        df = df.drop(columns=["tipo_producto"])
 
     col_map = {
         # Doctor
@@ -312,6 +318,10 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         "n_orden": "n_orden",
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+    # Salvaguarda: si quedaron columnas duplicadas tras el rename, consolidar tomando el primer valor no nulo
+    if df.columns.duplicated().any():
+        df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
     # Pre-cargar médicos existentes en memoria para evitar queries dentro del loop
     existing_doctors_by_rut: dict = {}

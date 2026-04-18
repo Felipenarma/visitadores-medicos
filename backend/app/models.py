@@ -96,7 +96,7 @@ class Sale(Base):
     rut_doctor = Column(String(20), nullable=True, index=True)
     rut_paciente = Column(String(20), nullable=True)
     nombre_paciente = Column(String(200), nullable=True)
-    categoria = Column(String(100), nullable=True)
+    categoria = Column(String(200), nullable=True)
     external_id = Column(String(200), nullable=True, unique=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
