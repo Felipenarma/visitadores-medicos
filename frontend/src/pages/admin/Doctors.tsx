@@ -204,7 +204,7 @@ export default function Doctors() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input className="input pl-9" placeholder="Buscar médico..." value={filters.search}
+                <input className="input pl-9" placeholder="Buscar por nombre o RUT..." value={filters.search}
                   onChange={e => setFilters({ ...filters, search: e.target.value })} />
               </div>
               <select className="input" value={filters.rep_id} onChange={e => setFilters({ ...filters, rep_id: e.target.value })}>
