@@ -14,10 +14,13 @@ router = APIRouter(prefix="/api/sales", tags=["sales"])
 
 
 def _norm_rut(r):
-    """Normaliza RUT eliminando puntos, guiones y espacios."""
+    """Normaliza RUT eliminando puntos, guiones, espacios y ceros iniciales."""
     if not r:
         return None
-    return re.sub(r'[\.\-\s]', '', str(r)).upper().strip()
+    cleaned = re.sub(r'[\.\-\s]', '', str(r)).upper().strip()
+    # Eliminar ceros iniciales: "076228507" → "76228507"
+    cleaned = cleaned.lstrip('0') or cleaned  # lstrip('0') puede dejar vacío si es "000", usar fallback
+    return cleaned or None
 
 
 def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
