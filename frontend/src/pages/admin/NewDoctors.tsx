@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download } from 'lucide-react';
 import { dashboardApi, doctorsApi, repsApi } from '../../api';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
 import type { MedicalRep } from '../../types';
 
 interface NewDoctorItem {
@@ -115,6 +116,24 @@ export default function NewDoctors() {
   const withRep    = data.filter(d => d.rep_name);
   const withoutRep = data.filter(d => !d.rep_name);
 
+  const downloadExcel = () => {
+    const rows = data.map(d => ({
+      'Médico':          d.doctor_name,
+      'RUT':             d.rut_doctor || '',
+      'Especialidad':    d.specialty || '',
+      'Primera Venta':   d.primera_venta ? format(new Date(d.primera_venta), 'dd/MM/yyyy', { locale: es }) : '',
+      'Visitador':       d.rep_name || 'Sin asignar',
+      'Productos':       d.productos.join(', '),
+      'Monto Total':     d.total_amount,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Ancho de columnas
+    ws['!cols'] = [{ wch: 30 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 50 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Médicos Nuevos');
+    XLSX.writeFile(wb, `medicos_nuevos_${MONTH_NAMES[month - 1]}_${year}.xlsx`);
+  };
+
   return (
     <div className="p-4 lg:p-6 space-y-6">
       {/* Header */}
@@ -145,6 +164,16 @@ export default function NewDoctors() {
           <button onClick={nextMonth} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
             <ChevronRight size={18} />
           </button>
+          {data.length > 0 && (
+            <button
+              onClick={downloadExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors ml-2"
+              title="Descargar Excel"
+            >
+              <Download size={15} />
+              Excel
+            </button>
+          )}
         </div>
       </div>
 
