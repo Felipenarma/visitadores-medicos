@@ -117,6 +117,37 @@ def delete_doctor(doctor_id: int, db: Session = Depends(get_db)):
     return {"message": "Médico desactivado"}
 
 
+@router.post("/{doctor_id}/merge-into/{target_id}")
+def merge_doctor(doctor_id: int, target_id: int, db: Session = Depends(get_db)):
+    """Fusiona doctor_id en target_id: mueve todas sus ventas y visitas, luego desactiva doctor_id."""
+    source = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    target = db.query(Doctor).filter(Doctor.id == target_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Médico origen no encontrado")
+    if not target:
+        raise HTTPException(status_code=404, detail="Médico destino no encontrado")
+
+    # Mover ventas y visitas
+    db.query(Sale).filter(Sale.doctor_id == doctor_id).update(
+        {"doctor_id": target_id}, synchronize_session=False
+    )
+    db.query(Visit).filter(Visit.doctor_id == doctor_id).update(
+        {"doctor_id": target_id}, synchronize_session=False
+    )
+
+    # Copiar RUT al destino si no tiene
+    if not target.rut and source.rut:
+        target.rut = source.rut
+
+    # Usar el nombre más completo
+    if source.name and len(source.name) > len(target.name or ""):
+        target.name = source.name
+
+    source.is_active = False
+    db.commit()
+    return {"ok": True, "merged_from": doctor_id, "merged_into": target_id, "target_name": target.name}
+
+
 @router.put("/{doctor_id}/assign-rep", response_model=DoctorOut)
 def assign_rep(doctor_id: int, data: AssignRepRequest, db: Session = Depends(get_db)):
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
