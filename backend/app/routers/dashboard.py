@@ -344,6 +344,9 @@ def get_new_doctors(
             continue  # No es nuevo
 
         doctor = all_doctors.get(s.doctor_id) if s.doctor_id else None
+        # Si el médico fue eliminado (is_active=False), no mostrarlo
+        if doctor and not doctor.is_active:
+            continue
         rep = all_reps.get(doctor.rep_id) if doctor and doctor.rep_id else None
 
         # Todas las ventas de este médico en el período
