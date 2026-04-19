@@ -52,18 +52,24 @@ def get_doctors(
         query = query.filter(Doctor.specialty.ilike(f"%{specialty}%"))
     if is_active is not None:
         query = query.filter(Doctor.is_active == is_active)
-    if search:
-        # Normalizar la búsqueda de RUT: quitar puntos, guiones y espacios
-        search_rut_norm = re.sub(r'[\.\-\s]', '', search).upper()
-        # Comparar también contra el RUT almacenado sin guión ni puntos
-        normalized_rut_col = func.replace(func.replace(func.replace(Doctor.rut, '-', ''), '.', ''), ' ', '')
-        query = query.filter(
-            Doctor.name.ilike(f"%{search}%")
-            | Doctor.rut.ilike(f"%{search}%")
-            | normalized_rut_col.ilike(f"%{search_rut_norm}%")
-        )
 
     doctors = query.all()
+
+    # Filtro de búsqueda en Python para normalizar RUT correctamente (con/sin guión/puntos)
+    if search:
+        search_lower = search.lower()
+        search_rut_norm = re.sub(r'[\.\-\s]', '', search).upper()
+
+        def _matches(doc: Doctor) -> bool:
+            if doc.name and search_lower in doc.name.lower():
+                return True
+            if doc.rut:
+                rut_norm = re.sub(r'[\.\-\s]', '', doc.rut).upper()
+                if search_rut_norm and search_rut_norm in rut_norm:
+                    return True
+            return False
+
+        doctors = [d for d in doctors if _matches(d)]
 
     if has_sales is not None:
         result = []
