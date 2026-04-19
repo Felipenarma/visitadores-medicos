@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -52,8 +53,14 @@ def get_doctors(
     if is_active is not None:
         query = query.filter(Doctor.is_active == is_active)
     if search:
+        # Normalizar la búsqueda de RUT: quitar puntos, guiones y espacios
+        search_rut_norm = re.sub(r'[\.\-\s]', '', search).upper()
+        # Comparar también contra el RUT almacenado sin guión ni puntos
+        normalized_rut_col = func.replace(func.replace(func.replace(Doctor.rut, '-', ''), '.', ''), ' ', '')
         query = query.filter(
-            Doctor.name.ilike(f"%{search}%") | Doctor.rut.ilike(f"%{search}%")
+            Doctor.name.ilike(f"%{search}%")
+            | Doctor.rut.ilike(f"%{search}%")
+            | normalized_rut_col.ilike(f"%{search_rut_norm}%")
         )
 
     doctors = query.all()
