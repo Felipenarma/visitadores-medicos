@@ -1,17 +1,131 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, BarChart2, TrendingUp, Users, Activity } from 'lucide-react';
+import {
+  Send, Bot, User, Loader2, Sparkles, BarChart2, TrendingUp, Users, Activity, Download
+} from 'lucide-react';
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend
+} from 'recharts';
 import { useAuth } from '../../context/AuthContext';
 import type { AgentMessage } from '../../types';
 import api from '../../api';
 
 const BASE = '/mike';
 
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface ChartData {
+  type: 'bar' | 'line';
+  title: string;
+  data: Record<string, unknown>[];
+  xKey: string;
+  yKey: string;
+  yKey2?: string;
+}
+
+interface MikeApiResponse {
+  response: string;
+  conversation_history: AgentMessage[];
+  charts?: ChartData[];
+  export_url?: string;
+}
+
+interface DisplayMessage extends AgentMessage {
+  charts?: ChartData[];
+  export_url?: string;
+}
+
+// ── API ────────────────────────────────────────────────────────────────────
+
 const mikeApi = {
   chat: (data: { message: string; conversation_history: AgentMessage[] }) =>
-    api.post<{ response: string; conversation_history: AgentMessage[] }>(`${BASE}/chat`, data).then(r => r.data),
+    api.post<MikeApiResponse>(`${BASE}/chat`, data).then(r => r.data),
 };
 
-function RenderMessage({ content, isUser }: { content: string; isUser: boolean }) {
+// ── Chart component ────────────────────────────────────────────────────────
+
+function MikeChart({ chart }: { chart: ChartData }) {
+  const VIOLET = '#8b5cf6';
+  const VIOLET2 = '#a78bfa';
+
+  return (
+    <div className="mt-3 bg-white border border-gray-200 rounded-xl p-3">
+      <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">{chart.title}</p>
+      <ResponsiveContainer width="100%" height={220}>
+        {chart.type === 'line' ? (
+          <LineChart data={chart.data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey={chart.xKey} tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} width={50} />
+            <Tooltip />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Line type="monotone" dataKey={chart.yKey} stroke={VIOLET} strokeWidth={2} dot={false} />
+            {chart.yKey2 && (
+              <Line type="monotone" dataKey={chart.yKey2} stroke={VIOLET2} strokeWidth={2} dot={false} />
+            )}
+          </LineChart>
+        ) : (
+          <BarChart data={chart.data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey={chart.xKey} tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} width={50} />
+            <Tooltip />
+            <Bar dataKey={chart.yKey} fill={VIOLET} radius={[3, 3, 0, 0]} />
+          </BarChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── Download button ────────────────────────────────────────────────────────
+
+function DownloadButton({ exportUrl }: { exportUrl: string }) {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const response = await api.get(exportUrl, { responseType: 'blob' });
+      const blob = new Blob([response.data as BlobPart], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = (response.headers['content-disposition'] as string) || '';
+      const match = disposition.match(/filename=([^;]+)/);
+      a.download = match ? match[1] : 'mike_export.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // silently ignore download errors
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={downloading}
+      className="mt-2 flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
+    >
+      {downloading ? (
+        <Loader2 size={14} className="animate-spin" />
+      ) : (
+        <Download size={14} />
+      )}
+      {downloading ? 'Descargando...' : 'Descargar Excel'}
+    </button>
+  );
+}
+
+// ── Message renderer ───────────────────────────────────────────────────────
+
+function RenderMessage({ content }: { content: string }) {
   const cleaned = content.replace(/\*\*/g, '').replace(/\*/g, '');
   return (
     <div className="whitespace-pre-wrap leading-relaxed break-words text-sm">
@@ -20,22 +134,45 @@ function RenderMessage({ content, isUser }: { content: string; isUser: boolean }
   );
 }
 
+// ── Suggestions ────────────────────────────────────────────────────────────
+
 const SUGGESTIONS = [
   { icon: <BarChart2 size={16} />, text: '¿Cómo va el desempeño de los visitadores este mes?' },
   { icon: <TrendingUp size={16} />, text: '¿Cuáles son los 10 médicos con más ventas en abril 2026?' },
   { icon: <Users size={16} />, text: '¿Cuántos médicos nuevos tuvimos este mes?' },
   { icon: <Activity size={16} />, text: 'Muéstrame la tendencia de ventas de los últimos 6 meses' },
   { icon: <BarChart2 size={16} />, text: '¿Qué visitador tiene la tasa de cumplimiento más baja?' },
-  { icon: <TrendingUp size={16} />, text: '¿Qué médicos no han sido visitados en los últimos 45 días?' },
+  { icon: <TrendingUp size={16} />, text: 'Exporta el ranking de médicos de este mes a Excel' },
 ];
+
+// ── Main component ─────────────────────────────────────────────────────────
+
+const STORAGE_KEY = 'mike_history';
 
 export default function Mike() {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) return JSON.parse(stored) as DisplayMessage[];
+    } catch {
+      // ignore parse errors
+    }
+    return [];
+  });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Persist messages to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // ignore storage errors
+    }
+  }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,7 +182,10 @@ export default function Mike() {
     const msg = (text || input).trim();
     if (!msg || loading) return;
 
-    const userMsg: AgentMessage = { role: 'user', content: msg };
+    const userMsg: DisplayMessage = { role: 'user', content: msg };
+    // Build history from current messages for API (only role/content)
+    const historyForApi: AgentMessage[] = messages.map(m => ({ role: m.role, content: m.content }));
+
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
@@ -53,13 +193,20 @@ export default function Mike() {
     try {
       const res = await mikeApi.chat({
         message: userMsg.content,
-        conversation_history: messages,
+        conversation_history: historyForApi,
       });
-      setMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
-    } catch (e: any) {
+      const assistantMsg: DisplayMessage = {
+        role: 'assistant',
+        content: res.response,
+        charts: res.charts,
+        export_url: res.export_url ?? undefined,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: e.response?.data?.detail || 'Error al conectar con Mike. Verifica que ANTHROPIC_API_KEY esté configurada.',
+        content: err.response?.data?.detail || 'Error al conectar con Mike. Verifica que ANTHROPIC_API_KEY esté configurada.',
       }]);
     } finally {
       setLoading(false);
@@ -72,6 +219,11 @@ export default function Mike() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleClear = () => {
+    setMessages([]);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   return (
@@ -126,12 +278,28 @@ export default function Mike() {
                     : <Sparkles size={15} className="text-violet-600" />
                   }
                 </div>
-                <div className={`max-w-[78%] rounded-2xl px-4 py-3 ${
-                  msg.role === 'user'
-                    ? 'bg-violet-600 text-white rounded-tr-sm'
-                    : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-                }`}>
-                  <RenderMessage content={msg.content} isUser={msg.role === 'user'} />
+                <div className={`max-w-[78%] ${msg.role === 'user' ? '' : 'flex-1'}`}>
+                  <div className={`rounded-2xl px-4 py-3 ${
+                    msg.role === 'user'
+                      ? 'bg-violet-600 text-white rounded-tr-sm'
+                      : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                  }`}>
+                    <RenderMessage content={msg.content} />
+                  </div>
+
+                  {/* Charts below assistant messages */}
+                  {msg.role === 'assistant' && msg.charts && msg.charts.length > 0 && (
+                    <div className="space-y-2">
+                      {msg.charts.map((chart, ci) => (
+                        <MikeChart key={ci} chart={chart} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Download button when export is ready */}
+                  {msg.role === 'assistant' && msg.export_url && (
+                    <DownloadButton exportUrl={msg.export_url} />
+                  )}
                 </div>
               </div>
             ))}
@@ -175,7 +343,7 @@ export default function Mike() {
       {messages.length > 0 && (
         <div className="mt-2 text-center">
           <button
-            onClick={() => setMessages([])}
+            onClick={handleClear}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
             Limpiar conversación

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, timedelta
 import random
+import requests
 
 from .database import engine, get_db, Base
 from .models import BusinessLine, MedicalRep, Doctor, Visit, Sale
@@ -89,6 +90,40 @@ def seed_business_lines(db: Session):
     db.commit()
 
 
+def run_weekly_report_job():
+    """Called by APScheduler every Monday at 8:00 AM Chile time."""
+    try:
+        # Call own endpoint internally
+        import urllib.request
+        req = urllib.request.Request(
+            "http://localhost:8000/api/mike/weekly-report",
+            method="POST",
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=60)
+    except Exception:
+        pass
+
+
+# APScheduler setup
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    import pytz
+
+    scheduler = BackgroundScheduler(timezone=pytz.utc)
+    # Every Monday at 8:00 AM Chile time (UTC-3 / UTC-4 depending on DST)
+    # Chile Standard Time = UTC-3, Chile Summer Time = UTC-4
+    # Using America/Santiago which handles DST automatically
+    chile_tz = pytz.timezone("America/Santiago")
+    scheduler.add_job(
+        run_weekly_report_job,
+        CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=chile_tz)
+    )
+except ImportError:
+    scheduler = None
+
+
 @app.on_event("startup")
 def startup_event():
     db = next(get_db())
@@ -96,6 +131,15 @@ def startup_event():
         seed_business_lines(db)
     finally:
         db.close()
+
+    if scheduler is not None:
+        scheduler.start()
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    if scheduler is not None and scheduler.running:
+        scheduler.shutdown(wait=False)
 
 
 @app.get("/")
