@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, timedelta
 import random
-import requests
 
 from .database import engine, get_db, Base
 from .models import BusinessLine, MedicalRep, Doctor, Visit, Sale
