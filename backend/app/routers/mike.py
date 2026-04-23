@@ -1145,7 +1145,7 @@ def mike_chat(request: MikeChatRequest, db: Session = Depends(get_db)):
     while iteration < max_iterations:
         iteration += 1
         response = client.messages.create(
-            model="claude-sonnet-4-5-20241022",
+            model="claude-sonnet-4-5",
             max_tokens=4096,
             system=system,
             tools=MIKE_TOOLS,
