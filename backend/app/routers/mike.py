@@ -1121,7 +1121,7 @@ def weekly_report(db: Session = Depends(get_db)):
 
 @router.post("/chat", response_model=MikeChatResponse)
 def mike_chat(request: MikeChatRequest, db: Session = Depends(get_db)):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
     if not api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY no configurada")
 
