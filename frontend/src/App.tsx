@@ -24,6 +24,7 @@ import NewDoctors from './pages/admin/NewDoctors';
 import RepCommissions from './pages/admin/RepCommissions';
 import RepDetail from './pages/admin/RepDetail';
 import SalesFiles from './pages/admin/SalesFiles';
+import Mike from './pages/admin/Mike';
 
 function PrivateRoute({ children, role }: { children: React.ReactNode; role?: 'admin' | 'rep' }) {
   const { user } = useAuth();
@@ -62,6 +63,7 @@ function AppRoutes() {
               <Route path="new-doctors" element={<NewDoctors />} />
               <Route path="commissions" element={<RepCommissions />} />
               <Route path="sales-files" element={<SalesFiles />} />
+              <Route path="mike" element={<Mike />} />
             </Routes>
           </Layout>
         </PrivateRoute>

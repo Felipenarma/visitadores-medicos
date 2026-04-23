@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Briefcase, Upload, TrendingUp,
   Calendar, Bot, Activity, LogOut, Stethoscope, BookOpen, Menu, X, QrCode,
-  BarChart2, UserPlus, DollarSign, FolderOpen
+  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,6 +26,7 @@ const adminNav: NavItem[] = [
   { to: '/admin/sales-ranking', icon: <BarChart2 size={20} />, label: 'Ranking Médicos' },
   { to: '/admin/new-doctors', icon: <UserPlus size={20} />, label: 'Médicos Nuevos' },
   { to: '/admin/commissions', icon: <DollarSign size={20} />, label: 'Comisiones' },
+  { to: '/admin/mike', icon: <Sparkles size={20} />, label: 'Mike (IA Admin)' },
   { to: '/admin/agent', icon: <Bot size={20} />, label: 'Agente IA' },
   { to: '/admin/knowledge', icon: <BookOpen size={20} />, label: 'Base de Conocimiento' },
   { to: '/admin/images', icon: <QrCode size={20} />, label: 'Imagenes y QR' },
