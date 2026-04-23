@@ -343,7 +343,7 @@ export default function Doctors() {
                       </span>
                       <span className="flex items-center gap-1.5">
                         <span className="inline-block w-3 h-3 rounded-sm bg-gray-300" />
-                        {prevMonthLabel()}
+                        {prevMonthLabel()} {salesMonth === 1 ? salesYear - 1 : salesYear}
                       </span>
                     </div>
                     <ResponsiveContainer width="100%" height={Math.max(320, salesByDoctor.length * 38)}>
@@ -365,7 +365,7 @@ export default function Doctors() {
                           cursor={{ fill: '#f8fafc' }}
                           formatter={(value: number, name: string) => [
                             `${value} unidades`,
-                            name === 'units_current' ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}` : prevMonthLabel()
+                            name === 'mes_actual' ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}` : `${prevMonthLabel()} ${salesMonth === 1 ? salesYear - 1 : salesYear}`
                           ]}
                           labelFormatter={(label: string) => <span className="font-semibold">{label}</span>}
                         />
