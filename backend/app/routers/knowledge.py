@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import io
@@ -26,6 +27,8 @@ def _entry_out(e: KnowledgeEntry) -> dict:
         "business_line_name": e.business_line.name if e.business_line else None,
         "is_active": e.is_active,
         "created_at": e.created_at.isoformat() if e.created_at else None,
+        "has_file": e.file_data is not None,
+        "original_filename": e.original_filename,
     }
 
 
@@ -103,15 +106,28 @@ def _extract_text(filename: str, data: bytes) -> str:
         except Exception as e:
             return f"[Error leyendo Excel: {e}]"
 
-    # PDF — basic text extraction without extra deps
+    # PDF — proper extraction with pypdf
     if name_lower.endswith(".pdf"):
+        # Try pypdf first (proper text extraction)
         try:
-            text = data.decode("latin-1", errors="replace")
-            # Extract readable strings from PDF binary
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(data))
+            pages_text = []
+            for i, page in enumerate(reader.pages):
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    pages_text.append(f"--- Página {i + 1} ---\n{page_text.strip()}")
+            if pages_text:
+                return "\n\n".join(pages_text)
+        except Exception:
+            pass
+        # Fallback: regex over raw binary
+        try:
             import re
+            text = data.decode("latin-1", errors="replace")
             strings = re.findall(r'[A-Za-záéíóúüñÁÉÍÓÚÜÑ0-9\s\.,\-:;/\\()\[\]!?@#$%&*+=\'\"]{4,}', text)
             clean = " ".join(s.strip() for s in strings if len(s.strip()) > 3)
-            return clean[:10000] if clean else f"[Archivo PDF: {filename}]"
+            return clean[:15000] if clean else f"[Archivo PDF: {filename}]"
         except Exception:
             return f"[Archivo PDF: {filename}]"
 
@@ -188,6 +204,61 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+# ── GET /api/knowledge/{id}/file ─────────────────────────────────────────────
+@router.get("/{entry_id}/file")
+def download_file(entry_id: int, db: Session = Depends(get_db)):
+    """Serve the original uploaded file for download."""
+    entry = db.query(KnowledgeEntry).filter(KnowledgeEntry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entrada no encontrada")
+    if not entry.file_data:
+        raise HTTPException(status_code=404, detail="Esta entrada no tiene archivo adjunto")
+
+    filename = entry.original_filename or f"documento_{entry_id}.bin"
+    name_lower = filename.lower()
+
+    if name_lower.endswith(".pdf"):
+        media_type = "application/pdf"
+    elif name_lower.endswith(".xlsx"):
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif name_lower.endswith(".xls"):
+        media_type = "application/vnd.ms-excel"
+    elif name_lower.endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif name_lower.endswith(".csv"):
+        media_type = "text/csv"
+    else:
+        media_type = "application/octet-stream"
+
+    return StreamingResponse(
+        io.BytesIO(entry.file_data),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── POST /api/knowledge/{id}/reprocess ───────────────────────────────────────
+@router.post("/{entry_id}/reprocess")
+async def reprocess_entry(
+    entry_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Re-extract text from a new file upload and update the existing entry."""
+    entry = db.query(KnowledgeEntry).filter(KnowledgeEntry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entrada no encontrada")
+    data = await file.read()
+    content = _extract_text(file.filename or "archivo", data)
+    entry.content = content
+    entry.title = (file.filename or "archivo").rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
+    entry.file_data = data
+    entry.original_filename = file.filename
+    db.commit()
+    db.refresh(entry)
+    return {"ok": True, "entry": _entry_out(entry), "chars": len(content)}
+
+
 # ── POST /api/knowledge/upload (single file) ──────────────────────────────────
 @router.post("/upload")
 async def upload_file(
@@ -207,6 +278,8 @@ async def upload_file(
         content=content,
         business_line_id=bl_id,
         is_active=True,
+        file_data=data,
+        original_filename=file.filename,
     )
     db.add(entry)
     db.commit()
@@ -234,6 +307,8 @@ async def upload_multiple(
             content=content,
             business_line_id=bl_id,
             is_active=True,
+            file_data=data,
+            original_filename=file.filename,
         )
         db.add(entry)
         db.commit()

@@ -28,6 +28,8 @@ def run_migrations():
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_sales_external_id ON sales (external_id) WHERE external_id IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS ix_sales_rut_doctor ON sales (rut_doctor) WHERE rut_doctor IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS ix_doctors_rut ON doctors (rut) WHERE rut IS NOT NULL",
+        "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS file_data BYTEA",
+        "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

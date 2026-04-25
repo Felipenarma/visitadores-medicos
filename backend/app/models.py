@@ -123,6 +123,8 @@ class KnowledgeEntry(Base):
     business_line_id = Column(Integer, ForeignKey("business_lines.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
+    file_data = Column(LargeBinary, nullable=True)
+    original_filename = Column(String(255), nullable=True)
 
     business_line = relationship("BusinessLine")
 

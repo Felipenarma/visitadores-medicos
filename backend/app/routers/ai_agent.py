@@ -19,6 +19,8 @@ SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuti
 
 REGLA OBLIGATORIA: Ante CUALQUIER pregunta sobre productos, activos, materias primas, categorías, protocolos, procedimientos, precios, disponibilidad o cualquier tema del laboratorio Narma, debes llamar PRIMERO a search_knowledge antes de responder. Si el primer resultado no tiene lo que necesitas, intenta con una búsqueda más general o sin parámetros. NUNCA respondas desde tu conocimiento general sobre estos temas sin antes consultar la base de conocimiento.
 
+COMPARTIR DOCUMENTOS: Cuando un resultado de search_knowledge incluya "download_url", puedes compartir ese link con el visitador diciéndole algo como: "Aquí tienes el documento para descargarlo: [nombre del archivo](download_url)". Usa el formato Markdown para el link.
+
 Siempre responde en español. Sé profesional, preciso y conciso."""
 
 TOOLS = [
@@ -291,6 +293,12 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
         if not entries:
             return {"results": [], "message": "No hay entradas en la base de conocimiento. El administrador debe cargar información primero."}
 
+        base_url = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip()
+        if base_url:
+            base_url = f"https://{base_url}"
+        else:
+            base_url = os.getenv("BASE_URL", "").strip()
+
         results = []
         for e in entries:
             content = e.content
@@ -309,12 +317,18 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
             elif len(content) > 15000:
                 content = content[:15000]
 
-            results.append({
+            result_item = {
                 "title": e.title,
                 "category": e.category,
                 "content": content,
                 "business_line": e.business_line.name if e.business_line else None,
-            })
+            }
+            if e.file_data:
+                result_item["has_file"] = True
+                result_item["original_filename"] = e.original_filename or f"documento_{e.id}"
+                if base_url:
+                    result_item["download_url"] = f"{base_url}/api/knowledge/{e.id}/file"
+            results.append(result_item)
 
         return {"results": results, "total": len(results)}
 

@@ -166,6 +166,10 @@ export const knowledgeApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data);
   },
+  getFileUrl: (id: number) => {
+    const base = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+    return `${base}/knowledge/${id}/file`;
+  },
 };
 
 // Images

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, BookOpen, Search, X, Upload, FileText, File, CheckCircle, AlertCircle, FolderOpen, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, BookOpen, Search, X, Upload, FileText, File, CheckCircle, AlertCircle, FolderOpen, RefreshCw, Download } from 'lucide-react';
 import { knowledgeApi, businessLinesApi } from '../api';
 
 interface KBEntry {
@@ -11,6 +11,8 @@ interface KBEntry {
   business_line_name: string | null;
   is_active: boolean;
   created_at: string;
+  has_file: boolean;
+  original_filename: string | null;
 }
 
 interface Category {
@@ -247,6 +249,16 @@ export default function KnowledgeBase() {
                 )}
               </div>
               <div className="flex gap-1 flex-shrink-0">
+                {entry.has_file && (
+                  <a
+                    href={knowledgeApi.getFileUrl(entry.id)}
+                    download={entry.original_filename || true}
+                    className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"
+                    title={`Descargar ${entry.original_filename || 'archivo'}`}
+                  >
+                    <Download size={16} />
+                  </a>
+                )}
                 <button
                   onClick={() => handleEdit(entry)}
                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
