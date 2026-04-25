@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, BookOpen, Search, X, Upload, FileText, File, CheckCircle, AlertCircle, FolderOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, BookOpen, Search, X, Upload, FileText, File, CheckCircle, AlertCircle, FolderOpen, RefreshCw } from 'lucide-react';
 import { knowledgeApi, businessLinesApi } from '../api';
 
 interface KBEntry {
@@ -44,8 +44,10 @@ export default function KnowledgeBase() {
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
+  const reprocessRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [uploadProgress, setUploadProgress] = useState('');
 
   const loadData = async () => {
@@ -153,6 +155,19 @@ export default function KnowledgeBase() {
     loadData();
   };
 
+  const handleReprocess = async (entry: KBEntry, file: File) => {
+    setReprocessingId(entry.id);
+    try {
+      await knowledgeApi.reprocess(entry.id, file);
+      loadData();
+    } catch (e) {
+      console.error(e);
+      alert('Error al reprocesar el archivo');
+    } finally {
+      setReprocessingId(null);
+    }
+  };
+
   const filtered = entries.filter(e =>
     !search || e.title.toLowerCase().includes(search.toLowerCase()) || e.content.toLowerCase().includes(search.toLowerCase())
   );
@@ -232,8 +247,39 @@ export default function KnowledgeBase() {
                 )}
               </div>
               <div className="flex gap-1 flex-shrink-0">
-                <button onClick={() => handleEdit(entry)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 size={16} /></button>
-                <button onClick={() => handleDelete(entry.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                <button
+                  onClick={() => handleEdit(entry)}
+                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                  title="Editar"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button
+                  onClick={() => reprocessRefs.current[entry.id]?.click()}
+                  disabled={reprocessingId === entry.id}
+                  className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg disabled:opacity-50"
+                  title="Re-procesar con nuevo archivo"
+                >
+                  <RefreshCw size={16} className={reprocessingId === entry.id ? 'animate-spin' : ''} />
+                </button>
+                <input
+                  type="file"
+                  accept={ACCEPTED_FORMATS}
+                  className="hidden"
+                  ref={el => { reprocessRefs.current[entry.id] = el; }}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) handleReprocess(entry, file);
+                    if (e.target) e.target.value = '';
+                  }}
+                />
+                <button
+                  onClick={() => handleDelete(entry.id)}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                  title="Eliminar"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
           </div>

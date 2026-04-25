@@ -159,6 +159,13 @@ export const knowledgeApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data);
   },
+  reprocess: (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/knowledge/${id}/reprocess`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
 };
 
 // Images
