@@ -6,18 +6,20 @@ import os
 import json
 import anthropic
 from ..database import get_db
-from ..models import Visit, Doctor, MedicalRep
+from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry
 from ..schemas import AgentChatRequest, AgentChatResponse, AgentMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
-SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuticos. Tu rol es ayudar a los visitadores médicos a:
+SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuticos del laboratorio Narma. Tu rol es ayudar a los visitadores médicos a:
 - Gestionar su agenda de visitas
 - Consultar información de sus médicos asignados
 - Registrar visitas realizadas
-- Obtener información sobre su cardex
+- Responder preguntas sobre productos, protocolos y procedimientos del laboratorio
 
-Siempre responde en español. Sé profesional y conciso."""
+Cuando el usuario te pregunte sobre productos, indicaciones, protocolos, preguntas frecuentes o cualquier información específica del laboratorio, usa SIEMPRE la herramienta search_knowledge para buscar en la base de conocimiento antes de responder. Si no encuentras información relevante en la base de conocimiento, indícalo claramente.
+
+Siempre responde en español. Sé profesional, preciso y conciso."""
 
 TOOLS = [
     {
@@ -100,6 +102,24 @@ TOOLS = [
                 }
             },
             "required": ["doctor_id"]
+        }
+    },
+    {
+        "name": "search_knowledge",
+        "description": "Busca en la base de conocimiento del laboratorio Narma. Úsala para responder preguntas sobre productos, indicaciones, protocolos, preguntas frecuentes o cualquier información específica del laboratorio.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Término de búsqueda (nombre de producto, tema, palabra clave)"
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["productos", "protocolos", "faq", "general", "archivo"],
+                    "description": "Categoría opcional para filtrar la búsqueda"
+                }
+            }
         }
     }
 ]
@@ -243,6 +263,36 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
             "notes": doctor.notes,
             "last_visit": last_visit.actual_date.isoformat() if last_visit and last_visit.actual_date else None,
             "next_visit": next_visit.scheduled_date.isoformat() if next_visit else None
+        }
+
+    elif tool_name == "search_knowledge":
+        query = tool_input.get("query", "")
+        category = tool_input.get("category")
+
+        q = db.query(KnowledgeEntry).filter(KnowledgeEntry.is_active == True)
+        if category:
+            q = q.filter(KnowledgeEntry.category == category)
+        if query:
+            q = q.filter(
+                KnowledgeEntry.title.ilike(f"%{query}%") |
+                KnowledgeEntry.content.ilike(f"%{query}%")
+            )
+        entries = q.order_by(KnowledgeEntry.created_at.desc()).limit(5).all()
+
+        if not entries:
+            return {"results": [], "message": "No se encontró información sobre ese tema en la base de conocimiento."}
+
+        return {
+            "results": [
+                {
+                    "title": e.title,
+                    "category": e.category,
+                    "content": e.content[:3000] if len(e.content) > 3000 else e.content,
+                    "business_line": e.business_line.name if e.business_line else None,
+                }
+                for e in entries
+            ],
+            "total": len(entries)
         }
 
     return {"error": f"Herramienta desconocida: {tool_name}"}
