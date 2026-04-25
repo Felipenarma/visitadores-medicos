@@ -6,7 +6,7 @@ import os
 import json
 import anthropic
 from ..database import get_db
-from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry
+from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry, ImageFile
 from ..schemas import AgentChatRequest, AgentChatResponse, AgentMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -19,7 +19,9 @@ SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuti
 
 REGLA OBLIGATORIA: Ante CUALQUIER pregunta sobre productos, activos, materias primas, categorías, protocolos, procedimientos, precios, disponibilidad o cualquier tema del laboratorio Narma, debes llamar PRIMERO a search_knowledge antes de responder. Si el primer resultado no tiene lo que necesitas, intenta con una búsqueda más general o sin parámetros. NUNCA respondas desde tu conocimiento general sobre estos temas sin antes consultar la base de conocimiento.
 
-COMPARTIR DOCUMENTOS: Cuando un resultado de search_knowledge incluya "download_url", puedes compartir ese link con el visitador diciéndole algo como: "Aquí tienes el documento para descargarlo: [nombre del archivo](download_url)". Usa el formato Markdown para el link.
+COMPARTIR DOCUMENTOS: Cuando un resultado de search_knowledge incluya "download_url", comparte ese link con el visitador así: "[nombre del archivo](download_url)". Usa formato Markdown.
+
+COMPARTIR IMÁGENES Y QR: Cuando el visitador pida un QR, imagen de producto o material visual, usa search_images para buscarlo. Si el resultado incluye "url" o "share_link", muestra el link directamente así: "[nombre](url)". Si la imagen es un QR, indícale al visitador que puede escanearlo desde ese link.
 
 Siempre responde en español. Sé profesional, preciso y conciso."""
 
@@ -104,6 +106,24 @@ TOOLS = [
                 }
             },
             "required": ["doctor_id"]
+        }
+    },
+    {
+        "name": "search_images",
+        "description": "Busca imágenes y códigos QR del laboratorio Narma almacenados en el sistema. Úsala cuando el visitador pida un QR, imagen de producto, material de apoyo visual o cualquier archivo de imagen. Devuelve el link directo para compartir.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Nombre o descripción de la imagen o QR que se busca"
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["qr", "product", "general"],
+                    "description": "Categoría opcional: qr (códigos QR), product (imágenes de producto), general"
+                }
+            }
         }
     },
     {
@@ -266,6 +286,52 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
             "last_visit": last_visit.actual_date.isoformat() if last_visit and last_visit.actual_date else None,
             "next_visit": next_visit.scheduled_date.isoformat() if next_visit else None
         }
+
+    elif tool_name == "search_images":
+        query = tool_input.get("query", "").strip()
+        category = tool_input.get("category")
+
+        base_url = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip()
+        if base_url:
+            base_url = f"https://{base_url}"
+        else:
+            base_url = os.getenv("BASE_URL", "").strip()
+
+        q = db.query(ImageFile)
+        if category:
+            q = q.filter(ImageFile.category == category)
+        if query:
+            q = q.filter(
+                ImageFile.name.ilike(f"%{query}%") |
+                ImageFile.description.ilike(f"%{query}%")
+            )
+        images = q.order_by(ImageFile.created_at.desc()).limit(10).all()
+
+        # Fallback: si no hay match, devolver todas
+        if not images and query:
+            q2 = db.query(ImageFile)
+            if category:
+                q2 = q2.filter(ImageFile.category == category)
+            images = q2.order_by(ImageFile.created_at.desc()).limit(10).all()
+
+        if not images:
+            return {"results": [], "message": "No hay imágenes o QR cargados en el sistema."}
+
+        results = []
+        for img in images:
+            item = {
+                "id": img.id,
+                "name": img.name,
+                "description": img.description or "",
+                "category": img.category,
+                "business_line": img.business_line.name if img.business_line else None,
+            }
+            if base_url:
+                item["url"] = f"{base_url}/api/images/{img.id}/file"
+                item["share_link"] = f"{base_url}/api/images/{img.id}/file"
+            results.append(item)
+
+        return {"results": results, "total": len(results)}
 
     elif tool_name == "search_knowledge":
         query = tool_input.get("query", "").strip()
