@@ -17,7 +17,7 @@ SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuti
 - Registrar visitas realizadas
 - Responder preguntas sobre productos, protocolos y procedimientos del laboratorio
 
-Cuando el usuario te pregunte sobre productos, indicaciones, protocolos, preguntas frecuentes o cualquier información específica del laboratorio, usa SIEMPRE la herramienta search_knowledge para buscar en la base de conocimiento antes de responder. Si no encuentras información relevante en la base de conocimiento, indícalo claramente.
+REGLA OBLIGATORIA: Ante CUALQUIER pregunta sobre productos, activos, materias primas, categorías, protocolos, procedimientos, precios, disponibilidad o cualquier tema del laboratorio Narma, debes llamar PRIMERO a search_knowledge antes de responder. Si el primer resultado no tiene lo que necesitas, intenta con una búsqueda más general o sin parámetros. NUNCA respondas desde tu conocimiento general sobre estos temas sin antes consultar la base de conocimiento.
 
 Siempre responde en español. Sé profesional, preciso y conciso."""
 
@@ -266,36 +266,48 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
         }
 
     elif tool_name == "search_knowledge":
-        query = tool_input.get("query", "")
+        query = tool_input.get("query", "").strip()
         category = tool_input.get("category")
 
-        q = db.query(KnowledgeEntry).filter(KnowledgeEntry.is_active == True)
+        base_q = db.query(KnowledgeEntry).filter(KnowledgeEntry.is_active == True)
         if category:
-            q = q.filter(KnowledgeEntry.category == category)
+            base_q = base_q.filter(KnowledgeEntry.category == category)
+
+        # Try specific query first (title or content ilike match)
         if query:
-            q = q.filter(
+            q_specific = base_q.filter(
                 KnowledgeEntry.title.ilike(f"%{query}%") |
                 KnowledgeEntry.content.ilike(f"%{query}%")
             )
-        entries = q.order_by(KnowledgeEntry.created_at.desc()).limit(5).all()
+            entries = q_specific.order_by(KnowledgeEntry.created_at.desc()).limit(5).all()
+
+            # Fallback: if no match found, return all active entries anyway
+            # (the agent can still reason over them even if the term isn't literally present)
+            if not entries:
+                entries = base_q.order_by(KnowledgeEntry.created_at.desc()).limit(3).all()
+        else:
+            entries = base_q.order_by(KnowledgeEntry.created_at.desc()).limit(5).all()
 
         if not entries:
-            return {"results": [], "message": "No se encontró información sobre ese tema en la base de conocimiento."}
+            return {"results": [], "message": "No hay entradas en la base de conocimiento. El administrador debe cargar información primero."}
 
         results = []
         for e in entries:
             content = e.content
-            # If query provided, extract only lines containing the query term (more relevant)
-            if query and len(content) > 5000:
+            # Smart filtering: if query is provided and content is large,
+            # extract matching lines + header so the relevant rows surface first
+            if query and len(content) > 3000:
                 lines = content.splitlines()
+                header_lines = lines[:5]  # column descriptions / header
                 matching = [l for l in lines if query.lower() in l.lower()]
-                header_lines = [l for l in lines[:5]]  # keep header/column info
                 if matching:
-                    content = "\n".join(header_lines) + "\n" + "\n".join(matching[:100])
+                    # Return header + up to 200 matching rows
+                    content = "\n".join(header_lines) + "\n" + "\n".join(matching[:200])
                 else:
-                    content = content[:8000]
-            elif len(content) > 8000:
-                content = content[:8000]
+                    # Term not found in individual lines; return full content up to 15000 chars
+                    content = content[:15000]
+            elif len(content) > 15000:
+                content = content[:15000]
 
             results.append({
                 "title": e.title,
@@ -338,7 +350,7 @@ def chat(request: AgentChatRequest, db: Session = Depends(get_db)):
         iteration += 1
         response = client.messages.create(
             model="claude-sonnet-4-5",
-            max_tokens=2048,
+            max_tokens=4096,
             system=system_with_context,
             tools=TOOLS,
             messages=messages
