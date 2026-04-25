@@ -113,6 +113,20 @@ class CardexUpload(Base):
     rows_processed = Column(Integer, default=0)
 
 
+class KnowledgeEntry(Base):
+    __tablename__ = "knowledge_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(300), nullable=False)
+    category = Column(String(50), default="general")
+    content = Column(Text, nullable=False)
+    business_line_id = Column(Integer, ForeignKey("business_lines.id"), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    business_line = relationship("BusinessLine")
+
+
 class ImageFile(Base):
     __tablename__ = "image_files"
 
