@@ -282,18 +282,29 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
         if not entries:
             return {"results": [], "message": "No se encontró información sobre ese tema en la base de conocimiento."}
 
-        return {
-            "results": [
-                {
-                    "title": e.title,
-                    "category": e.category,
-                    "content": e.content[:3000] if len(e.content) > 3000 else e.content,
-                    "business_line": e.business_line.name if e.business_line else None,
-                }
-                for e in entries
-            ],
-            "total": len(entries)
-        }
+        results = []
+        for e in entries:
+            content = e.content
+            # If query provided, extract only lines containing the query term (more relevant)
+            if query and len(content) > 5000:
+                lines = content.splitlines()
+                matching = [l for l in lines if query.lower() in l.lower()]
+                header_lines = [l for l in lines[:5]]  # keep header/column info
+                if matching:
+                    content = "\n".join(header_lines) + "\n" + "\n".join(matching[:100])
+                else:
+                    content = content[:8000]
+            elif len(content) > 8000:
+                content = content[:8000]
+
+            results.append({
+                "title": e.title,
+                "category": e.category,
+                "content": content,
+                "business_line": e.business_line.name if e.business_line else None,
+            })
+
+        return {"results": results, "total": len(results)}
 
     return {"error": f"Herramienta desconocida: {tool_name}"}
 
