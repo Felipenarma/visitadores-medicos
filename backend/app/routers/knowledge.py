@@ -29,6 +29,45 @@ def _entry_out(e: KnowledgeEntry) -> dict:
     }
 
 
+def _df_to_readable(df, label: str = "") -> str:
+    """Convert a DataFrame to a structured, AI-readable text format."""
+    import pandas as pd
+
+    # Clean up column names
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # Drop fully empty columns and rows
+    df = df.dropna(how="all", axis=1).dropna(how="all", axis=0)
+    df = df.fillna("")
+
+    if df.empty:
+        return f"[Sin datos: {label}]"
+
+    lines = []
+    columns = list(df.columns)
+
+    # Header describing the columns
+    lines.append(f"Columnas disponibles: {', '.join(columns)}")
+    lines.append(f"Total de registros: {len(df)}\n")
+
+    # Each row as labeled key-value pairs
+    for i, row in df.iterrows():
+        row_parts = []
+        for col in columns:
+            val = str(row[col]).strip()
+            if val and val != "nan":
+                row_parts.append(f"{col}: {val}")
+        if row_parts:
+            lines.append(f"[Registro {i + 1}] " + " | ".join(row_parts))
+
+        # Limit to 300 records to avoid huge content
+        if i >= 299:
+            lines.append(f"... ({len(df) - 300} registros adicionales omitidos)")
+            break
+
+    return "\n".join(lines)
+
+
 def _extract_text(filename: str, data: bytes) -> str:
     """Extract text content from uploaded file."""
     name_lower = filename.lower()
@@ -44,8 +83,8 @@ def _extract_text(filename: str, data: bytes) -> str:
     if name_lower.endswith(".csv"):
         try:
             import pandas as pd
-            df = pd.read_csv(io.BytesIO(data), nrows=200)
-            return df.to_string(index=False)
+            df = pd.read_csv(io.BytesIO(data), nrows=500)
+            return _df_to_readable(df, filename)
         except Exception as e:
             return f"[Error leyendo CSV: {e}]"
 
@@ -53,8 +92,14 @@ def _extract_text(filename: str, data: bytes) -> str:
     if any(name_lower.endswith(ext) for ext in [".xlsx", ".xls"]):
         try:
             import pandas as pd
-            df = pd.read_excel(io.BytesIO(data), nrows=200)
-            return df.to_string(index=False)
+            sheets = pd.read_excel(io.BytesIO(data), sheet_name=None)
+            parts = []
+            for sheet_name, df in sheets.items():
+                if df.empty:
+                    continue
+                parts.append(f"=== Hoja: {sheet_name} ===\n")
+                parts.append(_df_to_readable(df, sheet_name))
+            return "\n\n".join(parts) if parts else f"[Excel vacío: {filename}]"
         except Exception as e:
             return f"[Error leyendo Excel: {e}]"
 
