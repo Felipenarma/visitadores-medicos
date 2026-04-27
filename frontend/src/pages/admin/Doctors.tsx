@@ -99,8 +99,10 @@ export default function Doctors() {
   useEffect(() => { if (activeTab === 'analitica') loadSalesData(); }, [salesMonth, salesYear, activeTab]);
 
   const prevMonthLabel = () => MONTH_NAMES[salesMonth === 1 ? 11 : salesMonth - 2];
+  const _now = new Date();
+  const isSalesCurrentMonth = salesMonth === _now.getMonth() + 1 && salesYear === _now.getFullYear();
   const prevSalesMonth = () => { if (salesMonth === 1) { setSalesMonth(12); setSalesYear(y => y - 1); } else setSalesMonth(m => m - 1); };
-  const nextSalesMonth = () => { if (salesMonth === 12) { setSalesMonth(1); setSalesYear(y => y + 1); } else setSalesMonth(m => m + 1); };
+  const nextSalesMonth = () => { if (isSalesCurrentMonth) return; if (salesMonth === 12) { setSalesMonth(1); setSalesYear(y => y + 1); } else setSalesMonth(m => m + 1); };
 
   const openCreate = () => { setEditing(null); setForm(emptyDoctor); setError(''); setModalOpen(true); };
   const openEdit = (doc: Doctor) => { setEditing(doc); setForm({ ...doc }); setError(''); setModalOpen(true); };
@@ -312,7 +314,11 @@ export default function Doctors() {
             <span className="text-sm font-semibold text-gray-800 min-w-[130px] text-center">
               {MONTH_NAMES[salesMonth - 1]} {salesYear}
             </span>
-            <button onClick={nextSalesMonth} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <button
+              onClick={nextSalesMonth}
+              disabled={isSalesCurrentMonth}
+              className={`p-1.5 rounded-lg transition-colors ${isSalesCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+            >
               <ChevronRight size={18} className="text-gray-600" />
             </button>
           </div>

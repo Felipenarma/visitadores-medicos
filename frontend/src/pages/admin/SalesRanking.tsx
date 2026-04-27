@@ -37,11 +37,15 @@ export default function SalesRanking() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [repFilter, setRepFilter] = useState<string>('');
 
+  const now = new Date();
+  const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
+
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
     else setMonth(m => m - 1);
   };
   const nextMonth = () => {
+    if (isCurrentMonth) return;
     if (month === 12) { setMonth(1); setYear(y => y + 1); }
     else setMonth(m => m + 1);
   };
@@ -84,7 +88,11 @@ export default function SalesRanking() {
           <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">
             {MONTH_NAMES[month - 1]} {year}
           </span>
-          <button onClick={nextMonth} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
+          <button
+            onClick={nextMonth}
+            disabled={isCurrentMonth}
+            className={`p-1.5 rounded-lg border border-gray-200 ${isCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+          >
             <ChevronRight size={18} />
           </button>
         </div>
