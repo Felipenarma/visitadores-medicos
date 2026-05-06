@@ -1169,10 +1169,11 @@ def mike_chat(request: MikeChatRequest, db: Session = Depends(get_db)):
                     # Track tool calls for chart building
                     tool_calls_results.append({"name": block.name, "input": block.input, "result": tool_result})
 
-                    # Check for export
+                    # Check for export — use path without /api prefix so frontend
+                    # can call it directly via the axios instance (baseURL already has /api)
                     if block.name == "export_to_excel" and tool_result.get("download_ready"):
                         token = tool_result.get("token")
-                        export_url = f"/api/mike/export/{token}"
+                        export_url = f"/mike/export/{token}"
 
                     tool_results.append({
                         "type": "tool_result",

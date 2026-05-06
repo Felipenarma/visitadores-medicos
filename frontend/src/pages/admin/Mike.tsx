@@ -82,10 +82,13 @@ function MikeChart({ chart }: { chart: ChartData }) {
 
 function DownloadButton({ exportUrl }: { exportUrl: string }) {
   const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleDownload = async () => {
     setDownloading(true);
+    setError('');
     try {
+      // exportUrl is relative to /api (e.g. /mike/export/{token})
       const response = await api.get(exportUrl, { responseType: 'blob' });
       const blob = new Blob([response.data as BlobPart], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -95,31 +98,30 @@ function DownloadButton({ exportUrl }: { exportUrl: string }) {
       a.href = url;
       const disposition = (response.headers['content-disposition'] as string) || '';
       const match = disposition.match(/filename=([^;]+)/);
-      a.download = match ? match[1] : 'mike_export.xlsx';
+      a.download = match ? match[1].trim() : 'mike_export.xlsx';
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch {
-      // silently ignore download errors
+      setError('No se pudo descargar. Vuelve a pedirle a Mike que genere el Excel.');
     } finally {
       setDownloading(false);
     }
   };
 
   return (
-    <button
-      onClick={handleDownload}
-      disabled={downloading}
-      className="mt-2 flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
-    >
-      {downloading ? (
-        <Loader2 size={14} className="animate-spin" />
-      ) : (
-        <Download size={14} />
-      )}
-      {downloading ? 'Descargando...' : 'Descargar Excel'}
-    </button>
+    <div className="mt-2">
+      <button
+        onClick={handleDownload}
+        disabled={downloading}
+        className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
+      >
+        {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+        {downloading ? 'Descargando...' : 'Descargar Excel'}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
   );
 }
 
