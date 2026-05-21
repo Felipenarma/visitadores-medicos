@@ -8,11 +8,11 @@ Sistema fullstack de gestión de visitadores médicos farmacéuticos. Permite ad
 
 | Capa | Tecnologías |
 |------|-------------|
-| **Backend** | FastAPI 0.115.0, SQLAlchemy 2.0.0, Pydantic 2.8.0, Anthropic SDK 0.49.0, Pandas + Openpyxl, Uvicorn |
+| **Backend** | FastAPI 0.115.0, SQLAlchemy 2.0.0, Pydantic 2.8.0, Anthropic SDK 0.49.0, Pandas + Openpyxl, APScheduler 3.10.4, Uvicorn |
 | **Frontend** | React 18 + TypeScript, Vite, React Router DOM v6, Tailwind CSS, Recharts, FullCalendar, Axios, Lucide React |
 | **Base de datos** | SQLite (desarrollo) / PostgreSQL (producción) |
-| **Despliegue** | Railway (`railway.json` configurado) |
-| **IA** | Claude API (Anthropic) con tool-use |
+| **Despliegue** | Backend: Railway (`railway.json`). Frontend: Vercel (`frontend/vercel.json`) |
+| **IA** | Claude API (Anthropic) — modelo `claude-sonnet-4-5` con tool-use |
 
 ---
 
@@ -22,24 +22,26 @@ Sistema fullstack de gestión de visitadores médicos farmacéuticos. Permite ad
 visitadores-medicos/
 ├── backend/
 │   └── app/
-│       ├── main.py              # Setup, CORS, routers, seed, migraciones en caliente
+│       ├── main.py              # Setup, CORS, routers, seed, migraciones en caliente, APScheduler
 │       ├── database.py          # SQLAlchemy engine + get_db
 │       ├── models.py            # Modelos ORM (ver sección abajo)
 │       ├── schemas.py           # Pydantic schemas (in/out)
 │       └── routers/
 │           ├── business_lines.py
 │           ├── reps.py
-│           ├── doctors.py
+│           ├── doctors.py       # Búsqueda de RUT con normalización Python (sin/con guión)
 │           ├── visits.py
-│           ├── sales.py          # Carga simple + upload-consolidado + normalización
-│           ├── cardex.py         # Carga masiva de médicos desde Excel
-│           ├── dashboard.py      # Stats, tracking, ranking, nuevos médicos, comisiones
-│           ├── ai_agent.py       # Agente IA con Claude + tool-use
-│           └── images.py         # Gestión de imágenes de productos (binario en DB)
+│           ├── sales.py         # Carga simple + upload-consolidado + normalización
+│           ├── cardex.py        # Carga masiva de médicos desde Excel
+│           ├── dashboard.py     # Stats, tracking, ranking, nuevos médicos, comisiones
+│           ├── ai_agent.py      # Agente IA visitadores — tools: visitas, médicos, knowledge, images
+│           ├── mike.py          # Agente Mike (admin) — tools: dashboard, ventas, Excel export, reporte semanal
+│           ├── images.py        # Gestión de imágenes/QR (binario en DB)
+│           └── knowledge.py     # Base de conocimiento — CRUD + upload archivos (PDF/Excel/CSV/Word)
 ├── frontend/
 │   └── src/
 │       ├── App.tsx               # Rutas por rol (admin / rep)
-│       ├── api/index.ts          # Cliente Axios centralizado
+│       ├── api/index.ts          # Cliente Axios centralizado (baseURL=/api)
 │       ├── context/AuthContext.tsx
 │       ├── types/index.ts
 │       ├── components/
@@ -47,23 +49,23 @@ visitadores-medicos/
 │       └── pages/
 │           ├── AdminLogin.tsx
 │           ├── RepLogin.tsx
-│           ├── Login.tsx          # Redirect a /visitador
-│           ├── AIAgent.tsx        # Chat con agente IA (admin + rep)
-│           ├── KnowledgeBase.tsx  # Base de conocimiento
+│           ├── AIAgent.tsx        # Chat agente visitadores (admin + rep)
+│           ├── KnowledgeBase.tsx  # Base de conocimiento con botón Re-procesar archivos
 │           └── admin/
 │               ├── Dashboard.tsx
 │               ├── Reps.tsx
-│               ├── RepDetail.tsx  # Vista detallada de un visitador (semana/mes)
-│               ├── Doctors.tsx
+│               ├── RepDetail.tsx
+│               ├── Doctors.tsx    # Analítica de ventas con gráfico comparativo mes/mes anterior
 │               ├── BusinessLines.tsx
 │               ├── AdminCalendar.tsx
 │               ├── Tracking.tsx
 │               ├── CardexUpload.tsx
 │               ├── SalesUpload.tsx
 │               ├── Images.tsx
-│               ├── SalesRanking.tsx
-│               ├── NewDoctors.tsx
-│               └── RepCommissions.tsx
+│               ├── SalesRanking.tsx   # Bloqueado: no navega a meses futuros
+│               ├── NewDoctors.tsx     # Bloqueado: no navega a meses futuros
+│               ├── RepCommissions.tsx # Bloqueado: no navega a meses futuros
+│               └── Mike.tsx           # Chat Mike: charts, export Excel, localStorage persistence
 │           └── rep/
 │               ├── RepDashboard.tsx
 │               ├── RepCalendar.tsx
@@ -85,11 +87,12 @@ visitadores-medicos/
 | `Sale` | `sales` | Ventas: producto, monto, fecha, doctor vinculado, RUT doctor, RUT paciente, categoría, `external_id` único para deduplicación |
 | `SalesUpload` | `sales_uploads` | Tracking de cada carga masiva de ventas |
 | `CardexUpload` | `cardex_uploads` | Tracking de cada carga masiva de médicos |
-| `ImageFile` | `image_files` | Imágenes de productos almacenadas como binario en DB con categoría y línea de negocio |
+| `KnowledgeEntry` | `knowledge_entries` | Base de conocimiento: título, categoría, contenido extraído, línea de negocio |
+| `ImageFile` | `image_files` | Imágenes/QR almacenados como binario en DB con categoría y línea de negocio |
 
 ### Migraciones en caliente (`main.py → run_migrations`)
 
-Se ejecutan automáticamente al arrancar el servidor. Agregan columnas si no existen:
+Se ejecutan automáticamente al arrancar. Agregan columnas si no existen:
 - `sales`: `rut_doctor`, `rut_paciente`, `nombre_paciente`, `categoria`, `external_id`
 - `doctors`: `rut`, `medical_center`, `city`, `commune`
 - Índices únicos/parciales para `external_id`, `rut_doctor`, `rut` de doctors
@@ -98,47 +101,131 @@ Se ejecutan automáticamente al arrancar el servidor. Agregan columnas si no exi
 
 ## API Endpoints Principales
 
+### `/api/knowledge`
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/knowledge` | Lista entradas activas (filtro opcional por categoría) |
+| `GET` | `/api/knowledge/categories` | Categorías: productos, protocolos, faq, general, archivo |
+| `POST` | `/api/knowledge` | Crear entrada manual |
+| `PUT` | `/api/knowledge/{id}` | Actualizar entrada |
+| `DELETE` | `/api/knowledge/{id}` | Eliminar entrada |
+| `POST` | `/api/knowledge/upload` | Subir archivo único (PDF/Excel/CSV/Word/TXT) |
+| `POST` | `/api/knowledge/upload-multiple` | Subir múltiples archivos |
+| `POST` | `/api/knowledge/{id}/reprocess` | Re-extraer contenido de un archivo nuevo |
+
+### `/api/images`
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/images` | Lista imágenes/QR (filtro opcional por categoría: qr/product/general) |
+| `POST` | `/api/images` | Subir imagen (PNG/JPG/GIF/WebP/SVG, máx 5MB) |
+| `GET` | `/api/images/{id}/file` | Servir imagen binaria |
+| `DELETE` | `/api/images/{id}` | Eliminar imagen |
+
+### `/api/mike`
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/api/mike/chat` | Chat con agente Mike (admin) |
+| `GET` | `/api/mike/export/{token}` | Descargar Excel generado por Mike (token efímero en RAM) |
+| `POST` | `/api/mike/weekly-report` | Dispara reporte semanal por email (también corre automático lunes 8am Chile) |
+
+### `/api/agent`
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/api/agent/chat` | Chat con agente visitadores (rep + admin) |
+
 ### `/api/sales`
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | `GET` | `/api/sales/` | Lista las últimas 500 ventas |
 | `POST` | `/api/sales/upload` | Carga simple por nombre de médico (legacy) |
 | `POST` | `/api/sales/upload-consolidado` | **Carga avanzada**: RUT doctor/paciente, deduplicación por `external_id`, normalización automática en background |
-| `POST` | `/api/sales/normalize-doctors` | Fusión manual de médicos duplicados (también corre automático post-carga) |
+| `POST` | `/api/sales/normalize-doctors` | Fusión manual de médicos duplicados |
 | `GET` | `/api/sales/uploads/last` | Última carga registrada |
 | `GET` | `/api/sales/summary` | Total de ventas y visitas por médico |
 
 ### `/api/dashboard`
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| `GET` | `/api/dashboard/stats` | KPIs generales: doctores, reps activos, visitas del día/semana |
-| `GET` | `/api/dashboard/today` | Visitas de hoy con doctor y rep |
+| `GET` | `/api/dashboard/stats` | KPIs generales |
+| `GET` | `/api/dashboard/today` | Visitas de hoy |
 | `GET` | `/api/dashboard/visits-by-rep` | Visitas del mes por visitador |
 | `GET` | `/api/dashboard/sales-by-business-line` | Distribución de ventas por línea de negocio |
-| `GET` | `/api/dashboard/daily-tracking?date=` | Completitud de visitas por visitador para una fecha |
+| `GET` | `/api/dashboard/daily-tracking?date=` | Completitud de visitas por rep y fecha |
 | `GET` | `/api/dashboard/rep/{id}/stats` | Stats personales de un rep |
-| `GET` | `/api/dashboard/rep/{id}/detail` | Detalle de visitas semana + mes de un rep |
-| `GET` | `/api/dashboard/doctor-ranking?month=&year=` | Ranking de médicos por unidades vendidas en el mes |
-| `GET` | `/api/dashboard/new-doctors?month=&year=` | Médicos que prescriben por primera vez en el período |
-| `GET` | `/api/dashboard/sales-by-doctor?month=&year=&top=` | Mes actual vs anterior por médico (top N) |
-| `GET` | `/api/dashboard/rep-commissions?month=&year=` | Comisiones por rep: ventas, médicos nuevos, detalle por doctor y categoría |
+| `GET` | `/api/dashboard/rep/{id}/detail` | Detalle semana + mes de un rep |
+| `GET` | `/api/dashboard/doctor-ranking?month=&year=` | Ranking médicos por unidades vendidas |
+| `GET` | `/api/dashboard/new-doctors?month=&year=` | Médicos que prescriben por primera vez |
+| `GET` | `/api/dashboard/sales-by-doctor?month=&year=&top=` | Mes actual vs anterior por médico |
+| `GET` | `/api/dashboard/rep-commissions?month=&year=` | Comisiones por rep |
 
 ### Otros routers
 - `/api/reps` — CRUD de visitadores
-- `/api/doctors` — CRUD de médicos
+- `/api/doctors` — CRUD de médicos (búsqueda de RUT normalizada: acepta con/sin guión)
 - `/api/visits` — CRUD de visitas
 - `/api/business-lines` — CRUD de líneas de negocio
 - `/api/cardex/upload` — Carga masiva de médicos desde Excel
-- `/api/agent` — Chat con agente IA (Claude)
-- `/api/images` — CRUD de imágenes de productos (almacenamiento binario en DB)
+
+---
+
+## Agentes IA
+
+### Agente Visitadores (`ai_agent.py` → `/api/agent/chat`)
+Agente para visitadores y admin. Tools disponibles:
+- `get_my_visits` — visitas del rep (today/week/upcoming/all)
+- `get_my_doctors` — médicos asignados al rep
+- `schedule_visit` — programar visita
+- `complete_visit` — marcar visita como completada
+- `get_doctor_info` — info detallada de un médico
+- `search_knowledge` — busca en base de conocimiento (con fallback: si no hay match devuelve todas las entradas activas)
+- `search_images` — busca imágenes y QR, devuelve URL directa para compartir
+
+**Importante:** `search_knowledge` y `search_images` tienen fallback automático — si el query no hace match exacto en la DB, devuelven todas las entradas/imágenes disponibles para que el agente siempre tenga contexto.
+
+### Agente Mike (`mike.py` → `/api/mike/chat`)
+Agente ejecutivo para admin. Tools disponibles:
+- `get_dashboard_overview` — KPIs del día/semana/mes
+- `get_all_reps_summary` — resumen de visitadores con tasa de cumplimiento
+- `get_doctor_ranking` — ranking de médicos por ventas
+- `get_new_doctors` — médicos que prescriben por primera vez
+- `get_monthly_trend` — tendencia de ventas últimos N meses
+- `get_rep_commissions` — comisiones por visitador
+- `export_to_excel` — genera Excel descargable (token efímero en `_export_store` en RAM)
+
+Mike además genera **charts** automáticamente en el chat (Recharts bar/line) y tiene **persistencia en localStorage**.
+
+**Reporte semanal automático:** APScheduler dispara `POST /api/mike/weekly-report` cada lunes 8am hora Chile.
+
+---
+
+## Base de Conocimiento (`knowledge.py`)
+
+Extracción de contenido de archivos:
+- **Excel/CSV** → función `_df_to_readable()`: genera `[Registro N] Col: val | Col: val` (max 300 filas por hoja, todas las hojas)
+- **PDF** → extracción página por página con pypdf (instalado en Railway)
+- **Word (.docx)** → extracción de XML interno
+- **TXT/MD/JSON** → texto plano
+
+Los PDFs de brochures Narma están cargados como entradas en categoría `productos`:
+- Crema Base HRT (ID 7)
+- DHEA (ID 8)
+- Coenzima Q10 (ID 9)
+- Testosterona (ID 10)
+- Control de Peso (ID 11)
+- Dermatología (ID 12)
+
+Los QR de Narma están en `/api/images`:
+- QR Laboratorio (ID 4)
+- QR Control de Peso (ID 3)
+- QR Dermatología (ID 2)
+- QR Hormonas (ID 1)
 
 ---
 
 ## Inferencia de Categorías de Producto
 
-La función `_infer_categoria` (en `sales.py`) clasifica ventas por palabras clave en el nombre del producto o en el `tipo_producto`. Orden de prioridad:
+La función `_infer_categoria` (en `sales.py`) clasifica ventas por palabras clave. Orden de prioridad:
 
-1. **Producto Terminado** — marcas comerciales: `hormogel`, `lenzetto`, `estreva`, `duphaston`, `progendo`, etc.
+1. **Producto Terminado** — `hormogel`, `lenzetto`, `estreva`, `duphaston`, `progendo`, etc.
 2. **Pelo** — `minoxidil`, `finasteride`, `dutasteride`
 3. **Fertilidad** — `clomifeno`, `coenzima q10`, `coq10`
 4. **Cannabis Medicinal** — `cbd`, `thc`, `cannabis`, `vaporizable`, `aceite sublingual`, etc.
@@ -146,56 +233,40 @@ La función `_infer_categoria` (en `sales.py`) clasifica ventas por palabras cla
 6. **Dermatología** — `derma`, `retinol`, `ácido hialurónico`
 7. **Control de Peso** — `semaglutida`, `ozempic`, `saxenda`, `tirzepatida`
 8. **Suero Terapia** — `suero`, `glutatión`, `vitamina c/d`, `b12`
-9. Si `tipo_producto` contiene `magistral` → **Cannabis Medicinal** (por defecto Narma)
+9. Si `tipo_producto` contiene `magistral` → **Cannabis Medicinal**
 
 ---
 
 ## Normalización de Médicos Duplicados (`_run_normalization`)
 
-Se ejecuta en background automáticamente tras cada `upload-consolidado`. También disponible manualmente vía `POST /api/sales/normalize-doctors`.
+Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ### Pasos:
-1. Agrupa todas las ventas por RUT doctor normalizado (sin puntos/guiones)
-2. Calcula el nombre canónico, `doctor_id` y RUT más frecuentes por RUT normalizado
-3. Actualiza ventas con nombre/RUT/doctor_id canónico
-4. Fusiona médicos duplicados **por RUT** en la tabla `doctors` (desactiva los duplicados)
-5. Fusiona médicos duplicados **por nombre** (para doctors sin RUT)
-6. Sincroniza RUT entre tablas: `ventas → doctors` y `doctors → ventas`
+1. Agrupa ventas por RUT doctor normalizado (sin puntos/guiones)
+2. Calcula nombre canónico, `doctor_id` y RUT más frecuentes
+3. Actualiza ventas con valores canónicos
+4. Fusiona médicos duplicados por RUT (desactiva duplicados)
+5. Fusiona médicos duplicados por nombre (para doctors sin RUT)
+6. Sincroniza RUT entre tablas
 
 ---
 
 ## Funcionalidades por Rol
 
 ### Admin
-- **Dashboard** — KPIs generales, visitas del día, distribución por línea de negocio, visitas por rep
-- **Visitadores** — CRUD, activar/desactivar, vista detallada con semana/mes
-- **Médicos** — CRUD, filtros por rep y línea de negocio
-- **Líneas de negocio** — CRUD con color personalizado
-- **Calendario** — Calendario global de visitas (todos los reps), FullCalendar
-- **Tracking diario** — Completitud de visitas por rep y fecha
-- **Carga Cardex** — Excel con médicos (crea o actualiza)
-- **Carga Ventas** — Consolidado normalizado con deduplicación automática y match por RUT
-- **Ranking de médicos** — Unidades vendidas mes actual vs anterior por médico
-- **Médicos nuevos** — Primera prescripción en el período seleccionado
-- **Comisiones** — Resumen por visitador: ventas totales, médicos activos, médicos nuevos, desglose por categoría y detalle por médico
-- **Imágenes** — Upload y gestión de imágenes de productos por línea de negocio
-- **Agente IA** — Chat con Claude para consultas sobre visitas y médicos
-- **Base de conocimiento** — Documentación interna
+- Dashboard, Visitadores, Médicos, Líneas de negocio, Calendario global
+- Tracking diario, Carga Cardex, Carga Ventas
+- Ranking de médicos (bloqueado en mes actual, no navega al futuro)
+- Médicos nuevos (bloqueado en mes actual)
+- Comisiones (bloqueado en mes actual)
+- Imágenes/QR — upload y gestión
+- **Mike** — agente IA ejecutivo con charts y export Excel
+- **Base de conocimiento** — documentos/brochures con botón Re-procesar
+- **Agente IA visitadores** — misma interfaz que los reps
 
 ### Visitador (Rep)
-- **Dashboard personal** — Métricas propias: médicos, visitas del día/semana/mes, tasa de completitud
-- **Calendario personal** — Visitas propias, FullCalendar
-- **Mis médicos** — Lista de médicos asignados
-- **Agente IA** — Chat con Claude (tools: ver visitas, agendar, completar, actualizar)
-
----
-
-## Agente IA (Claude)
-
-- Usa Anthropic SDK con **tool-use**
-- Tools disponibles: `get_my_visits`, `get_my_doctors`, `schedule_visit`, `complete_visit`, `update_visit`
-- System prompt en español
-- Disponible para admin y reps desde el mismo componente `AIAgent.tsx`
+- Dashboard personal, Calendario personal, Mis médicos
+- **Agente IA** — gestión de visitas + consulta de base de conocimiento + compartir QR/imágenes
 
 ---
 
@@ -203,7 +274,7 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`. Tambi�
 
 - Portales separados: `/admin-login` y `/visitador`
 - Sin JWT; sesión manejada por `AuthContext` (React Context + localStorage)
-- Protección de rutas por rol vía `PrivateRoute` component
+- Protección de rutas por rol vía `PrivateRoute`
 
 ---
 
@@ -228,6 +299,7 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`. Tambi�
 | `/admin/images` | Images | admin |
 | `/admin/agent` | AIAgent | admin |
 | `/admin/knowledge` | KnowledgeBase | admin |
+| `/admin/mike` | Mike | admin |
 | `/rep/dashboard` | RepDashboard | rep |
 | `/rep/calendar` | RepCalendar | rep |
 | `/rep/doctors` | RepDoctors | rep |
@@ -272,10 +344,24 @@ Crea 3 reps, 10 médicos y visitas para los últimos 3 meses y próximos 3 meses
 
 ---
 
-## Despliegue en Railway
+## Despliegue
 
-Configurado via `railway.json`. Base de datos PostgreSQL en producción (se detecta automáticamente por `DATABASE_URL`). La variable de entorno `ANTHROPIC_API_KEY` es requerida para el agente IA.
+- **Backend:** Railway — `railway up --service web`
+- **Frontend:** Vercel — `cd frontend && npx vercel --prod`
+- Variable de entorno requerida: `ANTHROPIC_API_KEY` (sin espacios ni saltos de línea)
+- PostgreSQL se detecta automáticamente por `DATABASE_URL`
 
 ---
 
-*Última actualización: 2026-04-16*
+## Notas Técnicas Importantes
+
+- **ANTHROPIC_API_KEY**: debe hacer `.strip()` al leerla — Railway puede agregar `\n` al final
+- **Modelo Claude**: `claude-sonnet-4-5` (sin sufijo de fecha)
+- **export_url de Mike**: es relativa a `/api` (ej: `/mike/export/{token}`). El axios tiene `baseURL=/api` así que NO incluir `/api` en la URL
+- **_export_store**: dict en RAM — los tokens de Excel se pierden si Railway reinicia el servidor. Si falla la descarga, pedir a Mike que regenere el Excel
+- **Búsqueda de RUT**: normalización Python con `re.sub(r'[\.\-\s]', '', rut).upper()` — funciona con y sin guión/puntos
+- **pypdf**: instalado en Railway para extracción de PDFs página por página
+
+---
+
+*Última actualización: 2026-04-25*
