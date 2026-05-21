@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -45,6 +45,7 @@ export default function Doctors() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: '' });
+  const [exporting, setExporting] = useState(false);
 
   // Merge modal state
   const [mergeSource, setMergeSource]   = useState<Doctor | null>(null);
@@ -165,6 +166,27 @@ export default function Doctors() {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params: any = { is_active: true };
+      if (filters.rep_id) params.rep_id = parseInt(filters.rep_id);
+      if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
+      if (filters.search) params.search = filters.search;
+      const blob = await doctorsApi.exportExcel(params);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `medicos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Error al exportar. Intenta de nuevo.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -173,9 +195,19 @@ export default function Doctors() {
           <h1 className="text-2xl font-bold text-gray-900">Médicos</h1>
           <p className="text-gray-500 text-sm mt-1">{doctors.length} médicos encontrados</p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex items-center gap-2">
-          <Plus size={18} /> Nuevo Médico
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="btn-secondary flex items-center gap-2 disabled:opacity-50"
+          >
+            <Download size={16} />
+            {exporting ? 'Exportando...' : 'Exportar Excel'}
+          </button>
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+            <Plus size={18} /> Nuevo Médico
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

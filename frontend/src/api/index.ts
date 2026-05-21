@@ -44,6 +44,13 @@ export const doctorsApi = {
   delete: (id: number) => api.delete(`/doctors/${id}`).then(r => r.data),
   assignRep: (id: number, rep_id: number) => api.put<Doctor>(`/doctors/${id}/assign-rep`, { rep_id }).then(r => r.data),
   mergeInto: (fromId: number, toId: number) => api.post(`/doctors/${fromId}/merge-into/${toId}`).then(r => r.data),
+  exportExcel: (params?: {
+    rep_id?: number;
+    business_line_id?: number;
+    specialty?: string;
+    is_active?: boolean;
+    search?: string;
+  }) => api.get('/doctors/export', { params, responseType: 'blob' }).then(r => r.data as Blob),
 };
 
 // Visits
