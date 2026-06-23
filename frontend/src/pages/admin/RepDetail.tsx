@@ -401,7 +401,13 @@ export default function RepDetail() {
     );
   }
 
-  const { rep, week, month, is_current_month, query_month, query_year, doctor_ranking } = data;
+  const {
+    rep, week, month,
+    is_current_month = true,
+    query_month = selMonth,
+    query_year = selYear,
+    doctor_ranking = [],
+  } = data;
   const monthLabel = `${MONTH_NAMES[query_month - 1]} ${query_year}`;
 
   return (
