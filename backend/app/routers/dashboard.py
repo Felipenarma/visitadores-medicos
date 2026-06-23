@@ -369,6 +369,7 @@ def get_new_doctors(
             "rep_id": rep.id if rep else None,
             "productos": productos,
             "total_amount": total,
+            "sales_count": len(doc_sales),
         })
 
     result.sort(key=lambda x: x["primera_venta"] or "")

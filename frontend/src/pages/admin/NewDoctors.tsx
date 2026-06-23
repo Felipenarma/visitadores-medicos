@@ -16,6 +16,7 @@ interface NewDoctorItem {
   rep_id: number | null;
   productos: string[];
   total_amount: number;
+  sales_count: number;
 }
 
 interface EditForm {
@@ -127,7 +128,7 @@ export default function NewDoctors() {
       'Primera Venta':   d.primera_venta ? format(new Date(d.primera_venta), 'dd/MM/yyyy', { locale: es }) : '',
       'Visitador':       d.rep_name || 'Sin asignar',
       'Productos':       d.productos.join(', '),
-      'Monto Total':     d.total_amount,
+      'Recetas':         d.sales_count,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     // Ancho de columnas
@@ -229,7 +230,7 @@ export default function NewDoctors() {
                   <th className="text-left px-4 py-3 text-white font-semibold hidden sm:table-cell">Primera Venta</th>
                   <th className="text-left px-4 py-3 text-white font-semibold">Visitador</th>
                   <th className="text-left px-4 py-3 text-white font-semibold hidden lg:table-cell">Productos</th>
-                  <th className="text-right px-4 py-3 text-white font-semibold hidden sm:table-cell">Monto</th>
+                  <th className="text-right px-4 py-3 text-white font-semibold hidden sm:table-cell">Recetas</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -275,7 +276,7 @@ export default function NewDoctors() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-700 hidden sm:table-cell">
-                        ${item.total_amount.toLocaleString('es-CL')}
+                        {item.sales_count ?? 0}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-end">
