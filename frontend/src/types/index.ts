@@ -145,6 +145,16 @@ export interface RepDetailPeriod {
   visits: RepDetailVisit[];
 }
 
+export interface RepDoctorRanking {
+  doctor_id?: number;
+  doctor_name: string;
+  rut?: string;
+  specialty?: string;
+  units: number;
+  total_amount: number;
+  categorias: string[];
+}
+
 export interface RepDetail {
   rep: {
     id: number;
@@ -156,8 +166,12 @@ export interface RepDetail {
     is_active: boolean;
     doctor_count: number;
   };
+  is_current_month: boolean;
+  query_month: number;
+  query_year: number;
   week: RepDetailPeriod;
   month: RepDetailPeriod;
+  doctor_ranking: RepDoctorRanking[];
 }
 
 export interface AgentMessage {

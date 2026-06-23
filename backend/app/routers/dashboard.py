@@ -456,7 +456,12 @@ def get_sales_by_doctor(
 
 
 @router.get("/rep/{rep_id}/detail")
-def get_rep_detail(rep_id: int, db: Session = Depends(get_db)):
+def get_rep_detail(
+    rep_id: int,
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
     """Resumen detallado de un visitador: visitas y médicos por semana y mes."""
     rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
     if not rep:
@@ -465,15 +470,19 @@ def get_rep_detail(rep_id: int, db: Session = Depends(get_db)):
 
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Semana actual (lunes a domingo)
+    # Semana actual (lunes a domingo) — siempre es la semana real
     week_start = today_start - timedelta(days=today_start.weekday())
     week_end = week_start + timedelta(days=7)
 
-    # Mes actual
-    month_start = today_start.replace(day=1)
+    # Mes consultado (default: mes actual)
     from calendar import monthrange
-    _, last_day = monthrange(today_start.year, today_start.month)
-    month_end = today_start.replace(day=last_day, hour=23, minute=59, second=59)
+    query_month = month or today_start.month
+    query_year = year or today_start.year
+    _, last_day = monthrange(query_year, query_month)
+    month_start = datetime(query_year, query_month, 1)
+    month_end = datetime(query_year, query_month, last_day, 23, 59, 59)
+
+    is_current_month = (query_month == today_start.month and query_year == today_start.year)
 
     def build_period_summary(start, end):
         visits = db.query(Visit).filter(
@@ -516,6 +525,48 @@ def get_rep_detail(rep_id: int, db: Session = Depends(get_db)):
     week_summary = build_period_summary(week_start, week_end)
     month_summary = build_period_summary(month_start, month_end + timedelta(seconds=1))
 
+    # Ranking de médicos por ventas en el periodo consultado
+    rep_doctor_ids = [d.id for d in db.query(Doctor).filter(
+        Doctor.rep_id == rep_id, Doctor.is_active == True
+    ).all()]
+
+    period_sales = db.query(Sale).filter(
+        Sale.doctor_id.in_(rep_doctor_ids),
+        Sale.sale_date >= month_start,
+        Sale.sale_date <= month_end
+    ).all() if rep_doctor_ids else []
+
+    all_rep_doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(rep_doctor_ids)).all()} if rep_doctor_ids else {}
+
+    doctor_map = {}
+    for s in period_sales:
+        key = s.doctor_id
+        if not key:
+            continue
+        if key not in doctor_map:
+            doctor = all_rep_doctors.get(key)
+            doctor_map[key] = {
+                "doctor_id": key,
+                "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
+                "rut": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
+                "specialty": doctor.specialty if doctor else None,
+                "units": 0,
+                "total_amount": 0.0,
+                "categorias": set(),
+            }
+        doctor_map[key]["units"] += 1
+        doctor_map[key]["total_amount"] += safe_float(s.amount)
+        if s.categoria:
+            doctor_map[key]["categorias"].add(s.categoria)
+
+    doctor_ranking = sorted(
+        [{"categorias": list(v["categorias"]), "total_amount": round(v["total_amount"], 2),
+          **{k: val for k, val in v.items() if k not in ("categorias", "total_amount")}}
+         for v in doctor_map.values()],
+        key=lambda x: x["units"],
+        reverse=True,
+    )
+
     return {
         "rep": {
             "id": rep.id,
@@ -529,6 +580,9 @@ def get_rep_detail(rep_id: int, db: Session = Depends(get_db)):
                 Doctor.rep_id == rep_id, Doctor.is_active == True
             ).scalar(),
         },
+        "is_current_month": is_current_month,
+        "query_month": query_month,
+        "query_year": query_year,
         "week": {
             "start": week_start.strftime("%Y-%m-%d"),
             "end": (week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
@@ -539,6 +593,7 @@ def get_rep_detail(rep_id: int, db: Session = Depends(get_db)):
             "end": month_end.strftime("%Y-%m-%d"),
             **month_summary,
         },
+        "doctor_ranking": doctor_ranking,
     }
 
 

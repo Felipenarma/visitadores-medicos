@@ -1,8 +1,12 @@
 import re
+import io
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
+import pandas as pd
 from ..database import get_db
 from ..models import Doctor, MedicalRep, BusinessLine, Visit, Sale
 from ..schemas import DoctorCreate, DoctorUpdate, DoctorOut, AssignRepRequest
@@ -82,6 +86,102 @@ def get_doctors(
         return result
 
     return [enrich_doctor(doc, db) for doc in doctors]
+
+
+@router.get("/export")
+def export_doctors(
+    rep_id: Optional[int] = Query(None),
+    business_line_id: Optional[int] = Query(None),
+    specialty: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Exporta la lista de médicos a Excel respetando los mismos filtros que GET /."""
+    query = db.query(Doctor)
+    if rep_id is not None:
+        query = query.filter(Doctor.rep_id == rep_id)
+    if business_line_id is not None:
+        query = query.filter(Doctor.business_line_id == business_line_id)
+    if specialty is not None:
+        query = query.filter(Doctor.specialty.ilike(f"%{specialty}%"))
+    if is_active is not None:
+        query = query.filter(Doctor.is_active == is_active)
+
+    doctors = query.all()
+
+    if search:
+        search_lower = search.lower()
+        search_rut_norm = re.sub(r'[\.\-\s]', '', search).upper()
+
+        def _matches(doc: Doctor) -> bool:
+            if doc.name and search_lower in doc.name.lower():
+                return True
+            if doc.rut:
+                rut_norm = re.sub(r'[\.\-\s]', '', doc.rut).upper()
+                if search_rut_norm and search_rut_norm in rut_norm:
+                    return True
+            return False
+
+        doctors = [d for d in doctors if _matches(d)]
+
+    # Construir filas
+    rows = []
+    for doc in doctors:
+        # Última visita completada
+        last_visit = db.query(Visit).filter(
+            Visit.doctor_id == doc.id,
+            Visit.status == "completed"
+        ).order_by(Visit.actual_date.desc()).first()
+        last_visit_date = last_visit.actual_date.strftime("%d/%m/%Y") if last_visit and last_visit.actual_date else ""
+
+        visit_count = db.query(func.count(Visit.id)).filter(Visit.doctor_id == doc.id).scalar()
+        sale_count = db.query(func.count(Sale.id)).filter(Sale.doctor_id == doc.id).scalar()
+
+        rep_name = doc.rep.name if doc.rep else ""
+        bl_name = doc.business_line.name if doc.business_line else ""
+
+        rows.append({
+            "Nombre": doc.name or "",
+            "RUT": doc.rut or "",
+            "Centro Médico": doc.medical_center or "",
+            "Especialidad": doc.specialty or "",
+            "Ciudad": doc.city or "",
+            "Comuna": doc.commune or "",
+            "Dirección": doc.address or "",
+            "Teléfono": doc.phone or "",
+            "Correo": doc.email or "",
+            "Línea de Negocio": bl_name,
+            "Visitador Asignado": rep_name,
+            "Frec. Visita (días)": doc.visit_frequency or 30,
+            "Productos que Prescribe": doc.prescribes_products or "",
+            "Última Visita": last_visit_date,
+            "Total Visitas": visit_count,
+            "Tiene Ventas": "Sí" if sale_count > 0 else "No",
+            "Notas": doc.notes or "",
+            "Activo": "Sí" if doc.is_active else "No",
+        })
+
+    df = pd.DataFrame(rows)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Médicos")
+        ws = writer.sheets["Médicos"]
+        # Ajustar ancho de columnas
+        for col in ws.columns:
+            max_len = max((len(str(cell.value)) if cell.value else 0) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+
+    output.seek(0)
+    fecha = datetime.now().strftime("%Y%m%d")
+    filename = f"medicos_{fecha}.xlsx"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 @router.get("/{doctor_id}", response_model=DoctorOut)

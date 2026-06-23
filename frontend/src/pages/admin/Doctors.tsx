@@ -278,9 +278,17 @@ export default function Doctors() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {doctors.map(doc => (
-                      <tr key={doc.id} className="hover:bg-gray-50">
+                      <tr
+                        key={doc.id}
+                        onClick={() => openEdit(doc)}
+                        className="hover:bg-blue-50 cursor-pointer transition-colors group"
+                        title="Clic para editar"
+                      >
                         <td className="py-3 px-4">
-                          <div className="font-medium text-gray-900">{doc.name}</div>
+                          <div className="font-medium text-gray-900 group-hover:text-blue-700 flex items-center gap-1.5">
+                            {doc.name}
+                            <Edit2 size={12} className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                          </div>
                           {doc.phone && <div className="text-xs text-gray-400">{doc.phone}</div>}
                         </td>
                         <td className="py-3 px-4 text-gray-500 text-xs">{doc.rut || '—'}</td>
@@ -301,13 +309,10 @@ export default function Doctors() {
                         <td className="py-3 px-4">
                           {doc.has_sales ? <span className="badge-completed">Sí</span> : <span className="badge-cancelled">No</span>}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                           <div className="flex justify-end gap-1">
                             <button onClick={() => openAssign(doc)} title="Asignar visitador" className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
                               <UserCheck size={15} />
-                            </button>
-                            <button onClick={() => openEdit(doc)} title="Editar" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                              <Edit2 size={15} />
                             </button>
                             <button onClick={() => openMerge(doc)} title="Fusionar con otro médico" className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
                               <GitMerge size={15} />

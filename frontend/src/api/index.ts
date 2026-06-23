@@ -104,7 +104,10 @@ export const dashboardApi = {
   getVisitsByRep: (month?: number, year?: number) => api.get<{ rep_name: string; completed: number; total: number; rep_id: number }[]>('/dashboard/visits-by-rep', { params: { ...(month && { month }), ...(year && { year }) } }).then(r => r.data),
   getSalesByBusinessLine: () => api.get<{ name: string; value: number; color: string }[]>('/dashboard/sales-by-business-line').then(r => r.data),
   getRepStats: (rep_id: number) => api.get<RepStats>(`/dashboard/rep/${rep_id}/stats`).then(r => r.data),
-  getRepDetail: (rep_id: number) => api.get<RepDetail>(`/dashboard/rep/${rep_id}/detail`).then(r => r.data),
+  getRepDetail: (rep_id: number, month?: number, year?: number) =>
+    api.get<RepDetail>(`/dashboard/rep/${rep_id}/detail`, {
+      params: { ...(month && { month }), ...(year && { year }) }
+    }).then(r => r.data),
   getDailyTracking: (date?: string) => api.get<{
     date: string;
     reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
