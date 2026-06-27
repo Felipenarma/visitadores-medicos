@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, User, MapPin, Phone, Mail, Users,
+  ArrowLeft, MapPin, Phone, Mail, Users,
   CheckCircle, XCircle, Clock, AlertCircle, Calendar, Download,
-  ChevronLeft, ChevronRight, TrendingUp, Award
+  ChevronLeft, ChevronRight, Award, Stethoscope
 } from 'lucide-react';
 import { dashboardApi, doctorsApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking } from '../../types';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, Doctor } from '../../types';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -337,10 +337,61 @@ function PeriodNavigator({
 
 // ─── main page ───────────────────────────────────────────────────────────────
 
+function DoctorListSection({ doctors, repName, onExport, exporting }: {
+  doctors: Doctor[];
+  repName: string;
+  onExport: () => void;
+  exporting: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+          <Stethoscope size={16} className="text-blue-500" />
+          Médicos registrados
+          <span className="text-xs font-normal bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{doctors.length}</span>
+        </h2>
+        <button
+          onClick={onExport}
+          disabled={exporting}
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <Download size={13} />
+          {exporting ? 'Exportando...' : 'Exportar Excel'}
+        </button>
+      </div>
+      {doctors.length === 0 ? (
+        <div className="text-center py-10 text-gray-400 text-sm">Sin médicos asignados</div>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {doctors.map(doc => (
+            <div key={doc.id} className="px-6 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors">
+              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                <span className="text-blue-600 font-semibold text-sm">{doc.name.charAt(0).toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-800 text-sm truncate">{doc.name}</p>
+                <p className="text-xs text-gray-400 truncate">
+                  {[doc.specialty, doc.medical_center, doc.commune].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+                </p>
+              </div>
+              {doc.rut && <span className="text-xs text-gray-400 shrink-0">{doc.rut}</span>}
+              {doc.has_sales && (
+                <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full shrink-0">Con ventas</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RepDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<RepDetail | null>(null);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -376,8 +427,11 @@ export default function RepDetail() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    dashboardApi.getRepDetail(Number(id), selMonth, selYear)
-      .then(setData)
+    Promise.all([
+      dashboardApi.getRepDetail(Number(id), selMonth, selYear),
+      doctorsApi.getAll({ rep_id: Number(id), is_active: true }),
+    ])
+      .then(([detail, docs]) => { setData(detail); setDoctors(docs); })
       .catch(() => setError('No se pudo cargar la información del visitador'))
       .finally(() => setLoading(false));
   }, [id, selMonth, selYear]);
@@ -433,17 +487,7 @@ export default function RepDetail() {
                 {rep.is_active ? 'Activo' : 'Inactivo'}
               </span>
             </h1>
-            <div className="flex items-center gap-3">
-              <PeriodNavigator month={selMonth} year={selYear} onChange={handlePeriodChange} />
-              <button
-                onClick={handleExportDoctors}
-                disabled={exporting}
-                className="btn-secondary flex items-center gap-2 shrink-0 disabled:opacity-50"
-              >
-                <Download size={15} />
-                {exporting ? 'Exportando...' : 'Exportar médicos'}
-              </button>
-            </div>
+            <PeriodNavigator month={selMonth} year={selYear} onChange={handlePeriodChange} />
           </div>
 
           <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
@@ -470,7 +514,10 @@ export default function RepDetail() {
         </div>
       </div>
 
-      {/* Week section — solo en mes actual */}
+      {/* 1. Ranking de médicos por ventas */}
+      <DoctorRankingSection ranking={doctor_ranking} monthLabel={monthLabel} />
+
+      {/* 2. Seguimiento de visitas */}
       {is_current_month && (
         <PeriodSection
           title="Esta semana"
@@ -478,16 +525,19 @@ export default function RepDetail() {
           dateRange={fmtDateRange(week.start, week.end)}
         />
       )}
-
-      {/* Month section */}
       <PeriodSection
         title={is_current_month ? 'Este mes' : monthLabel}
         period={month}
         dateRange={fmtDateRange(month.start, month.end)}
       />
 
-      {/* Doctor ranking */}
-      <DoctorRankingSection ranking={doctor_ranking} monthLabel={monthLabel} />
+      {/* 3. Listado de médicos registrados */}
+      <DoctorListSection
+        doctors={doctors}
+        repName={rep.name}
+        onExport={handleExportDoctors}
+        exporting={exporting}
+      />
     </div>
   );
 }

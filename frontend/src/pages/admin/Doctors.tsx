@@ -267,6 +267,7 @@ export default function Doctors() {
                       <th className="text-left py-3 px-4 text-gray-500 font-medium">Centro Médico</th>
                       <th className="text-left py-3 px-4 text-gray-500 font-medium">Ciudad</th>
                       <th className="text-left py-3 px-4 text-gray-500 font-medium">Comuna</th>
+                      <th className="text-left py-3 px-4 text-gray-500 font-medium">Teléfono</th>
                       <th className="text-left py-3 px-4 text-gray-500 font-medium">Especialidad</th>
                       <th className="text-left py-3 px-4 text-gray-500 font-medium">Línea</th>
                       <th className="text-left py-3 px-4 text-gray-500 font-medium">Visitador</th>
@@ -289,9 +290,9 @@ export default function Doctors() {
                             {doc.name}
                             <Edit2 size={12} className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                           </div>
-                          {doc.phone && <div className="text-xs text-gray-400">{doc.phone}</div>}
                         </td>
                         <td className="py-3 px-4 text-gray-500 text-xs">{doc.rut || '—'}</td>
+                        <td className="py-3 px-4 text-gray-600 text-xs">{doc.phone || '—'}</td>
                         <td className="py-3 px-4 text-gray-600 text-xs">{doc.medical_center || '—'}</td>
                         <td className="py-3 px-4 text-gray-600 text-xs">{doc.city || '—'}</td>
                         <td className="py-3 px-4 text-gray-600 text-xs">{doc.commune || '—'}</td>
