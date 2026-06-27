@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar } from 'lucide-react';
+import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar, Edit2 } from 'lucide-react';
 import { doctorsApi, businessLinesApi, visitsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
@@ -20,6 +20,12 @@ export default function RepDoctors() {
   const [visitNotes, setVisitNotes] = useState('');
   const [savingVisit, setSavingVisit] = useState(false);
   const [visitSuccess, setVisitSuccess] = useState<number | null>(null);
+
+  // Edit state
+  const [editDoctor, setEditDoctor] = useState<any>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const loadData = async () => {
     if (!user?.rep_id) return;
@@ -81,6 +87,44 @@ export default function RepDoctors() {
     finally { setSavingVisit(false); }
   };
 
+  const openEdit = (doc: any) => {
+    setEditDoctor(doc);
+    setEditForm({
+      name: doc.name || '',
+      rut: doc.rut || '',
+      medical_center: doc.medical_center || '',
+      specialty: doc.specialty || '',
+      city: doc.city || '',
+      commune: doc.commune || '',
+      phone: doc.phone || '',
+      email: doc.email || '',
+      address: doc.address || '',
+      notes: doc.notes || '',
+      business_line_id: doc.business_line_id ? String(doc.business_line_id) : '',
+    });
+    setEditError('');
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editDoctor) return;
+    if (!editForm.name.trim()) { setEditError('El nombre es requerido'); return; }
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      await doctorsApi.update(editDoctor.id, {
+        ...editForm,
+        business_line_id: editForm.business_line_id ? parseInt(editForm.business_line_id) : undefined,
+      });
+      setEditDoctor(null);
+      loadData();
+    } catch {
+      setEditError('Error al guardar. Intenta nuevamente.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const filtered = doctors.filter(d =>
     !search || d.name.toLowerCase().includes(search.toLowerCase()) ||
     (d.medical_center || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -129,18 +173,26 @@ export default function RepDoctors() {
                 {doc.business_line_name && (
                   <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">{doc.business_line_name}</span>
                 )}
-                {visitSuccess === doc.id ? (
-                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                    <CheckCircle size={14} /> Registrada
-                  </span>
-                ) : (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { setVisitDoctor(doc); setVisitDate(format(new Date(), 'yyyy-MM-dd')); setVisitNotes(''); }}
-                    className="text-xs px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1 font-medium"
+                    onClick={() => openEdit(doc)}
+                    className="text-xs px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1 font-medium"
                   >
-                    <CheckCircle size={14} /> Registrar Visita
+                    <Edit2 size={13} /> Editar
                   </button>
-                )}
+                  {visitSuccess === doc.id ? (
+                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle size={14} /> Registrada
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => { setVisitDoctor(doc); setVisitDate(format(new Date(), 'yyyy-MM-dd')); setVisitNotes(''); }}
+                      className="text-xs px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors flex items-center gap-1 font-medium"
+                    >
+                      <CheckCircle size={14} /> Registrar Visita
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -186,6 +238,78 @@ export default function RepDoctors() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editDoctor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="text-lg font-semibold">Editar Médico</h2>
+              <button onClick={() => setEditDoctor(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-5 space-y-4">
+              <div>
+                <label className="label">Nombre *</label>
+                <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="input w-full" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">RUT</label>
+                  <input value={editForm.rut} onChange={e => setEditForm({...editForm, rut: e.target.value})} className="input w-full" placeholder="12345678-9" />
+                </div>
+                <div>
+                  <label className="label">Línea de Negocio</label>
+                  <select value={editForm.business_line_id} onChange={e => setEditForm({...editForm, business_line_id: e.target.value})} className="input w-full">
+                    <option value="">Seleccionar</option>
+                    {businessLines.map(bl => <option key={bl.id} value={bl.id}>{bl.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">Centro Médico</label>
+                <input value={editForm.medical_center} onChange={e => setEditForm({...editForm, medical_center: e.target.value})} className="input w-full" placeholder="Clínica Santa María" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Especialidad</label>
+                  <input value={editForm.specialty} onChange={e => setEditForm({...editForm, specialty: e.target.value})} className="input w-full" placeholder="Dermatología" />
+                </div>
+                <div>
+                  <label className="label">Teléfono</label>
+                  <input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="input w-full" placeholder="+56 9 1234 5678" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Ciudad</label>
+                  <input value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} className="input w-full" />
+                </div>
+                <div>
+                  <label className="label">Comuna</label>
+                  <input value={editForm.commune} onChange={e => setEditForm({...editForm, commune: e.target.value})} className="input w-full" />
+                </div>
+              </div>
+              <div>
+                <label className="label">Email</label>
+                <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="input w-full" placeholder="doctor@email.com" />
+              </div>
+              <div>
+                <label className="label">Dirección</label>
+                <input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} className="input w-full" />
+              </div>
+              <div>
+                <label className="label">Notas</label>
+                <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} className="input w-full" rows={2} placeholder="Observaciones..." />
+              </div>
+              {editError && <p className="text-sm text-red-500">{editError}</p>}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditDoctor(null)} className="btn-secondary flex-1">Cancelar</button>
+                <button type="submit" disabled={savingEdit} className="btn-primary flex-1">{savingEdit ? 'Guardando...' : 'Guardar cambios'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
