@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Phone, Mail, Users,
   CheckCircle, XCircle, Clock, AlertCircle, Calendar, Download,
-  ChevronLeft, ChevronRight, Award, Stethoscope
+  ChevronLeft, ChevronRight, Award, Stethoscope, TrendingUp
 } from 'lucide-react';
 import { dashboardApi, doctorsApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, Doctor } from '../../types';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, Doctor } from '../../types';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -337,6 +337,68 @@ function PeriodNavigator({
 
 // ─── main page ───────────────────────────────────────────────────────────────
 
+function EffectivenessCard({ e, monthLabel }: { e: RepEffectiveness; monthLabel: string }) {
+  const convColor = e.conversion_rate >= 70 ? 'text-green-600' : e.conversion_rate >= 40 ? 'text-amber-500' : 'text-red-500';
+  const penColor  = e.penetration_rate >= 50 ? 'text-green-600' : e.penetration_rate >= 25 ? 'text-amber-500' : 'text-red-500';
+  const visColor  = e.visit_rate >= 70 ? 'text-green-600' : e.visit_rate >= 40 ? 'text-amber-500' : 'text-red-500';
+
+  function Ring({ rate, color, label }: { rate: number; color: string; label: string }) {
+    const r = 32; const circ = 2 * Math.PI * r;
+    const hex = color.includes('green') ? '#22c55e' : color.includes('amber') ? '#f59e0b' : '#ef4444';
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <svg width={80} height={80} viewBox="0 0 80 80">
+          <circle cx={40} cy={40} r={r} fill="none" stroke="#e5e7eb" strokeWidth={8} />
+          <circle cx={40} cy={40} r={r} fill="none" stroke={hex} strokeWidth={8}
+            strokeDasharray={`${(rate / 100) * circ} ${circ}`}
+            strokeLinecap="round" transform="rotate(-90 40 40)" />
+          <text x={40} y={45} textAnchor="middle" fontSize={15} fontWeight="700" fill={hex}>{rate}%</text>
+        </svg>
+        <span className="text-xs text-gray-500 text-center leading-tight max-w-[90px]">{label}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+          <TrendingUp size={16} className="text-indigo-500" />
+          Análisis de Efectividad — {monthLabel}
+        </h2>
+      </div>
+
+      {/* Rings */}
+      <div className="grid grid-cols-3 divide-x divide-gray-100 py-6">
+        <div className="flex flex-col items-center gap-1 px-4">
+          <Ring rate={e.visit_rate} color={visColor} label="Médicos visitados vs asignados" />
+        </div>
+        <div className="flex flex-col items-center gap-1 px-4">
+          <Ring rate={e.conversion_rate} color={convColor} label="Visitados que generaron recetas" />
+        </div>
+        <div className="flex flex-col items-center gap-1 px-4">
+          <Ring rate={e.penetration_rate} color={penColor} label="Asignados que generaron recetas" />
+        </div>
+      </div>
+
+      {/* Detail counters */}
+      <div className="grid grid-cols-4 divide-x divide-gray-100 border-t border-gray-100 bg-gray-50">
+        {[
+          { label: 'Médicos asignados', value: e.total_assigned, color: 'text-gray-700' },
+          { label: 'Visitados en el período', value: e.doctors_visited, color: visColor },
+          { label: 'Generaron recetas', value: e.doctors_with_sales, color: penColor },
+          { label: 'Visitados con receta', value: e.doctors_visited_with_sales, color: convColor },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="flex flex-col items-center py-4 px-3">
+            <span className={`text-2xl font-bold ${color}`}>{value}</span>
+            <span className="text-xs text-gray-400 text-center mt-0.5 leading-tight">{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DoctorListSection({ doctors, repName, onExport, exporting }: {
   doctors: Doctor[];
   repName: string;
@@ -457,6 +519,7 @@ export default function RepDetail() {
 
   const {
     rep, week, month,
+    effectiveness,
     is_current_month = true,
     query_month = selMonth,
     query_year = selYear,
@@ -514,7 +577,12 @@ export default function RepDetail() {
         </div>
       </div>
 
-      {/* 1. Ranking de médicos por ventas */}
+      {/* 1. Análisis de efectividad */}
+      {effectiveness && (
+        <EffectivenessCard e={effectiveness} monthLabel={monthLabel} />
+      )}
+
+      {/* 2. Ranking de médicos por ventas */}
       <DoctorRankingSection ranking={doctor_ranking} monthLabel={monthLabel} />
 
       {/* 2. Seguimiento de visitas */}

@@ -155,6 +155,16 @@ export interface RepDoctorRanking {
   categorias: string[];
 }
 
+export interface RepEffectiveness {
+  total_assigned: number;
+  doctors_visited: number;
+  doctors_with_sales: number;
+  doctors_visited_with_sales: number;
+  conversion_rate: number;
+  penetration_rate: number;
+  visit_rate: number;
+}
+
 export interface RepDetail {
   rep: {
     id: number;
@@ -166,6 +176,7 @@ export interface RepDetail {
     is_active: boolean;
     doctor_count: number;
   };
+  effectiveness?: RepEffectiveness;
   is_current_month: boolean;
   query_month: number;
   query_year: number;

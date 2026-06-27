@@ -526,6 +526,12 @@ def get_rep_detail(
     week_summary = build_period_summary(week_start, week_end)
     month_summary = build_period_summary(month_start, month_end + timedelta(seconds=1))
 
+    # Médicos visitados (con visita completada) en el periodo
+    doctors_visited_ids = set(
+        v["doctor_id"] for v in month_summary["visits"]
+        if v["status"] == "completed" and v["doctor_id"]
+    )
+
     # Ranking de médicos por ventas en el periodo consultado
     rep_doctor_ids = [d.id for d in db.query(Doctor).filter(
         Doctor.rep_id == rep_id, Doctor.is_active == True
@@ -568,6 +574,31 @@ def get_rep_detail(
         reverse=True,
     )
 
+    # Métricas de efectividad
+    doctors_with_sales_ids = set(doctor_map.keys())
+    doctors_visited_with_sales = doctors_visited_ids & doctors_with_sales_ids
+    total_assigned = len(rep_doctor_ids)
+    n_visited = len(doctors_visited_ids)
+    n_with_sales = len(doctors_with_sales_ids)
+    n_visited_with_sales = len(doctors_visited_with_sales)
+
+    effectiveness = {
+        "total_assigned": total_assigned,
+        "doctors_visited": n_visited,
+        "doctors_with_sales": n_with_sales,
+        "doctors_visited_with_sales": n_visited_with_sales,
+        # % de médicos visitados que generaron recetas
+        "conversion_rate": round((n_visited_with_sales / n_visited) * 100) if n_visited > 0 else 0,
+        # % de médicos asignados que generaron recetas
+        "penetration_rate": round((n_with_sales / total_assigned) * 100) if total_assigned > 0 else 0,
+        # % de médicos asignados visitados
+        "visit_rate": round((n_visited / total_assigned) * 100) if total_assigned > 0 else 0,
+    }
+
+    doctor_count = db.query(func.count(Doctor.id)).filter(
+        Doctor.rep_id == rep_id, Doctor.is_active == True
+    ).scalar()
+
     return {
         "rep": {
             "id": rep.id,
@@ -577,10 +608,9 @@ def get_rep_detail(
             "territory": rep.territory,
             "zone": rep.zone,
             "is_active": rep.is_active,
-            "doctor_count": db.query(func.count(Doctor.id)).filter(
-                Doctor.rep_id == rep_id, Doctor.is_active == True
-            ).scalar(),
+            "doctor_count": doctor_count,
         },
+        "effectiveness": effectiveness,
         "is_current_month": is_current_month,
         "query_month": query_month,
         "query_year": query_year,
