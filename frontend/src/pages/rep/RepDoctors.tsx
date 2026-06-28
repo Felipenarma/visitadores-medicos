@@ -208,58 +208,51 @@ export default function RepDoctors() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>
           ) : ranking.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">
-              <Award size={36} className="mx-auto mb-3 opacity-30" />
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
+              <Award size={40} className="mx-auto mb-3 opacity-30" />
               <p>Sin prescripciones registradas en {MONTH_NAMES[rankMonth - 1]} {rankYear}</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                  <Award size={16} className="text-amber-500" />
-                  Ranking de Prescripciones — {MONTH_NAMES[rankMonth - 1]} {rankYear}
-                </h2>
-                <span className="text-sm text-gray-400">{ranking.length} médicos</span>
-              </div>
-              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex gap-6 text-sm">
-                <span className="text-gray-500">Total recetas: <span className="font-semibold text-gray-800">{ranking.reduce((s: number, d: any) => s + d.units, 0)}</span></span>
-              </div>
-              {(() => {
-                const maxUnits = ranking[0]?.units || 1;
-                return (
-                  <div className="divide-y divide-gray-50">
-                    {ranking.map((doc: any, idx: number) => (
-                      <div key={doc.doctor_id ?? doc.doctor_name} className="px-5 py-4 flex items-center gap-4">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${
-                          idx === 0 ? 'bg-amber-100 text-amber-700' :
-                          idx === 1 ? 'bg-gray-200 text-gray-600' :
-                          idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
-                        }`}>{idx + 1}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-gray-800 text-sm truncate">{doc.doctor_name}</p>
-                            {doc.rut_doctor && <span className="text-xs text-gray-400 shrink-0">{doc.rut_doctor}</span>}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ backgroundColor: '#0F1E2D' }}>
+                      <th className="text-left px-4 py-3 text-white font-semibold w-12">#</th>
+                      <th className="text-left px-4 py-3 text-white font-semibold">Médico</th>
+                      <th className="text-left px-4 py-3 text-white font-semibold hidden md:table-cell">Especialidad</th>
+                      <th className="text-left px-4 py-3 text-white font-semibold hidden sm:table-cell">Categorías</th>
+                      <th className="text-center px-4 py-3 text-white font-semibold">Recetas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ranking.map((item: any, idx: number) => (
+                      <tr key={item.doctor_id ?? item.doctor_name} className={`border-t border-gray-100 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        <td className="px-4 py-3 font-bold text-gray-500">
+                          {idx === 0 ? <span className="text-lg">🥇</span> : idx === 1 ? <span className="text-lg">🥈</span> : idx === 2 ? <span className="text-lg">🥉</span> : <span>{idx + 1}</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-gray-900">{item.doctor_name}</p>
+                          {item.rut_doctor && <p className="text-xs text-gray-400">{item.rut_doctor}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
+                          {item.specialty || <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 hidden sm:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {(item.categorias || []).map((cat: string) => (
+                              <span key={cat} className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700">{cat}</span>
+                            ))}
                           </div>
-                          {doc.specialty && <p className="text-xs text-gray-400">{doc.specialty}</p>}
-                          {doc.categorias?.length > 0 && (
-                            <div className="flex gap-1 mt-1 flex-wrap">
-                              {doc.categorias.map((c: string) => (
-                                <span key={c} className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{c}</span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(doc.units / maxUnits) * 100}%` }} />
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-bold text-gray-800">{doc.units} <span className="text-xs font-normal text-gray-400">recetas</span></p>
-                        </div>
-                      </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-lg font-bold" style={{ color: '#0F1E2D' }}>{item.units}</span>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                );
-              })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

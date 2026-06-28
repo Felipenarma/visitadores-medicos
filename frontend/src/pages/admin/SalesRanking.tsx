@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, TrendingUp, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, TrendingUp, Users } from 'lucide-react';
 import { dashboardApi, repsApi } from '../../api';
 import type { MedicalRep } from '../../types';
 
@@ -35,7 +35,7 @@ export default function SalesRanking() {
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [repFilter, setRepFilter] = useState<string>('');
+  const [selectedRepId, setSelectedRepId] = useState<number | null>(null);
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
@@ -51,20 +51,18 @@ export default function SalesRanking() {
   };
 
   useEffect(() => {
-    repsApi.getAll().then(setReps).catch(console.error);
+    repsApi.getAll().then(r => setReps(r.filter((x: MedicalRep) => x.is_active))).catch(console.error);
   }, []);
 
   useEffect(() => {
     setLoading(true);
-    (dashboardApi as any).getDoctorRanking(month, year)
+    dashboardApi.getDoctorRanking(month, year, selectedRepId ?? undefined)
       .then((res: DoctorRankingItem[]) => setData(res))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [month, year]);
+  }, [month, year, selectedRepId]);
 
-  const filtered = repFilter
-    ? data.filter(d => d.rep_name === repFilter)
-    : data;
+  const selectedRep = reps.find(r => r.id === selectedRepId);
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
@@ -76,7 +74,9 @@ export default function SalesRanking() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Ranking de Médicos</h1>
-            <p className="text-sm text-gray-500">Unidades vendidas por médico</p>
+            <p className="text-sm text-gray-500">
+              {selectedRep ? `Médicos de ${selectedRep.name}` : 'Todos los visitadores'} · {data.length} médicos
+            </p>
           </div>
         </div>
 
@@ -98,19 +98,36 @@ export default function SalesRanking() {
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-3">
-        <Filter size={16} className="text-gray-400" />
-        <select
-          value={repFilter}
-          onChange={e => setRepFilter(e.target.value)}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      {/* Rep filter pills */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400 mr-1">
+          <Users size={14} /> Filtrar por visitador:
+        </div>
+        <button
+          onClick={() => setSelectedRepId(null)}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+            selectedRepId === null
+              ? 'text-white border-transparent shadow-sm'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+          }`}
+          style={selectedRepId === null ? { backgroundColor: '#0F1E2D' } : {}}
         >
-          <option value="">Todos los visitadores</option>
-          {reps.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-          <option value="Sin visitador">Sin visitador</option>
-        </select>
-        <span className="text-sm text-gray-500">{filtered.length} médicos</span>
+          Todos
+        </button>
+        {reps.map(rep => (
+          <button
+            key={rep.id}
+            onClick={() => setSelectedRepId(rep.id)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+              selectedRepId === rep.id
+                ? 'text-white border-transparent shadow-sm'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+            }`}
+            style={selectedRepId === rep.id ? { backgroundColor: '#4BA5C3' } : {}}
+          >
+            {rep.name}
+          </button>
+        ))}
       </div>
 
       {/* Table */}
@@ -118,7 +135,7 @@ export default function SalesRanking() {
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{ borderColor: '#4BA5C3' }} />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : data.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <TrendingUp size={40} className="mx-auto mb-3 opacity-30" />
           <p>No hay ventas registradas para este período</p>
@@ -138,7 +155,7 @@ export default function SalesRanking() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((item, idx) => (
+                {data.map((item, idx) => (
                   <tr
                     key={`${item.rut_doctor}-${idx}`}
                     className={`border-t border-gray-100 transition-colors hover:bg-blue-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
