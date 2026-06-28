@@ -234,6 +234,7 @@ def get_rep_stats(rep_id: int, db: Session = Depends(get_db)):
 def get_doctor_ranking(
     month: int = Query(default=None),
     year: int = Query(default=None),
+    rep_id: int = Query(default=None),
     db: Session = Depends(get_db)
 ):
     """Ranking mensual de médicos por unidades vendidas."""
@@ -246,10 +247,20 @@ def get_doctor_ranking(
     period_start = datetime(year, month, 1)
     period_end = datetime(year, month, last_day, 23, 59, 59)
 
-    sales = db.query(Sale).filter(
+    # Si se filtra por rep, limitar a los doctor_ids de ese rep
+    rep_doctor_ids = None
+    if rep_id:
+        rep_doctor_ids = [d.id for d in db.query(Doctor).filter(
+            Doctor.rep_id == rep_id, Doctor.is_active == True
+        ).all()]
+
+    sales_query = db.query(Sale).filter(
         Sale.sale_date >= period_start,
         Sale.sale_date <= period_end
-    ).all()
+    )
+    if rep_doctor_ids is not None:
+        sales_query = sales_query.filter(Sale.doctor_id.in_(rep_doctor_ids))
+    sales = sales_query.all()
 
     # Pre-cargar doctors y reps en memoria
     all_doctors = {d.id: d for d in db.query(Doctor).all()}

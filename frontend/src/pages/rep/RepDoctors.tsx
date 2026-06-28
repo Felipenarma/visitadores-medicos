@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar, Edit2 } from 'lucide-react';
-import { doctorsApi, businessLinesApi, visitsApi } from '../../api';
+import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar, Edit2, BarChart2, ChevronLeft, ChevronRight, Award } from 'lucide-react';
+import { doctorsApi, businessLinesApi, visitsApi, dashboardApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
 
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
 export default function RepDoctors() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'lista' | 'analitica'>('lista');
   const [doctors, setDoctors] = useState<any[]>([]);
   const [businessLines, setBusinessLines] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Analítica state
+  const now = new Date();
+  const [rankMonth, setRankMonth] = useState(now.getMonth() + 1);
+  const [rankYear, setRankYear] = useState(now.getFullYear());
+  const [ranking, setRanking] = useState<any[]>([]);
+  const [loadingRank, setLoadingRank] = useState(false);
+  const isCurrentMonth = rankMonth === now.getMonth() + 1 && rankYear === now.getFullYear();
+
+  const prevMonth = () => { if (rankMonth === 1) { setRankMonth(12); setRankYear(y => y - 1); } else setRankMonth(m => m - 1); };
+  const nextMonth = () => { if (isCurrentMonth) return; if (rankMonth === 12) { setRankMonth(1); setRankYear(y => y + 1); } else setRankMonth(m => m + 1); };
   const [form, setForm] = useState({
     name: '', rut: '', medical_center: '', specialty: '', city: '', commune: '', phone: '', email: '',
     address: '', notes: '', business_line_id: '', visit_date: format(new Date(), 'yyyy-MM-dd'),
@@ -39,7 +53,18 @@ export default function RepDoctors() {
     } catch (e) { console.error(e); }
   };
 
+  const loadRanking = async () => {
+    if (!user?.rep_id) return;
+    setLoadingRank(true);
+    try {
+      const data = await dashboardApi.getDoctorRanking(rankMonth, rankYear, user.rep_id);
+      setRanking(data);
+    } catch (e) { console.error(e); }
+    finally { setLoadingRank(false); }
+  };
+
   useEffect(() => { loadData(); }, [user?.rep_id]);
+  useEffect(() => { if (activeTab === 'analitica') loadRanking(); }, [rankMonth, rankYear, activeTab, user?.rep_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,11 +163,110 @@ export default function RepDoctors() {
           <h1 className="text-2xl font-bold text-gray-900">Mis Médicos</h1>
           <p className="text-gray-500 text-sm mt-1">{doctors.length} médicos asignados</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={18} /> Nuevo Médico
+        {activeTab === 'lista' && (
+          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
+            <Plus size={18} /> Nuevo Médico
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-5">
+        <button
+          onClick={() => setActiveTab('lista')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'lista' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <Stethoscope size={15} /> Mis Médicos
+        </button>
+        <button
+          onClick={() => setActiveTab('analitica')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'analitica' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <BarChart2 size={15} /> Analítica
         </button>
       </div>
 
+      {/* ── TAB ANALÍTICA ── */}
+      {activeTab === 'analitica' && (
+        <div className="space-y-4">
+          {/* Navegación mes */}
+          <div className="flex items-center gap-2">
+            <button onClick={prevMonth} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
+              <ChevronLeft size={18} />
+            </button>
+            <span className="text-sm font-semibold text-gray-800 min-w-[140px] text-center">
+              {MONTH_NAMES[rankMonth - 1]} {rankYear}
+            </span>
+            <button onClick={nextMonth} disabled={isCurrentMonth}
+              className={`p-1.5 rounded-lg border border-gray-200 ${isCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
+          {loadingRank ? (
+            <div className="flex justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          ) : ranking.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">
+              <Award size={36} className="mx-auto mb-3 opacity-30" />
+              <p>Sin prescripciones registradas en {MONTH_NAMES[rankMonth - 1]} {rankYear}</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                  <Award size={16} className="text-amber-500" />
+                  Ranking de Prescripciones — {MONTH_NAMES[rankMonth - 1]} {rankYear}
+                </h2>
+                <span className="text-sm text-gray-400">{ranking.length} médicos</span>
+              </div>
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex gap-6 text-sm">
+                <span className="text-gray-500">Total recetas: <span className="font-semibold text-gray-800">{ranking.reduce((s: number, d: any) => s + d.units, 0)}</span></span>
+              </div>
+              {(() => {
+                const maxUnits = ranking[0]?.units || 1;
+                return (
+                  <div className="divide-y divide-gray-50">
+                    {ranking.map((doc: any, idx: number) => (
+                      <div key={doc.doctor_id ?? doc.doctor_name} className="px-5 py-4 flex items-center gap-4">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${
+                          idx === 0 ? 'bg-amber-100 text-amber-700' :
+                          idx === 1 ? 'bg-gray-200 text-gray-600' :
+                          idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
+                        }`}>{idx + 1}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-800 text-sm truncate">{doc.doctor_name}</p>
+                            {doc.rut_doctor && <span className="text-xs text-gray-400 shrink-0">{doc.rut_doctor}</span>}
+                          </div>
+                          {doc.specialty && <p className="text-xs text-gray-400">{doc.specialty}</p>}
+                          {doc.categorias?.length > 0 && (
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              {doc.categorias.map((c: string) => (
+                                <span key={c} className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{c}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(doc.units / maxUnits) * 100}%` }} />
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-gray-800">{doc.units} <span className="text-xs font-normal text-gray-400">recetas</span></p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB LISTA ── */}
+      {activeTab === 'lista' && <>
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre, RUT o centro médico..." className="input pl-9 w-full" />
@@ -402,6 +526,7 @@ export default function RepDoctors() {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
