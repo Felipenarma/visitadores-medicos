@@ -7,6 +7,10 @@ import {
 } from 'lucide-react';
 import { dashboardApi, doctorsApi, repsApi } from '../../api';
 import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, Doctor } from '../../types';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend
+} from 'recharts';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -468,6 +472,10 @@ export default function RepDetail() {
   const [savingTarget, setSavingTarget] = useState(false);
   const [editingTarget, setEditingTarget] = useState(false);
 
+  // Monthly trend state
+  const [monthlyTrend, setMonthlyTrend] = useState<{ label: string; completed: number; missed: number; total: number }[]>([]);
+  const [loadingTrend, setLoadingTrend] = useState(false);
+
   const handlePeriodChange = (m: number, y: number) => {
     setSelMonth(m);
     setSelYear(y);
@@ -527,6 +535,16 @@ export default function RepDetail() {
       .catch(() => setError('No se pudo cargar la información del visitador'))
       .finally(() => setLoading(false));
   }, [id, selMonth, selYear]);
+
+  // Load trend data once on mount (not per period)
+  useEffect(() => {
+    if (!id) return;
+    setLoadingTrend(true);
+    dashboardApi.getRepMonthlyTrend(Number(id), 6)
+      .then(setMonthlyTrend)
+      .catch(() => {})
+      .finally(() => setLoadingTrend(false));
+  }, [id]);
 
   if (loading) {
     return (
@@ -662,6 +680,38 @@ export default function RepDetail() {
           </div>
         );
       })()}
+
+      {/* Tendencia mensual — últimos 6 meses */}
+      {(monthlyTrend.length > 0 || loadingTrend) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+              <TrendingUp size={16} className="text-blue-500" />
+              Tendencia de Visitas — Últimos 6 meses
+            </h2>
+          </div>
+          {loadingTrend ? (
+            <div className="flex justify-center py-10">
+              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <div className="p-4">
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={monthlyTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="completed" name="Completadas" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="missed" name="Perdidas" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="total" name="Total" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 1. Análisis de efectividad */}
       {effectiveness && (

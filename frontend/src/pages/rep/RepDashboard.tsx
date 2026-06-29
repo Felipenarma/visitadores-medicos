@@ -109,6 +109,7 @@ export default function RepDashboard() {
                 <div>
                   <p className="font-medium text-gray-800 text-sm">{(visit as any).doctor_name || 'Doctor'}</p>
                   <p className="text-xs text-gray-400">{format(new Date(visit.scheduled_date), 'HH:mm')}</p>
+                  {visit.notes && <p className="text-xs text-gray-500 mt-0.5 italic">📝 {visit.notes}</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   {statusBadge(justCompleted.has(visit.id) ? 'completed' : visit.status)}

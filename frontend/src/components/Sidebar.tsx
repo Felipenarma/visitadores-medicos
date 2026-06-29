@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Briefcase, Upload, TrendingUp,
   Calendar, Bot, Activity, LogOut, Stethoscope, BookOpen, Menu, X, QrCode,
-  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles
+  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { visitsApi } from '../api';
+import { visitsApi, doctorsApi, repsApi } from '../api';
 
 interface NavItem {
   to: string;
@@ -41,12 +41,20 @@ const repNav: NavItem[] = [
   { to: '/rep/agent', icon: <Bot size={20} />, label: 'Agente IA' },
 ];
 
+type SearchResult = { type: 'doctor' | 'rep'; id: number; name: string; sub?: string };
+
 export default function Sidebar() {
   const { user, logout, isAdmin } = useAuth();
   const navItems = isAdmin ? adminNav : repNav;
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const [pendingToday, setPendingToday] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user?.rep_id) return;
@@ -59,7 +67,49 @@ export default function Sidebar() {
   // Close mobile menu on route change
   React.useEffect(() => {
     setOpen(false);
+    setSearchQuery('');
+    setSearchOpen(false);
   }, [location.pathname]);
+
+  const handleSearch = (q: string) => {
+    setSearchQuery(q);
+    if (searchRef.current) clearTimeout(searchRef.current);
+    if (q.trim().length < 2) { setSearchResults([]); setSearchOpen(false); return; }
+    searchRef.current = setTimeout(async () => {
+      try {
+        const results: SearchResult[] = [];
+        if (isAdmin) {
+          const [docs, reps] = await Promise.all([
+            doctorsApi.getAll({ search: q, is_active: true }),
+            repsApi.getAll(),
+          ]);
+          docs.slice(0, 5).forEach((d: any) => results.push({
+            type: 'doctor', id: d.id, name: d.name,
+            sub: [d.specialty, d.rep_name].filter(Boolean).join(' · ')
+          }));
+          reps.filter((r: any) => r.name.toLowerCase().includes(q.toLowerCase())).slice(0, 3)
+            .forEach((r: any) => results.push({ type: 'rep', id: r.id, name: r.name, sub: 'Visitador' }));
+        } else {
+          const docs = await doctorsApi.getAll({ search: q, rep_id: user?.rep_id, is_active: true });
+          docs.slice(0, 6).forEach((d: any) => results.push({
+            type: 'doctor', id: d.id, name: d.name, sub: d.specialty || undefined
+          }));
+        }
+        setSearchResults(results);
+        setSearchOpen(results.length > 0);
+      } catch { setSearchResults([]); }
+    }, 300);
+  };
+
+  const handleSearchSelect = (r: SearchResult) => {
+    setSearchQuery('');
+    setSearchOpen(false);
+    if (r.type === 'doctor') {
+      navigate(isAdmin ? '/admin/doctors' : '/rep/doctors');
+    } else {
+      navigate(`/admin/reps/${r.id}`);
+    }
+  };
 
   const sidebarContent = (
     <>
@@ -93,6 +143,41 @@ export default function Sidebar() {
             <p className="text-xs text-gray-500">{isAdmin ? 'Administrador' : 'Visitador'}</p>
           </div>
         </div>
+      </div>
+
+      {/* Search */}
+      <div className="px-3 lg:px-4 py-2 border-b border-gray-100 relative">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            ref={searchInputRef}
+            className="w-full text-sm pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-colors"
+            placeholder="Buscar médico o visitador..."
+            value={searchQuery}
+            onChange={e => handleSearch(e.target.value)}
+            onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
+            onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+          />
+        </div>
+        {searchOpen && searchResults.length > 0 && (
+          <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            {searchResults.map((r, i) => (
+              <button
+                key={i}
+                onMouseDown={() => handleSearchSelect(r)}
+                className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-2.5 border-b border-gray-50 last:border-0"
+              >
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${r.type === 'doctor' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
+                  {r.type === 'doctor' ? <Stethoscope size={12} /> : <Users size={12} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{r.name}</p>
+                  {r.sub && <p className="text-xs text-gray-400 truncate">{r.sub}</p>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Navigation */}

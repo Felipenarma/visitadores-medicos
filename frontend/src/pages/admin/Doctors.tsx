@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download, TrendingUp, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download, TrendingUp, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Modal from '../../components/Modal';
-import { doctorsApi, repsApi, businessLinesApi, dashboardApi } from '../../api';
-import type { Doctor, MedicalRep, BusinessLine } from '../../types';
+import { doctorsApi, repsApi, businessLinesApi, dashboardApi, visitsApi } from '../../api';
+import type { Doctor, MedicalRep, BusinessLine, Visit } from '../../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -49,6 +49,24 @@ export default function Doctors() {
   const [historialDoctor, setHistorialDoctor] = useState<Doctor | null>(null);
   const [historialData, setHistorialData] = useState<any[]>([]);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
+
+  // Historial visitas state
+  const [visitHistorialDoctor, setVisitHistorialDoctor] = useState<Doctor | null>(null);
+  const [visitHistorialData, setVisitHistorialData] = useState<Visit[]>([]);
+  const [loadingVisitHistorial, setLoadingVisitHistorial] = useState(false);
+
+  const openVisitHistorial = async (doc: Doctor) => {
+    if (!doc.id) return;
+    setVisitHistorialDoctor(doc);
+    setLoadingVisitHistorial(true);
+    try {
+      const data = await visitsApi.getAll({ doctor_id: doc.id });
+      setVisitHistorialData(data.sort((a: Visit, b: Visit) =>
+        new Date(b.scheduled_date).getTime() - new Date(a.scheduled_date).getTime()
+      ));
+    } catch (e) { console.error(e); }
+    finally { setLoadingVisitHistorial(false); }
+  };
 
   const openHistorial = async (doc: Doctor) => {
     if (!doc.id) return;
@@ -330,6 +348,9 @@ export default function Doctors() {
                           <div className="flex justify-end gap-1">
                             <button onClick={() => openHistorial(doc)} title="Ver historial de ventas" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                               <TrendingUp size={15} />
+                            </button>
+                            <button onClick={() => openVisitHistorial(doc)} title="Ver historial de visitas" className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
+                              <Calendar size={15} />
                             </button>
                             <button onClick={() => openAssign(doc)} title="Asignar visitador" className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
                               <UserCheck size={15} />
@@ -728,6 +749,75 @@ export default function Doctors() {
                 </ResponsiveContainer>
               )}
               <p className="text-xs text-gray-400 text-center mt-2">Últimos 6 meses de prescripciones</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Historial de visitas modal */}
+      {visitHistorialDoctor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Calendar size={18} className="text-purple-500" />
+                Visitas — {visitHistorialDoctor.name}
+              </h2>
+              <button onClick={() => setVisitHistorialDoctor(null)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              {loadingVisitHistorial ? (
+                <div className="flex justify-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+                </div>
+              ) : visitHistorialData.length === 0 ? (
+                <p className="text-gray-400 text-center py-10">Sin visitas registradas</p>
+              ) : (
+                <div className="space-y-2">
+                  {visitHistorialData.map(v => {
+                    const statusColors: Record<string, string> = {
+                      completed: 'bg-green-100 text-green-700',
+                      missed: 'bg-red-100 text-red-700',
+                      scheduled: 'bg-blue-100 text-blue-600',
+                      cancelled: 'bg-gray-100 text-gray-500',
+                    };
+                    const statusLabels: Record<string, string> = {
+                      completed: 'Completada', missed: 'Perdida',
+                      scheduled: 'Programada', cancelled: 'Cancelada',
+                    };
+                    return (
+                      <div key={v.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                        <div className="text-right min-w-[80px]">
+                          <p className="text-sm font-medium text-gray-700">
+                            {new Date(v.scheduled_date).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: '2-digit' })}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {new Date(v.scheduled_date).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[v.status] || statusColors.scheduled}`}>
+                              {statusLabels[v.status] || v.status}
+                            </span>
+                            {v.rep_name && <span className="text-xs text-gray-500">{v.rep_name}</span>}
+                          </div>
+                          {v.notes && <p className="text-xs text-gray-500 mt-1 italic">📝 {v.notes}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {!loadingVisitHistorial && visitHistorialData.length > 0 && (
+                <p className="text-xs text-gray-400 text-center mt-3">
+                  {visitHistorialData.length} visita(s) en total ·
+                  {' '}{visitHistorialData.filter(v => v.status === 'completed').length} completadas ·
+                  {' '}{visitHistorialData.filter(v => v.status === 'missed').length} perdidas
+                </p>
+              )}
             </div>
           </div>
         </div>

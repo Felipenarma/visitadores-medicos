@@ -535,6 +535,65 @@ def get_doctor_sales_history(
     return result
 
 
+@router.get("/rep/{rep_id}/monthly-trend")
+def get_rep_monthly_trend(
+    rep_id: int,
+    months: int = Query(default=6),
+    db: Session = Depends(get_db)
+):
+    """Tendencia mensual de visitas de un visitador en los últimos N meses."""
+    from calendar import monthrange
+    from collections import defaultdict
+
+    now = datetime.utcnow()
+
+    months_back = months - 1
+    start_m, start_y = now.month - months_back, now.year
+    while start_m <= 0:
+        start_m += 12
+        start_y -= 1
+    period_start = datetime(start_y, start_m, 1)
+    _, last_day_now = monthrange(now.year, now.month)
+    period_end = datetime(now.year, now.month, last_day_now, 23, 59, 59)
+
+    visits = db.query(Visit).filter(
+        Visit.rep_id == rep_id,
+        Visit.scheduled_date >= period_start,
+        Visit.scheduled_date <= period_end,
+        Visit.status.in_(["completed", "missed", "cancelled", "scheduled"])
+    ).all()
+
+    completed: dict = defaultdict(int)
+    missed: dict = defaultdict(int)
+    total: dict = defaultdict(int)
+
+    for v in visits:
+        key = (v.scheduled_date.year, v.scheduled_date.month)
+        total[key] += 1
+        if v.status == "completed":
+            completed[key] += 1
+        elif v.status == "missed":
+            missed[key] += 1
+
+    LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    result = []
+    for i in range(months - 1, -1, -1):
+        m = now.month - i
+        y = now.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        key = (y, m)
+        result.append({
+            "month": m, "year": y,
+            "label": LABELS[m - 1],
+            "completed": completed[key],
+            "missed": missed[key],
+            "total": total[key],
+        })
+    return result
+
+
 @router.get("/rep/{rep_id}/detail")
 def get_rep_detail(
     rep_id: int,
