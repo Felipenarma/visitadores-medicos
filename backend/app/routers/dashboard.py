@@ -475,7 +475,16 @@ def get_doctor_sales_history(
 ):
     """Historial de ventas de un médico en los últimos N meses."""
     from calendar import monthrange
+    from sqlalchemy import or_
+    import re as _re
     now = datetime.utcnow()
+
+    # Obtener el doctor para conocer su RUT normalizado
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor_rut = None
+    if doctor and doctor.rut:
+        doctor_rut = _re.sub(r'[\.\-\s]', '', doctor.rut).upper()
+
     result = []
     for i in range(months - 1, -1, -1):
         m = now.month - i
@@ -486,11 +495,18 @@ def get_doctor_sales_history(
         _, last_day = monthrange(y, m)
         start = datetime(y, m, 1)
         end = datetime(y, m, last_day, 23, 59, 59)
-        count = db.query(Sale).filter(
-            Sale.doctor_id == doctor_id,
-            Sale.sale_date >= start,
-            Sale.sale_date <= end,
-        ).count()
+
+        # Buscar ventas por doctor_id O por rut_doctor normalizado
+        conditions = [Sale.sale_date >= start, Sale.sale_date <= end]
+        if doctor_rut:
+            conditions.append(or_(
+                Sale.doctor_id == doctor_id,
+                func.upper(func.replace(func.replace(func.replace(Sale.rut_doctor, '.', ''), '-', ''), ' ', '')) == doctor_rut
+            ))
+        else:
+            conditions.append(Sale.doctor_id == doctor_id)
+
+        count = db.query(Sale).filter(*conditions).count()
         result.append({"month": m, "year": y, "units": count, "label": f"{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {y}"})
     return result
 
