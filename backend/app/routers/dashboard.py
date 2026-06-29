@@ -477,14 +477,53 @@ def get_doctor_sales_history(
     from calendar import monthrange
     from sqlalchemy import or_
     import re as _re
+
+    def norm_rut(r):
+        return _re.sub(r'[\.\-\s]', '', r or '').upper()
+
     now = datetime.utcnow()
 
-    # Obtener el doctor para conocer su RUT normalizado
+    # Obtener doctor y su RUT normalizado
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
-    doctor_rut = None
-    if doctor and doctor.rut:
-        doctor_rut = _re.sub(r'[\.\-\s]', '', doctor.rut).upper()
+    doctor_rut_norm = norm_rut(doctor.rut) if doctor and doctor.rut else None
 
+    # Rango total de fechas para un solo query
+    months_back = months - 1
+    start_m, start_y = now.month - months_back, now.year
+    while start_m <= 0:
+        start_m += 12
+        start_y -= 1
+    period_start = datetime(start_y, start_m, 1)
+    _, last_day_now = monthrange(now.year, now.month)
+    period_end = datetime(now.year, now.month, last_day_now, 23, 59, 59)
+
+    # Un solo query amplio: ventas por doctor_id O rut_doctor no nulo
+    if doctor_rut_norm:
+        sales = db.query(Sale).filter(
+            Sale.sale_date >= period_start,
+            Sale.sale_date <= period_end,
+            or_(Sale.doctor_id == doctor_id, Sale.rut_doctor.isnot(None))
+        ).all()
+        # Filtrar en Python por RUT normalizado
+        sales = [
+            s for s in sales
+            if s.doctor_id == doctor_id or norm_rut(s.rut_doctor) == doctor_rut_norm
+        ]
+    else:
+        sales = db.query(Sale).filter(
+            Sale.sale_date >= period_start,
+            Sale.sale_date <= period_end,
+            Sale.doctor_id == doctor_id
+        ).all()
+
+    # Agrupar por mes
+    from collections import defaultdict
+    counts: dict = defaultdict(int)
+    for s in sales:
+        if s.sale_date:
+            counts[(s.sale_date.year, s.sale_date.month)] += 1
+
+    LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
     result = []
     for i in range(months - 1, -1, -1):
         m = now.month - i
@@ -492,22 +531,7 @@ def get_doctor_sales_history(
         while m <= 0:
             m += 12
             y -= 1
-        _, last_day = monthrange(y, m)
-        start = datetime(y, m, 1)
-        end = datetime(y, m, last_day, 23, 59, 59)
-
-        # Buscar ventas por doctor_id O por rut_doctor normalizado
-        conditions = [Sale.sale_date >= start, Sale.sale_date <= end]
-        if doctor_rut:
-            conditions.append(or_(
-                Sale.doctor_id == doctor_id,
-                func.upper(func.replace(func.replace(func.replace(Sale.rut_doctor, '.', ''), '-', ''), ' ', '')) == doctor_rut
-            ))
-        else:
-            conditions.append(Sale.doctor_id == doctor_id)
-
-        count = db.query(Sale).filter(*conditions).count()
-        result.append({"month": m, "year": y, "units": count, "label": f"{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {y}"})
+        result.append({"month": m, "year": y, "units": counts[(y, m)], "label": f"{LABELS[m-1]} {y}"})
     return result
 
 
