@@ -56,8 +56,14 @@ export default function SalesRanking() {
 
   useEffect(() => {
     setLoading(true);
-    dashboardApi.getDoctorRanking(month, year, selectedRepId ?? undefined)
-      .then((res: DoctorRankingItem[]) => setData(res))
+    dashboardApi.getDoctorRanking(month, year)
+      .then((res: DoctorRankingItem[]) => {
+        if (selectedRepId !== null) {
+          setData(res.filter((item: DoctorRankingItem) => item.rep_id === selectedRepId));
+        } else {
+          setData(res);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [month, year, selectedRepId]);
