@@ -16,6 +16,7 @@ import Tracking from './pages/admin/Tracking';
 import RepDashboard from './pages/rep/RepDashboard';
 import RepCalendar from './pages/rep/RepCalendar';
 import RepDoctors from './pages/rep/RepDoctors';
+import MyCommissions from './pages/rep/MyCommissions';
 import AIAgent from './pages/AIAgent';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Images from './pages/admin/Images';
@@ -78,6 +79,7 @@ function AppRoutes() {
               <Route path="calendar" element={<RepCalendar />} />
               <Route path="doctors" element={<RepDoctors />} />
               <Route path="agent" element={<AIAgent />} />
+              <Route path="commissions" element={<MyCommissions />} />
             </Routes>
           </Layout>
         </PrivateRoute>
