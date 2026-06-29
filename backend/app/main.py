@@ -44,10 +44,18 @@ def run_migrations():
     with engine.connect() as conn:
         for stmt in migrations:
             try:
+                conn.execute(text("SAVEPOINT mig_step"))
                 conn.execute(text(stmt))
+                conn.execute(text("RELEASE SAVEPOINT mig_step"))
             except Exception:
-                pass
-        conn.commit()
+                try:
+                    conn.execute(text("ROLLBACK TO SAVEPOINT mig_step"))
+                except Exception:
+                    pass
+        try:
+            conn.commit()
+        except Exception:
+            pass
 
 run_migrations()
 
