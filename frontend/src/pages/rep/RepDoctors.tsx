@@ -157,11 +157,23 @@ export default function RepDoctors() {
     }
   };
 
-  const filtered = doctors.filter(d =>
-    !search || d.name.toLowerCase().includes(search.toLowerCase()) ||
-    (d.medical_center || '').toLowerCase().includes(search.toLowerCase()) ||
-    (d.rut || '').includes(search)
-  );
+  const filtered = doctors
+    .filter(d =>
+      !search || d.name.toLowerCase().includes(search.toLowerCase()) ||
+      (d.medical_center || '').toLowerCase().includes(search.toLowerCase()) ||
+      (d.rut || '').includes(search)
+    )
+    .sort((a, b) => {
+      // Vencidas primero, luego por días sin visita descendente
+      const freq = (d: any) => d.visit_frequency || 30;
+      const days = (d: any) => d.last_visit_date
+        ? Math.floor((Date.now() - new Date(d.last_visit_date).getTime()) / 86400000)
+        : 9999;
+      const overdue = (d: any) => days(d) > freq(d);
+      if (overdue(a) && !overdue(b)) return -1;
+      if (!overdue(a) && overdue(b)) return 1;
+      return days(b) - days(a);
+    });
 
   return (
     <div>
@@ -280,6 +292,41 @@ export default function RepDoctors() {
           </div>
         ) : filtered.map(doc => (
           <div key={doc.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-200 transition-colors">
+            {/* Visit frequency indicator */}
+            {(() => {
+              const freq = doc.visit_frequency || 30;
+              const lastVisit = doc.last_visit_date ? new Date(doc.last_visit_date) : null;
+              const daysSince = lastVisit ? Math.floor((Date.now() - lastVisit.getTime()) / 86400000) : null;
+              const overdue = daysSince !== null && daysSince > freq;
+              const dueSoon = daysSince !== null && daysSince > freq * 0.8 && !overdue;
+              return (
+                <div className={`flex items-center justify-between mb-3 pb-3 border-b ${overdue ? 'border-red-100' : 'border-gray-100'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
+                      overdue ? 'bg-red-50 text-red-600' :
+                      dueSoon ? 'bg-amber-50 text-amber-600' :
+                      'bg-green-50 text-green-600'
+                    }`}>
+                      <Calendar size={12} />
+                      {daysSince === null ? 'Sin visitas' :
+                       overdue ? `Vencida hace ${daysSince - freq}d` :
+                       dueSoon ? `Visitar pronto (${freq - daysSince}d)` :
+                       `Al día`}
+                    </div>
+                    {lastVisit && (
+                      <span className="text-xs text-gray-400">
+                        Última: {lastVisit.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <CheckCircle size={12} className="text-blue-400" />
+                    <span className="font-semibold text-blue-600">{doc.visits_count ?? 0}</span>
+                    <span>visitas</span>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-gray-900">{doc.name}</h3>

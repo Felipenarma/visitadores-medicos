@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, CheckCircle, XCircle, Users, Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import { Calendar, CheckCircle, XCircle, Users, Clock, TrendingUp, AlertCircle, Target } from 'lucide-react';
 import StatCard from '../../components/StatCard';
 import { dashboardApi, visitsApi, repsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import type { RepStats, Visit } from '../../types';
+import type { RepStats, Visit, RepEffectiveness } from '../../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -15,6 +15,7 @@ export default function RepDashboard() {
   const [completing, setCompleting] = useState<number | null>(null);
   const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
   const [targetVisits, setTargetVisits] = useState(0);
+  const [effectiveness, setEffectiveness] = useState<RepEffectiveness | null>(null);
 
   const today = format(new Date(), 'yyyy-MM-dd');
   const nowDate = new Date();
@@ -33,6 +34,10 @@ export default function RepDashboard() {
       repsApi.getTarget(user.rep_id, nowDate.getMonth() + 1, nowDate.getFullYear())
         .then(target => setTargetVisits(target.target_visits ?? 0))
         .catch(() => setTargetVisits(0));
+      // Cargar efectividad del mes actual
+      dashboardApi.getRepDetail(user.rep_id, nowDate.getMonth() + 1, nowDate.getFullYear())
+        .then(detail => setEffectiveness(detail.effectiveness ?? null))
+        .catch(() => {});
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -183,6 +188,54 @@ export default function RepDashboard() {
                 <span>{stats?.missed_this_month ?? 0} perdidas</span>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Efectividad del mes */}
+      {effectiveness && effectiveness.total_assigned > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2 mb-4">
+            <Target size={16} className="text-indigo-500" /> Efectividad del Mes
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            {/* Ring principal: % visitados prescribiendo */}
+            {(() => {
+              const rate = effectiveness.conversion_rate;
+              const color = rate >= 70 ? '#22c55e' : rate >= 40 ? '#f59e0b' : '#ef4444';
+              const r = 30; const circ = 2 * Math.PI * r;
+              return (
+                <div className="flex flex-col items-center gap-1 col-span-1">
+                  <svg width={76} height={76} viewBox="0 0 76 76">
+                    <circle cx={38} cy={38} r={r} fill="none" stroke="#e5e7eb" strokeWidth={8} />
+                    <circle cx={38} cy={38} r={r} fill="none" stroke={color} strokeWidth={8}
+                      strokeDasharray={`${(rate / 100) * circ} ${circ}`}
+                      strokeLinecap="round" transform="rotate(-90 38 38)" />
+                    <text x={38} y={43} textAnchor="middle" fontSize={14} fontWeight="700" fill={color}>{rate}%</text>
+                  </svg>
+                  <p className="text-xs text-gray-500 text-center leading-tight">Visitados<br/>prescribiendo</p>
+                </div>
+              );
+            })()}
+            {/* Contadores */}
+            <div className="col-span-2 grid grid-cols-2 gap-2">
+              {[
+                { label: 'Médicos asignados', value: effectiveness.total_assigned, color: 'text-gray-700', bg: 'bg-gray-50' },
+                { label: 'Visitados este mes', value: effectiveness.doctors_visited, color: 'text-blue-700', bg: 'bg-blue-50' },
+                { label: 'Con prescripciones', value: effectiveness.doctors_with_sales, color: 'text-green-700', bg: 'bg-green-50' },
+                { label: 'Visitados + prescripción', value: effectiveness.doctors_visited_with_sales, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+              ].map(({ label, value, color, bg }) => (
+                <div key={label} className={`${bg} rounded-lg p-2.5 text-center`}>
+                  <p className={`text-xl font-bold ${color}`}>{value}</p>
+                  <p className="text-xs text-gray-500 leading-tight mt-0.5">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          {effectiveness.visit_rate < 50 && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mt-3">
+              ⚠️ Solo has visitado el {effectiveness.visit_rate}% de tus médicos este mes. ¡Intensifica las visitas!
+            </p>
           )}
         </div>
       )}
