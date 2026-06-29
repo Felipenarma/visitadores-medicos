@@ -12,7 +12,7 @@ from .routers import business_lines, reps, doctors, visits, sales, cardex, dashb
 # Create tables (checkfirst=True avoids errors if tables already exist)
 Base.metadata.create_all(bind=engine, checkfirst=True)
 
-# Migración segura: agregar columnas nuevas si no existen
+# Migración segura: cada statement en su propia conexión para evitar transacciones abortadas
 def run_migrations():
     migrations = [
         "ALTER TABLE sales ADD COLUMN IF NOT EXISTS rut_doctor VARCHAR(20)",
@@ -30,34 +30,20 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS ix_doctors_rut ON doctors (rut) WHERE rut IS NOT NULL",
         "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS file_data BYTEA",
         "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)",
-        """CREATE TABLE IF NOT EXISTS rep_targets (
-            id SERIAL PRIMARY KEY,
-            rep_id INTEGER NOT NULL REFERENCES medical_reps(id),
-            month INTEGER NOT NULL,
-            year INTEGER NOT NULL,
-            target_visits INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        )""",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_rep_targets_rep_month_year ON rep_targets (rep_id, month, year)",
     ]
-    with engine.connect() as conn:
-        for stmt in migrations:
-            try:
-                conn.execute(text("SAVEPOINT mig_step"))
-                conn.execute(text(stmt))
-                conn.execute(text("RELEASE SAVEPOINT mig_step"))
-            except Exception:
-                try:
-                    conn.execute(text("ROLLBACK TO SAVEPOINT mig_step"))
-                except Exception:
-                    pass
+    for stmt in migrations:
         try:
-            conn.commit()
+            with engine.connect() as conn:
+                conn.execute(text(stmt))
+                conn.commit()
         except Exception:
             pass
 
-run_migrations()
+try:
+    run_migrations()
+except Exception:
+    pass
 
 def clean_nan_values():
     """Limpia valores NaN guardados como float en PostgreSQL."""

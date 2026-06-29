@@ -141,9 +141,9 @@ class RepTarget(Base):
     year = Column(Integer, nullable=False)
     target_visits = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime, server_default=func.now())
 
-    rep = relationship("MedicalRep", backref="targets")
+    rep = relationship("MedicalRep")
 
 
 class ImageFile(Base):
