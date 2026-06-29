@@ -511,14 +511,18 @@ export default function RepDetail() {
     Promise.all([
       dashboardApi.getRepDetail(Number(id), selMonth, selYear),
       doctorsApi.getAll({ rep_id: Number(id), is_active: true }),
-      repsApi.getTarget(Number(id), selMonth, selYear),
     ])
-      .then(([detail, docs, target]) => {
+      .then(([detail, docs]) => {
         setData(detail);
         setDoctors(docs);
-        setTargetVisits(target.target_visits ?? 0);
-        setTargetInput(String(target.target_visits ?? 0));
         setEditingTarget(false);
+        // Cargar objetivo independientemente para no bloquear si el endpoint no existe aún
+        repsApi.getTarget(Number(id), selMonth, selYear)
+          .then(target => {
+            setTargetVisits(target.target_visits ?? 0);
+            setTargetInput(String(target.target_visits ?? 0));
+          })
+          .catch(() => { setTargetVisits(0); setTargetInput('0'); });
       })
       .catch(() => setError('No se pudo cargar la información del visitador'))
       .finally(() => setLoading(false));

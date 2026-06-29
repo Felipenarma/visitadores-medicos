@@ -23,14 +23,16 @@ export default function RepDashboard() {
     if (!user?.rep_id) return;
     setLoading(true);
     try {
-      const [s, tv, target] = await Promise.all([
+      const [s, tv] = await Promise.all([
         dashboardApi.getRepStats(user.rep_id),
         visitsApi.getAll({ rep_id: user.rep_id, date_from: today, date_to: today }),
-        repsApi.getTarget(user.rep_id, nowDate.getMonth() + 1, nowDate.getFullYear()),
       ]);
       setStats(s);
       setTodayVisits(tv);
-      setTargetVisits(target.target_visits ?? 0);
+      // Cargar objetivo sin bloquear si el endpoint no está disponible aún
+      repsApi.getTarget(user.rep_id, nowDate.getMonth() + 1, nowDate.getFullYear())
+        .then(target => setTargetVisits(target.target_visits ?? 0))
+        .catch(() => setTargetVisits(0));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
