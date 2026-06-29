@@ -58,7 +58,14 @@ export default function RepDoctors() {
     setLoadingRank(true);
     try {
       const data = await dashboardApi.getDoctorRanking(rankMonth, rankYear, user.rep_id);
-      setRanking(data);
+      // Filtro cliente: solo médicos asignados a este rep (por si el backend no filtra)
+      const myDoctorIds = new Set(doctors.map((d: any) => d.id));
+      const myRuts = new Set(doctors.map((d: any) => d.rut).filter(Boolean));
+      const filtered = data.filter((item: any) =>
+        (item.doctor_id && myDoctorIds.has(item.doctor_id)) ||
+        (item.rut_doctor && myRuts.has(item.rut_doctor))
+      );
+      setRanking(filtered.length > 0 ? filtered : data.filter((item: any) => item.rep_id === user.rep_id));
     } catch (e) { console.error(e); }
     finally { setLoadingRank(false); }
   };
