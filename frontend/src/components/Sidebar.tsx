@@ -105,7 +105,7 @@ export default function Sidebar() {
     setSearchQuery('');
     setSearchOpen(false);
     if (r.type === 'doctor') {
-      navigate(isAdmin ? '/admin/doctors' : '/rep/doctors');
+      navigate((isAdmin ? '/admin/doctors' : '/rep/doctors') + `?search=${encodeURIComponent(r.name)}`);
     } else {
       navigate(`/admin/reps/${r.id}`);
     }

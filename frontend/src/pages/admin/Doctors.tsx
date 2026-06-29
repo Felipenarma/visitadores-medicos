@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download, TrendingUp, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Modal from '../../components/Modal';
@@ -27,6 +28,7 @@ const emptyDoctor: Partial<Doctor> = {
 };
 
 export default function Doctors() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'lista' | 'analitica'>('lista');
 
   // Lista state
@@ -42,7 +44,7 @@ export default function Doctors() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: '' });
+  const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: searchParams.get('search') || '' });
   const [exporting, setExporting] = useState(false);
 
   // Historial ventas state
@@ -128,6 +130,12 @@ export default function Doctors() {
     } catch (e) { console.error(e); }
     finally { setLoadingSales(false); }
   };
+
+  // Si viene con ?search= desde el buscador global, limpiar el param de la URL
+  useEffect(() => {
+    const q = searchParams.get('search');
+    if (q) setSearchParams({}, { replace: true });
+  }, []);
 
   useEffect(() => { load(); }, [filters]);
   useEffect(() => { if (activeTab === 'analitica') loadSalesData(); }, [salesMonth, salesYear, activeTab]);
