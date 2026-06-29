@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download } from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
+import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download, TrendingUp, X } from 'lucide-react';
+import { BarChart as RechartsBar, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Modal from '../../components/Modal';
 import { doctorsApi, repsApi, businessLinesApi, dashboardApi } from '../../api';
 import type { Doctor, MedicalRep, BusinessLine } from '../../types';
@@ -46,6 +44,22 @@ export default function Doctors() {
   const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: '' });
   const [exporting, setExporting] = useState(false);
+
+  // Historial ventas state
+  const [historialDoctor, setHistorialDoctor] = useState<Doctor | null>(null);
+  const [historialData, setHistorialData] = useState<any[]>([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+
+  const openHistorial = async (doc: Doctor) => {
+    if (!doc.id) return;
+    setHistorialDoctor(doc);
+    setLoadingHistorial(true);
+    try {
+      const data = await dashboardApi.getDoctorSalesHistory(doc.id, 6);
+      setHistorialData(data);
+    } catch (e) { console.error(e); }
+    finally { setLoadingHistorial(false); }
+  };
 
   // Merge modal state
   const [mergeSource, setMergeSource]   = useState<Doctor | null>(null);
@@ -314,6 +328,9 @@ export default function Doctors() {
                         </td>
                         <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                           <div className="flex justify-end gap-1">
+                            <button onClick={() => openHistorial(doc)} title="Ver historial de ventas" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                              <TrendingUp size={15} />
+                            </button>
                             <button onClick={() => openAssign(doc)} title="Asignar visitador" className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
                               <UserCheck size={15} />
                             </button>
@@ -674,6 +691,43 @@ export default function Doctors() {
                 <GitMerge size={15} />
                 {merging ? 'Fusionando...' : 'Fusionar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Historial de ventas modal */}
+      {historialDoctor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <TrendingUp size={18} className="text-blue-500" />
+                Historial — {historialDoctor.name}
+              </h2>
+              <button onClick={() => setHistorialDoctor(null)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            <div className="p-5">
+              {loadingHistorial ? (
+                <div className="flex justify-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                </div>
+              ) : historialData.length === 0 ? (
+                <p className="text-gray-400 text-center py-10">Sin prescripciones registradas</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <RechartsBar data={historialData}>
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <Tooltip formatter={(v: any) => [v, 'Recetas']} />
+                    <Bar dataKey="units" fill="#4BA5C3" radius={[4, 4, 0, 0]} name="Recetas" />
+                  </RechartsBar>
+                </ResponsiveContainer>
+              )}
+              <p className="text-xs text-gray-400 text-center mt-2">Últimos 6 meses de prescripciones</p>
             </div>
           </div>
         </div>

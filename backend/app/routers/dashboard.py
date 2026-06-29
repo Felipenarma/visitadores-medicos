@@ -467,6 +467,34 @@ def get_sales_by_doctor(
     return result[:top]
 
 
+@router.get("/doctor/{doctor_id}/sales-history")
+def get_doctor_sales_history(
+    doctor_id: int,
+    months: int = Query(default=6),
+    db: Session = Depends(get_db)
+):
+    """Historial de ventas de un médico en los últimos N meses."""
+    from calendar import monthrange
+    now = datetime.utcnow()
+    result = []
+    for i in range(months - 1, -1, -1):
+        m = now.month - i
+        y = now.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        _, last_day = monthrange(y, m)
+        start = datetime(y, m, 1)
+        end = datetime(y, m, last_day, 23, 59, 59)
+        count = db.query(Sale).filter(
+            Sale.doctor_id == doctor_id,
+            Sale.sale_date >= start,
+            Sale.sale_date <= end,
+        ).count()
+        result.append({"month": m, "year": y, "units": count, "label": f"{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]} {y}"})
+    return result
+
+
 @router.get("/rep/{rep_id}/detail")
 def get_rep_detail(
     rep_id: int,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Stethoscope, Calendar, TrendingUp, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, UserPlus } from 'lucide-react';
+import { Users, Stethoscope, Calendar, TrendingUp, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, UserPlus, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -236,6 +236,32 @@ export default function AdminDashboard() {
           color="red"
         />
       </div>
+
+      {/* Alertas de inactividad */}
+      {(() => {
+        const now = new Date();
+        const inactivos = visitsByRep.filter(r => r.completed === 0);
+        if (inactivos.length === 0) return null;
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={18} className="text-amber-600" />
+              <h3 className="font-semibold text-amber-800">
+                {inactivos.length} visitador{inactivos.length > 1 ? 'es' : ''} sin visitas completadas en {MONTH_NAMES[chartMonth - 1]}
+              </h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {inactivos.map(r => (
+                <span key={r.rep_id} className="inline-flex items-center gap-1.5 bg-white border border-amber-200 text-amber-700 text-sm px-3 py-1 rounded-full font-medium">
+                  <span className="w-2 h-2 bg-amber-400 rounded-full" />
+                  {r.rep_name}
+                  {r.total > 0 && <span className="text-amber-400 text-xs">({r.total} prog.)</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

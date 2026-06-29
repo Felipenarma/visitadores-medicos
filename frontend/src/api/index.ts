@@ -112,6 +112,8 @@ export const dashboardApi = {
     date: string;
     reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
   }>('/dashboard/daily-tracking', { params: date ? { date } : {} }).then(r => r.data),
+  getDoctorSalesHistory: (doctor_id: number, months = 6) =>
+    api.get(`/dashboard/doctor/${doctor_id}/sales-history`, { params: { months } }).then(r => r.data),
   getDoctorRanking: (month: number, year: number, rep_id?: number) =>
     api.get('/dashboard/doctor-ranking', { params: { month, year, ...(rep_id ? { rep_id } : {}) } }).then(r => r.data),
   getNewDoctors: (month: number, year: number) =>
