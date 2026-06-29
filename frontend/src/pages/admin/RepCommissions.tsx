@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { dashboardApi } from '../../api';
+import * as XLSX from 'xlsx';
 
 interface CategoryBreakdown {
   [key: string]: number;
@@ -194,43 +195,39 @@ export default function RepCommissions() {
   const totalDoctors = data.reduce((s, r) => s + r.doctors_with_sales, 0);
 
   const exportExcel = () => {
-    // Resumen por visitador
-    const rows: string[][] = [
-      ['Visitador', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...Object.keys(data[0]?.categories || {})],
+    const wb = XLSX.utils.book_new();
+    const allCats = Array.from(new Set(data.flatMap(r => Object.keys(r.categories))));
+
+    // Hoja 1: Resumen por visitador
+    const resumenRows = [
+      ['Visitador', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...allCats],
       ...data.map(r => [
-        r.rep_name,
-        String(r.sales_count),
-        String(r.doctors_with_sales),
-        String(r.new_doctors_count),
-        ...Object.keys(data[0]?.categories || {}).map(cat => String(r.categories[cat] || 0)),
+        r.rep_name, r.sales_count, r.doctors_with_sales, r.new_doctors_count,
+        ...allCats.map(cat => r.categories[cat] || 0),
       ]),
       [],
-      ['TOTAL', String(totalUnits), String(totalDoctors), String(totalNewDoctors)],
+      ['TOTAL', totalUnits, totalDoctors, totalNewDoctors, ...allCats.map(cat => data.reduce((s, r) => s + (r.categories[cat] || 0), 0))],
     ];
+    const ws1 = XLSX.utils.aoa_to_sheet(resumenRows);
+    ws1['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, ...allCats.map(() => ({ wch: 18 }))];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
 
-    // Detalle por médico (todas las filas)
-    const detail: string[][] = [
-      [], ['--- DETALLE POR MÉDICO ---'],
-      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Unidades', 'Nuevo'],
+    // Hoja 2: Detalle por médico
+    const detalleRows = [
+      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Unidades', 'Médico Nuevo', ...allCats],
       ...data.flatMap(r =>
         (r.doctors_detail || []).map(d => [
-          r.rep_name, d.doctor_name, d.rut || '', d.specialty || '', String(d.units), d.is_new ? 'Sí' : 'No',
+          r.rep_name, d.doctor_name, d.rut || '', d.specialty || '', d.units,
+          d.is_new ? 'Sí' : 'No',
+          ...allCats.map(cat => d.categories[cat] || 0),
         ])
       ),
     ];
+    const ws2 = XLSX.utils.aoa_to_sheet(detalleRows);
+    ws2['!cols'] = [{ wch: 25 }, { wch: 35 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 14 }, ...allCats.map(() => ({ wch: 18 }))];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Detalle Médicos');
 
-    const csv = [...rows, ...detail]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-
-    const bom = '﻿';
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `comisiones_${MONTH_NAMES[month - 1]}_${year}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    XLSX.writeFile(wb, `Comisiones_${MONTH_NAMES[month - 1]}_${year}.xlsx`);
   };
 
   return (
@@ -254,7 +251,7 @@ export default function RepCommissions() {
               onClick={exportExcel}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
             >
-              <Download size={15} /> Exportar CSV
+              <Download size={15} /> Exportar Excel
             </button>
           )}
           {/* Month selector */}
