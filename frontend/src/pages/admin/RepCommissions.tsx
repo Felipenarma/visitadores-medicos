@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { dashboardApi } from '../../api';
 
 interface CategoryBreakdown {
@@ -193,6 +193,46 @@ export default function RepCommissions() {
   const totalNewDoctors = data.reduce((s, r) => s + r.new_doctors_count, 0);
   const totalDoctors = data.reduce((s, r) => s + r.doctors_with_sales, 0);
 
+  const exportExcel = () => {
+    // Resumen por visitador
+    const rows: string[][] = [
+      ['Visitador', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...Object.keys(data[0]?.categories || {})],
+      ...data.map(r => [
+        r.rep_name,
+        String(r.sales_count),
+        String(r.doctors_with_sales),
+        String(r.new_doctors_count),
+        ...Object.keys(data[0]?.categories || {}).map(cat => String(r.categories[cat] || 0)),
+      ]),
+      [],
+      ['TOTAL', String(totalUnits), String(totalDoctors), String(totalNewDoctors)],
+    ];
+
+    // Detalle por médico (todas las filas)
+    const detail: string[][] = [
+      [], ['--- DETALLE POR MÉDICO ---'],
+      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Unidades', 'Nuevo'],
+      ...data.flatMap(r =>
+        (r.doctors_detail || []).map(d => [
+          r.rep_name, d.doctor_name, d.rut || '', d.specialty || '', String(d.units), d.is_new ? 'Sí' : 'No',
+        ])
+      ),
+    ];
+
+    const csv = [...rows, ...detail]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const bom = '﻿';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `comisiones_${MONTH_NAMES[month - 1]}_${year}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-4 lg:p-6 space-y-6">
       {/* Header */}
@@ -207,21 +247,32 @@ export default function RepCommissions() {
           </div>
         </div>
 
-        {/* Month selector */}
-        <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
-            <ChevronLeft size={18} />
-          </button>
-          <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">
-            {MONTH_NAMES[month - 1]} {year}
-          </span>
-          <button
-            onClick={nextMonth}
-            disabled={isCurrentMonth}
-            className={`p-1.5 rounded-lg border border-gray-200 ${isCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-          >
-            <ChevronRight size={18} />
-          </button>
+        <div className="flex items-center gap-3">
+          {/* Export button */}
+          {data.length > 0 && (
+            <button
+              onClick={exportExcel}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <Download size={15} /> Exportar CSV
+            </button>
+          )}
+          {/* Month selector */}
+          <div className="flex items-center gap-2">
+            <button onClick={prevMonth} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
+              <ChevronLeft size={18} />
+            </button>
+            <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">
+              {MONTH_NAMES[month - 1]} {year}
+            </span>
+            <button
+              onClick={nextMonth}
+              disabled={isCurrentMonth}
+              className={`p-1.5 rounded-lg border border-gray-200 ${isCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
       </div>
 

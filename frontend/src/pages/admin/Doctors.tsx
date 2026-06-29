@@ -67,7 +67,7 @@ export default function Doctors() {
     setLoading(true);
     try {
       const params: any = { is_active: true };
-      if (filters.rep_id) params.rep_id = parseInt(filters.rep_id);
+      if (filters.rep_id && filters.rep_id !== 'none') params.rep_id = parseInt(filters.rep_id);
       if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
       if (filters.search) params.search = filters.search;
       const [d, r, bl] = await Promise.all([
@@ -75,7 +75,8 @@ export default function Doctors() {
         repsApi.getAll(),
         businessLinesApi.getAll(),
       ]);
-      setDoctors(d);
+      // Filtro cliente: sin visitador asignado
+      setDoctors(filters.rep_id === 'none' ? d.filter((doc: Doctor) => !doc.rep_id) : d);
       setReps(r);
       setBusinessLines(bl);
     } finally {
@@ -243,6 +244,7 @@ export default function Doctors() {
               </div>
               <select className="input" value={filters.rep_id} onChange={e => setFilters({ ...filters, rep_id: e.target.value })}>
                 <option value="">Todos los visitadores</option>
+                <option value="none">⚠️ Sin visitador asignado</option>
                 {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
               <select className="input" value={filters.business_line_id} onChange={e => setFilters({ ...filters, business_line_id: e.target.value })}>

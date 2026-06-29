@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Briefcase, Upload, TrendingUp,
@@ -6,6 +6,7 @@ import {
   BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { visitsApi } from '../api';
 
 interface NavItem {
   to: string;
@@ -44,6 +45,15 @@ export default function Sidebar() {
   const navItems = isAdmin ? adminNav : repNav;
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const [pendingToday, setPendingToday] = useState(0);
+
+  useEffect(() => {
+    if (!user?.rep_id) return;
+    const today = new Date().toISOString().split('T')[0];
+    visitsApi.getAll({ rep_id: user.rep_id, status: 'scheduled', date_from: today, date_to: today })
+      .then(visits => setPendingToday(visits.length))
+      .catch(() => {});
+  }, [user?.rep_id, location.pathname]);
 
   // Close mobile menu on route change
   React.useEffect(() => {
@@ -86,22 +96,30 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-3 lg:p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`
-            }
-          >
-            {item.icon}
-            {item.label}
-          </NavLink>
-        ))}
+        {navItems.map((item) => {
+          const showBadge = !isAdmin && item.to === '/rep/calendar' && pendingToday > 0;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`
+              }
+            >
+              {item.icon}
+              <span className="flex-1">{item.label}</span>
+              {showBadge && (
+                <span className="min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
+                  {pendingToday}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* Logout */}
