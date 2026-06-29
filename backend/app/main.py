@@ -30,6 +30,16 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS ix_doctors_rut ON doctors (rut) WHERE rut IS NOT NULL",
         "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS file_data BYTEA",
         "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)",
+        """CREATE TABLE IF NOT EXISTS rep_targets (
+            id SERIAL PRIMARY KEY,
+            rep_id INTEGER NOT NULL REFERENCES medical_reps(id),
+            month INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            target_visits INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_rep_targets_rep_month_year ON rep_targets (rep_id, month, year)",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

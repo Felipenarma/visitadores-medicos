@@ -5,7 +5,7 @@ import {
   CheckCircle, XCircle, Clock, AlertCircle, Calendar, Download,
   ChevronLeft, ChevronRight, Award, Stethoscope, TrendingUp
 } from 'lucide-react';
-import { dashboardApi, doctorsApi } from '../../api';
+import { dashboardApi, doctorsApi, repsApi } from '../../api';
 import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, Doctor } from '../../types';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -462,6 +462,12 @@ export default function RepDetail() {
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
   const [selYear, setSelYear] = useState(now.getFullYear());
 
+  // Target state
+  const [targetVisits, setTargetVisits] = useState(0);
+  const [targetInput, setTargetInput] = useState('');
+  const [savingTarget, setSavingTarget] = useState(false);
+  const [editingTarget, setEditingTarget] = useState(false);
+
   const handlePeriodChange = (m: number, y: number) => {
     setSelMonth(m);
     setSelYear(y);
@@ -486,14 +492,34 @@ export default function RepDetail() {
     }
   };
 
+  const saveTarget = async () => {
+    if (!id) return;
+    const val = parseInt(targetInput);
+    if (isNaN(val) || val < 0) return;
+    setSavingTarget(true);
+    try {
+      await repsApi.setTarget(Number(id), { month: selMonth, year: selYear, target_visits: val });
+      setTargetVisits(val);
+      setEditingTarget(false);
+    } catch { /* ignore */ }
+    finally { setSavingTarget(false); }
+  };
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     Promise.all([
       dashboardApi.getRepDetail(Number(id), selMonth, selYear),
       doctorsApi.getAll({ rep_id: Number(id), is_active: true }),
+      repsApi.getTarget(Number(id), selMonth, selYear),
     ])
-      .then(([detail, docs]) => { setData(detail); setDoctors(docs); })
+      .then(([detail, docs, target]) => {
+        setData(detail);
+        setDoctors(docs);
+        setTargetVisits(target.target_visits ?? 0);
+        setTargetInput(String(target.target_visits ?? 0));
+        setEditingTarget(false);
+      })
       .catch(() => setError('No se pudo cargar la información del visitador'))
       .finally(() => setLoading(false));
   }, [id, selMonth, selYear]);
@@ -576,6 +602,62 @@ export default function RepDetail() {
           </div>
         </div>
       </div>
+
+      {/* Objetivo mensual */}
+      {(() => {
+        const completadas = month?.completed ?? 0;
+        const pct = targetVisits > 0 ? Math.min(100, Math.round((completadas / targetVisits) * 100)) : 0;
+        const barColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-blue-500' : 'bg-orange-400';
+        return (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-6">
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <TrendingUp size={15} className="text-blue-500" />
+                  Objetivo {monthLabel}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {completadas} / {targetVisits > 0 ? targetVisits : '—'} visitas completadas
+                  {targetVisits > 0 && <span className="ml-2 font-bold text-gray-700">{pct}%</span>}
+                </span>
+              </div>
+              {targetVisits > 0 && (
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                </div>
+              )}
+            </div>
+            <div className="shrink-0">
+              {editingTarget ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={targetInput}
+                    onChange={e => setTargetInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveTarget(); if (e.key === 'Escape') setEditingTarget(false); }}
+                    className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    autoFocus
+                  />
+                  <button onClick={saveTarget} disabled={savingTarget} className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    {savingTarget ? '...' : 'Guardar'}
+                  </button>
+                  <button onClick={() => setEditingTarget(false)} className="px-3 py-1.5 border border-gray-200 text-gray-500 text-xs rounded-lg hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setTargetInput(String(targetVisits)); setEditingTarget(true); }}
+                  className="px-4 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                >
+                  {targetVisits > 0 ? 'Editar objetivo' : 'Definir objetivo'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 1. Análisis de efectividad */}
       {effectiveness && (

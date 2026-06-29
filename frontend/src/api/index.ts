@@ -26,6 +26,10 @@ export const repsApi = {
   create: (data: Partial<MedicalRep>) => api.post<MedicalRep>('/reps/', data).then(r => r.data),
   update: (id: number, data: Partial<MedicalRep>) => api.put<MedicalRep>(`/reps/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/reps/${id}`).then(r => r.data),
+  getTarget: (id: number, month?: number, year?: number) =>
+    api.get(`/reps/${id}/target`, { params: { ...(month && { month }), ...(year && { year }) } }).then(r => r.data),
+  setTarget: (id: number, data: { month: number; year: number; target_visits: number }) =>
+    api.post(`/reps/${id}/target`, data).then(r => r.data),
 };
 
 // Doctors

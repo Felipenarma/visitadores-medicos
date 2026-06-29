@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, CheckCircle, XCircle, Users, Clock, TrendingUp, AlertCircle } from 'lucide-react';
 import StatCard from '../../components/StatCard';
-import { dashboardApi, visitsApi } from '../../api';
+import { dashboardApi, visitsApi, repsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { RepStats, Visit } from '../../types';
 import { format } from 'date-fns';
@@ -14,19 +14,23 @@ export default function RepDashboard() {
   const [todayVisits, setTodayVisits] = useState<Visit[]>([]);
   const [completing, setCompleting] = useState<number | null>(null);
   const [justCompleted, setJustCompleted] = useState<Set<number>>(new Set());
+  const [targetVisits, setTargetVisits] = useState(0);
 
   const today = format(new Date(), 'yyyy-MM-dd');
+  const nowDate = new Date();
 
   const loadData = async () => {
     if (!user?.rep_id) return;
     setLoading(true);
     try {
-      const [s, tv] = await Promise.all([
+      const [s, tv, target] = await Promise.all([
         dashboardApi.getRepStats(user.rep_id),
         visitsApi.getAll({ rep_id: user.rep_id, date_from: today, date_to: today }),
+        repsApi.getTarget(user.rep_id, nowDate.getMonth() + 1, nowDate.getFullYear()),
       ]);
       setStats(s);
       setTodayVisits(tv);
+      setTargetVisits(target.target_visits ?? 0);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -131,24 +135,52 @@ export default function RepDashboard() {
       </div>
 
       {/* Progreso mensual */}
-      {monthTotal > 0 && (
+      {(monthTotal > 0 || targetVisits > 0) && (
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-800 flex items-center gap-2">
               <TrendingUp size={16} className="text-blue-500" /> Progreso del Mes
             </h3>
-            <span className="text-sm font-bold text-gray-700">{completionPct}%</span>
+            <span className="text-sm font-bold text-gray-700">
+              {targetVisits > 0
+                ? `${stats?.completed_this_month ?? 0} / ${targetVisits} visitas`
+                : `${completionPct}%`}
+            </span>
           </div>
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${completionPct >= 80 ? 'bg-green-500' : completionPct >= 50 ? 'bg-blue-500' : 'bg-orange-400'}`}
-              style={{ width: `${completionPct}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>{stats?.completed_this_month ?? 0} completadas</span>
-            <span>{stats?.missed_this_month ?? 0} perdidas</span>
-          </div>
+          {targetVisits > 0 ? (
+            <>
+              {/* Barra de meta */}
+              {(() => {
+                const completed = stats?.completed_this_month ?? 0;
+                const pct = Math.min(100, Math.round((completed / targetVisits) * 100));
+                const barColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-blue-500' : 'bg-orange-400';
+                return (
+                  <>
+                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>{completed} completadas · {stats?.missed_this_month ?? 0} perdidas</span>
+                      <span className="font-semibold text-gray-600">{pct}% del objetivo</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </>
+          ) : (
+            <>
+              <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${completionPct >= 80 ? 'bg-green-500' : completionPct >= 50 ? 'bg-blue-500' : 'bg-orange-400'}`}
+                  style={{ width: `${completionPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>{stats?.completed_this_month ?? 0} completadas</span>
+                <span>{stats?.missed_this_month ?? 0} perdidas</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -132,6 +132,20 @@ class KnowledgeEntry(Base):
     business_line = relationship("BusinessLine")
 
 
+class RepTarget(Base):
+    __tablename__ = "rep_targets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rep_id = Column(Integer, ForeignKey("medical_reps.id"), nullable=False)
+    month = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=False)
+    target_visits = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    rep = relationship("MedicalRep", backref="targets")
+
+
 class ImageFile(Base):
     __tablename__ = "image_files"
 
