@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download, TrendingUp, X } from 'lucide-react';
-import { BarChart as RechartsBar, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Modal from '../../components/Modal';
 import { doctorsApi, repsApi, businessLinesApi, dashboardApi } from '../../api';
 import type { Doctor, MedicalRep, BusinessLine } from '../../types';
@@ -718,13 +718,13 @@ export default function Doctors() {
                 <p className="text-gray-400 text-center py-10">Sin prescripciones registradas</p>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <RechartsBar data={historialData}>
+                  <BarChart data={historialData}>
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                     <Tooltip formatter={(v: any) => [v, 'Recetas']} />
                     <Bar dataKey="units" fill="#4BA5C3" radius={[4, 4, 0, 0]} name="Recetas" />
-                  </RechartsBar>
+                  </BarChart>
                 </ResponsiveContainer>
               )}
               <p className="text-xs text-gray-400 text-center mt-2">Últimos 6 meses de prescripciones</p>

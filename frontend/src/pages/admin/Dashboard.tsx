@@ -33,7 +33,7 @@ type NewDoctorItem = {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [todayVisits, setTodayVisits] = useState<TodayVisit[]>([]);
-  const [visitsByRep, setVisitsByRep] = useState<{ rep_name: string; completed: number; total: number }[]>([]);
+  const [visitsByRep, setVisitsByRep] = useState<{ rep_id: number; rep_name: string; completed: number; total: number }[]>([]);
   const [salesByLine, setSalesByLine] = useState<{ name: string; value: number; color: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
