@@ -37,6 +37,56 @@ def enrich_doctor(doctor: Doctor, db: Session) -> DoctorOut:
     return out
 
 
+def _enrich_batch(doctors: list, db: Session) -> List[DoctorOut]:
+    """Enriquece una lista de médicos con 3 queries batch en lugar de N*3 queries."""
+    if not doctors:
+        return []
+
+    doctor_ids = [d.id for d in doctors]
+
+    # Última visita completada por médico (1 query)
+    last_visits = db.query(
+        Visit.doctor_id,
+        func.max(Visit.actual_date).label("last_date")
+    ).filter(
+        Visit.doctor_id.in_(doctor_ids),
+        Visit.status == "completed"
+    ).group_by(Visit.doctor_id).all()
+    last_visit_map = {r.doctor_id: r.last_date for r in last_visits}
+
+    # Total visitas por médico (1 query)
+    visit_counts = db.query(
+        Visit.doctor_id,
+        func.count(Visit.id).label("cnt")
+    ).filter(
+        Visit.doctor_id.in_(doctor_ids)
+    ).group_by(Visit.doctor_id).all()
+    visit_count_map = {r.doctor_id: r.cnt for r in visit_counts}
+
+    # Tiene ventas por médico (1 query)
+    sale_counts = db.query(
+        Sale.doctor_id,
+        func.count(Sale.id).label("cnt")
+    ).filter(
+        Sale.doctor_id.in_(doctor_ids)
+    ).group_by(Sale.doctor_id).all()
+    sale_count_map = {r.doctor_id: r.cnt for r in sale_counts}
+
+    results = []
+    for doc in doctors:
+        out = DoctorOut.model_validate(doc)
+        if doc.business_line:
+            out.business_line_name = doc.business_line.name
+        if doc.rep:
+            out.rep_name = doc.rep.name
+        out.last_visit_date = last_visit_map.get(doc.id)
+        out.visits_count = visit_count_map.get(doc.id, 0)
+        out.has_sales = sale_count_map.get(doc.id, 0) > 0
+        results.append(out)
+
+    return results
+
+
 @router.get("/", response_model=List[DoctorOut])
 def get_doctors(
     rep_id: Optional[int] = Query(None),
@@ -75,17 +125,14 @@ def get_doctors(
 
         doctors = [d for d in doctors if _matches(d)]
 
-    if has_sales is not None:
-        result = []
-        for doc in doctors:
-            sale_count = db.query(func.count(Sale.id)).filter(Sale.doctor_id == doc.id).scalar()
-            if has_sales and sale_count > 0:
-                result.append(enrich_doctor(doc, db))
-            elif not has_sales and sale_count == 0:
-                result.append(enrich_doctor(doc, db))
-        return result
+    # Enriquecer con batch queries (evita N+1)
+    enriched = _enrich_batch(doctors, db)
 
-    return [enrich_doctor(doc, db) for doc in doctors]
+    # Filtro has_sales sobre datos ya cargados (sin queries extra)
+    if has_sales is not None:
+        enriched = [d for d in enriched if d.has_sales == has_sales]
+
+    return enriched
 
 
 @router.get("/export")
@@ -125,19 +172,31 @@ def export_doctors(
 
         doctors = [d for d in doctors if _matches(d)]
 
+    # Batch queries para el export (evita N+1)
+    doctor_ids = [d.id for d in doctors]
+    last_visits_q = db.query(
+        Visit.doctor_id, func.max(Visit.actual_date).label("last_date")
+    ).filter(Visit.doctor_id.in_(doctor_ids), Visit.status == "completed"
+    ).group_by(Visit.doctor_id).all()
+    last_visit_map = {r.doctor_id: r.last_date for r in last_visits_q}
+
+    visit_counts_q = db.query(
+        Visit.doctor_id, func.count(Visit.id).label("cnt")
+    ).filter(Visit.doctor_id.in_(doctor_ids)).group_by(Visit.doctor_id).all()
+    visit_count_map = {r.doctor_id: r.cnt for r in visit_counts_q}
+
+    sale_counts_q = db.query(
+        Sale.doctor_id, func.count(Sale.id).label("cnt")
+    ).filter(Sale.doctor_id.in_(doctor_ids)).group_by(Sale.doctor_id).all()
+    sale_count_map = {r.doctor_id: r.cnt for r in sale_counts_q}
+
     # Construir filas
     rows = []
     for doc in doctors:
-        # Última visita completada
-        last_visit = db.query(Visit).filter(
-            Visit.doctor_id == doc.id,
-            Visit.status == "completed"
-        ).order_by(Visit.actual_date.desc()).first()
-        last_visit_date = last_visit.actual_date.strftime("%d/%m/%Y") if last_visit and last_visit.actual_date else ""
-
-        visit_count = db.query(func.count(Visit.id)).filter(Visit.doctor_id == doc.id).scalar()
-        sale_count = db.query(func.count(Sale.id)).filter(Sale.doctor_id == doc.id).scalar()
-
+        last_date = last_visit_map.get(doc.id)
+        last_visit_date = last_date.strftime("%d/%m/%Y") if last_date else ""
+        visit_count = visit_count_map.get(doc.id, 0)
+        sale_count = sale_count_map.get(doc.id, 0)
         rep_name = doc.rep.name if doc.rep else ""
         bl_name = doc.business_line.name if doc.business_line else ""
 
