@@ -3,7 +3,7 @@ import io
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import List, Optional
 import pandas as pd
@@ -97,7 +97,10 @@ def get_doctors(
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Doctor)
+    query = db.query(Doctor).options(
+        joinedload(Doctor.rep),
+        joinedload(Doctor.business_line)
+    )
     if rep_id is not None:
         query = query.filter(Doctor.rep_id == rep_id)
     if business_line_id is not None:
@@ -145,7 +148,10 @@ def export_doctors(
     db: Session = Depends(get_db)
 ):
     """Exporta la lista de médicos a Excel respetando los mismos filtros que GET /."""
-    query = db.query(Doctor)
+    query = db.query(Doctor).options(
+        joinedload(Doctor.rep),
+        joinedload(Doctor.business_line)
+    )
     if rep_id is not None:
         query = query.filter(Doctor.rep_id == rep_id)
     if business_line_id is not None:
