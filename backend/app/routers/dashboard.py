@@ -368,6 +368,7 @@ def get_new_doctors(
 
         first_sale_date = min((x.sale_date for x in doc_sales if x.sale_date), default=None)
         productos = list(set(x.product for x in doc_sales if x.product))
+        categorias = list(set(x.categoria for x in doc_sales if x.categoria))
         total = sum(safe_float(x.amount) for x in doc_sales)
 
         result.append({
@@ -379,6 +380,7 @@ def get_new_doctors(
             "rep_name": rep.name if rep else None,
             "rep_id": rep.id if rep else None,
             "productos": productos,
+            "categorias": categorias,
             "total_amount": total,
             "sales_count": len(doc_sales),
         })

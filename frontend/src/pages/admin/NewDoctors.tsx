@@ -15,8 +15,64 @@ interface NewDoctorItem {
   rep_name: string | null;
   rep_id: number | null;
   productos: string[];
+  categorias: string[];
   total_amount: number;
   sales_count: number;
+}
+
+const CAT_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  'Hormonas':           { bg: '#F3F0FF', text: '#6D28D9', dot: '#8B5CF6' },
+  'Cannabis Medicinal': { bg: '#ECFDF5', text: '#065F46', dot: '#10B981' },
+  'Dermatología':       { bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B' },
+  'Control de Peso':    { bg: '#FEF2F2', text: '#991B1B', dot: '#EF4444' },
+  'Suero Terapia':      { bg: '#EFF6FF', text: '#1E40AF', dot: '#3B82F6' },
+  'Fertilidad':         { bg: '#FDF4FF', text: '#6B21A8', dot: '#C084FC' },
+  'Pelo':               { bg: '#F0FDF4', text: '#14532D', dot: '#4ADE80' },
+  'Producto Terminado': { bg: '#F8FAFC', text: '#475569', dot: '#94A3B8' },
+};
+
+function CategoryBadge({ cat }: { cat: string }) {
+  const c = CAT_COLORS[cat] || { bg: '#F1F5F9', text: '#475569', dot: '#94A3B8' };
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
+      style={{ backgroundColor: c.bg, color: c.text }}>
+      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.dot }} />
+      {cat}
+    </span>
+  );
+}
+
+function ProductTooltip({ productos }: { productos: string[] }) {
+  const [show, setShow] = React.useState(false);
+  if (productos.length === 0) return <span className="text-gray-300 text-xs">—</span>;
+  return (
+    <div className="relative" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      <div className="flex flex-wrap gap-1 cursor-default">
+        {productos.slice(0, 2).map((p, i) => (
+          <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full max-w-[140px] truncate" title={p}>
+            {p}
+          </span>
+        ))}
+        {productos.length > 2 && (
+          <span className="text-xs text-blue-500 font-medium cursor-pointer">+{productos.length - 2} más</span>
+        )}
+      </div>
+      {show && (
+        <div className="absolute z-50 bottom-full left-0 mb-2 w-72 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl"
+          style={{ minWidth: '200px' }}>
+          <p className="font-semibold text-gray-300 mb-2">Todos los productos ({productos.length}):</p>
+          <div className="space-y-1">
+            {productos.map((p, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <span className="text-gray-400 mt-0.5">·</span>
+                <span className="text-white leading-tight">{p}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface EditForm {
@@ -229,6 +285,7 @@ export default function NewDoctors() {
                   <th className="text-left px-4 py-3 text-white font-semibold hidden md:table-cell">Especialidad</th>
                   <th className="text-left px-4 py-3 text-white font-semibold hidden sm:table-cell">Primera Venta</th>
                   <th className="text-left px-4 py-3 text-white font-semibold">Visitador</th>
+                  <th className="text-left px-4 py-3 text-white font-semibold hidden md:table-cell">Línea</th>
                   <th className="text-left px-4 py-3 text-white font-semibold hidden lg:table-cell">Productos</th>
                   <th className="text-right px-4 py-3 text-white font-semibold hidden sm:table-cell">Recetas</th>
                   <th className="px-4 py-3"></th>
@@ -265,15 +322,18 @@ export default function NewDoctors() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
+                      {/* Línea de negocio */}
+                      <td className="px-4 py-3 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
-                          {item.productos.slice(0, 3).map((p, i) => (
-                            <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                              {p.length > 25 ? p.slice(0, 25) + '…' : p}
-                            </span>
-                          ))}
-                          {item.productos.length > 3 && <span className="text-xs text-gray-400">+{item.productos.length - 3}</span>}
+                          {(item.categorias || []).length > 0
+                            ? (item.categorias || []).map((cat, i) => <CategoryBadge key={i} cat={cat} />)
+                            : <span className="text-gray-300 text-xs">—</span>
+                          }
                         </div>
+                      </td>
+                      {/* Productos con tooltip */}
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <ProductTooltip productos={item.productos || []} />
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-700 hidden sm:table-cell">
                         {item.sales_count ?? 0}
