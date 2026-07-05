@@ -69,6 +69,9 @@ class DoctorBase(BaseModel):
     prescribes_products: Optional[str] = None
     visit_frequency: Optional[int] = 30
     is_active: Optional[bool] = True
+    medical_center: Optional[str] = None
+    city: Optional[str] = None
+    commune: Optional[str] = None
 
 
 class DoctorCreate(DoctorBase):
