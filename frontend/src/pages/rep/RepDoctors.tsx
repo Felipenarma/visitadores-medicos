@@ -14,6 +14,7 @@ export default function RepDoctors() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
 
   // Analítica state
   const now = new Date();
@@ -43,6 +44,7 @@ export default function RepDoctors() {
 
   const loadData = async () => {
     if (!user?.rep_id) return;
+    setLoadingDoctors(true);
     try {
       const [docs, bls] = await Promise.all([
         doctorsApi.getAll({ rep_id: user.rep_id }),
@@ -51,6 +53,7 @@ export default function RepDoctors() {
       setDoctors(docs);
       setBusinessLines(bls);
     } catch (e) { console.error(e); }
+    finally { setLoadingDoctors(false); }
   };
 
   const loadRanking = async () => {
@@ -284,7 +287,14 @@ export default function RepDoctors() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre, RUT o centro médico..." className="input pl-9 w-full" />
       </div>
 
-      <div className="space-y-3">
+      {loadingDoctors ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+          <p className="text-gray-400 text-sm">Cargando médicos...</p>
+        </div>
+      ) : null}
+
+      <div className="space-y-3" style={{ display: loadingDoctors ? 'none' : undefined }}>
         {filtered.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
             <Stethoscope size={40} className="mx-auto text-gray-300 mb-3" />

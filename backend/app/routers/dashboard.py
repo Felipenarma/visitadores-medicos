@@ -323,9 +323,10 @@ def get_new_doctors(
         Sale.sale_date <= period_end
     ).all()
 
-    # Pre-cargar doctors y reps en memoria
+    # Pre-cargar doctors, reps y líneas de negocio en memoria
     all_doctors = {d.id: d for d in db.query(Doctor).all()}
     all_reps = {r.id: r for r in db.query(MedicalRep).all()}
+    all_blines = {bl.id: bl for bl in db.query(BusinessLine).all()}
 
     result = []
     seen_keys = set()
@@ -371,6 +372,7 @@ def get_new_doctors(
         categorias = list(set(x.categoria for x in doc_sales if x.categoria))
         total = sum(safe_float(x.amount) for x in doc_sales)
 
+        bl = all_blines.get(doctor.business_line_id) if doctor and doctor.business_line_id else None
         result.append({
             "doctor_id": doctor.id if doctor else None,
             "rut_doctor": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
@@ -381,6 +383,8 @@ def get_new_doctors(
             "rep_id": rep.id if rep else None,
             "productos": productos,
             "categorias": categorias,
+            "business_line_id": doctor.business_line_id if doctor else None,
+            "business_line_name": bl.name if bl else None,
             "total_amount": total,
             "sales_count": len(doc_sales),
         })

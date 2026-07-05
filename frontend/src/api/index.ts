@@ -210,6 +210,22 @@ export const imagesApi = {
   getUrl: (id: number) => `${API_URL}/images/${id}/file`,
 };
 
+// Sales extra
+export const salesExtraApi = {
+  recategorize: () => api.post('/sales/recategorize').then(r => r.data),
+  setDoctorCategoria: (data: { doctor_id?: number | null; rut_doctor?: string; categoria: string; business_line_id?: number | null }) =>
+    api.post('/sales/set-doctor-categoria', data).then(r => r.data),
+};
+
+// Sessions
+export const sessionsApi = {
+  start: (rep_id: number) => api.post('/sessions/start', { rep_id }).then(r => r.data),
+  heartbeat: (session_id: number) => api.post('/sessions/heartbeat', { session_id }).then(r => r.data),
+  end: (session_id: number) => api.post('/sessions/end', { session_id }).then(r => r.data),
+  getRepStats: (rep_id: number, days = 7) => api.get(`/sessions/rep/${rep_id}/stats`, { params: { days } }).then(r => r.data),
+  getSummary: (days = 7) => api.get('/sessions/summary', { params: { days } }).then(r => r.data),
+};
+
 // Seed
 export const seedApi = {
   seed: () => api.post('/seed').then(r => r.data),

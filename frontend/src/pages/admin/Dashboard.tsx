@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Stethoscope, Calendar, TrendingUp, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, UserPlus, AlertTriangle } from 'lucide-react';
+import { Users, Stethoscope, Calendar, TrendingUp, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, UserPlus, AlertTriangle, Target } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import StatCard from '../../components/StatCard';
 import { dashboardApi, seedApi } from '../../api';
-import type { DashboardStats, TodayVisit } from '../../types';
+import type { DashboardStats, TodayVisit, RepEffectiveness } from '../../types';
 import { format, addDays, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -44,6 +44,8 @@ export default function AdminDashboard() {
   const [salesYear, setSalesYear] = useState(new Date().getFullYear());
   const [salesByDoctor, setSalesByDoctor] = useState<SalesByDoctorItem[]>([]);
   const [newDoctors, setNewDoctors] = useState<NewDoctorItem[]>([]);
+  const [repsEffectiveness, setRepsEffectiveness] = useState<{ rep_id: number; rep_name: string; eff: RepEffectiveness | null }[]>([]);
+  const [loadingEff, setLoadingEff] = useState(false);
   const [trackingDate, setTrackingDate] = useState(new Date());
   const [dailyTracking, setDailyTracking] = useState<{
     date: string;
@@ -72,6 +74,17 @@ export default function AdminDashboard() {
     try {
       const vr = await dashboardApi.getVisitsByRep(chartMonth, chartYear);
       setVisitsByRep(vr);
+      // Cargar efectividad de cada rep en paralelo
+      if (vr.length > 0) {
+        setLoadingEff(true);
+        Promise.all(
+          vr.map(r =>
+            dashboardApi.getRepDetail(r.rep_id, chartMonth, chartYear)
+              .then(d => ({ rep_id: r.rep_id, rep_name: r.rep_name, eff: d.effectiveness ?? null }))
+              .catch(() => ({ rep_id: r.rep_id, rep_name: r.rep_name, eff: null }))
+          )
+        ).then(setRepsEffectiveness).finally(() => setLoadingEff(false));
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -331,6 +344,90 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* Efectividad por Visitador */}
+      {(repsEffectiveness.length > 0 || loadingEff) && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center">
+                <Target size={18} className="text-indigo-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Efectividad por Visitador</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  % médicos visitados que prescribieron — {MONTH_NAMES[chartMonth - 1]} {chartYear}
+                </p>
+              </div>
+            </div>
+          </div>
+          {loadingEff ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {repsEffectiveness.map(({ rep_id, rep_name, eff }) => {
+                if (!eff || eff.total_assigned === 0) return (
+                  <div key={rep_id} className="border border-gray-100 rounded-xl p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-sm">{rep_name.charAt(0)}</div>
+                      <p className="font-semibold text-gray-700 text-sm">{rep_name}</p>
+                    </div>
+                    <p className="text-xs text-gray-400 text-center py-2">Sin médicos asignados</p>
+                  </div>
+                );
+                const rate = eff.conversion_rate;
+                const color = rate >= 70 ? '#22c55e' : rate >= 40 ? '#f59e0b' : '#ef4444';
+                const r = 26; const circ = 2 * Math.PI * r;
+                return (
+                  <div key={rep_id} className="border border-gray-100 rounded-xl p-4 hover:border-indigo-200 transition-colors">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">{rep_name.charAt(0)}</div>
+                      <p className="font-semibold text-gray-800 text-sm">{rep_name}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {/* Mini ring */}
+                      <svg width={64} height={64} viewBox="0 0 64 64" className="flex-shrink-0">
+                        <circle cx={32} cy={32} r={r} fill="none" stroke="#e5e7eb" strokeWidth={7} />
+                        <circle cx={32} cy={32} r={r} fill="none" stroke={color} strokeWidth={7}
+                          strokeDasharray={`${(rate / 100) * circ} ${circ}`}
+                          strokeLinecap="round" transform="rotate(-90 32 32)" />
+                        <text x={32} y={36} textAnchor="middle" fontSize={13} fontWeight="700" fill={color}>{rate}%</text>
+                      </svg>
+                      {/* Mini stats */}
+                      <div className="flex-1 space-y-1.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Asignados</span>
+                          <span className="font-semibold text-gray-700">{eff.total_assigned}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Visitados</span>
+                          <span className="font-semibold text-blue-600">{eff.doctors_visited}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Con prescripción</span>
+                          <span className="font-semibold text-green-600">{eff.doctors_with_sales}</span>
+                        </div>
+                        <div className="mt-1">
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="text-gray-400">Cobertura</span>
+                            <span className="text-gray-500">{eff.visit_rate}%</span>
+                          </div>
+                          <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${eff.visit_rate >= 70 ? 'bg-green-400' : eff.visit_rate >= 40 ? 'bg-amber-400' : 'bg-red-400'}`}
+                              style={{ width: `${eff.visit_rate}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Ventas por Doctor — mes actual vs anterior */}
       <div className="card">

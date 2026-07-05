@@ -95,7 +95,13 @@ def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
     if any(k in p for k in suero_kw):
         return "Suero Terapia"
 
-    # Magistral sin match → no asignar categoría (mejor sin categoría que con categoría incorrecta)
+    # Veterinario — va antes del catch-all, después de cannabis
+    vet_kw = ["trilostano", "mitotane", "mitotano", "veterinario", "veterinaria",
+              "canino", "felino", "equino", "bovino", "anipryl", "selegilina"]
+    if any(k in p for k in vet_kw):
+        return "Veterinario"
+
+    # Sin match → no asignar categoría (mejor sin categoría que con categoría incorrecta)
     return None
 
 
@@ -743,3 +749,32 @@ def recategorize_sales(db: Session = Depends(get_db)):
             updated += 1
     db.commit()
     return {"message": f"Re-categorización completada: {updated} ventas actualizadas de {len(sales)} totales"}
+
+
+@router.post("/set-doctor-categoria")
+def set_doctor_categoria(data: dict, db: Session = Depends(get_db)):
+    """Asigna manualmente una categoría a todas las ventas de un médico y actualiza su línea de negocio."""
+    doctor_id = data.get("doctor_id")
+    rut_doctor = data.get("rut_doctor")
+    categoria = data.get("categoria")
+    business_line_id = data.get("business_line_id")
+
+    if not categoria:
+        return {"ok": False, "error": "categoria requerida"}
+
+    updated = 0
+    if doctor_id:
+        updated = db.query(Sale).filter(Sale.doctor_id == doctor_id).update(
+            {"categoria": categoria}, synchronize_session=False
+        )
+        if business_line_id:
+            doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+            if doctor:
+                doctor.business_line_id = business_line_id
+    elif rut_doctor:
+        updated = db.query(Sale).filter(Sale.rut_doctor == rut_doctor).update(
+            {"categoria": categoria}, synchronize_session=False
+        )
+
+    db.commit()
+    return {"ok": True, "updated": updated}

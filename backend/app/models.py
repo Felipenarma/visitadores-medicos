@@ -146,6 +146,19 @@ class RepTarget(Base):
     rep = relationship("MedicalRep")
 
 
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rep_id = Column(Integer, ForeignKey("medical_reps.id"), nullable=False)
+    login_at = Column(DateTime, server_default=func.now(), nullable=False)
+    last_activity = Column(DateTime, server_default=func.now(), nullable=False)
+    logout_at = Column(DateTime, nullable=True)
+    duration_minutes = Column(Integer, default=0)
+
+    rep = relationship("MedicalRep")
+
+
 class ImageFile(Base):
     __tablename__ = "image_files"
 
