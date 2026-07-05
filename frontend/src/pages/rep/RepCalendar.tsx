@@ -265,16 +265,18 @@ export default function RepCalendar() {
                   )}
 
                   {/* Assign button */}
-                  {visitDoctor.rep_id !== user?.rep_id && (
-                    <button
-                      onClick={handleAssignMe}
-                      disabled={assigning}
-                      className="mt-2 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-white border border-blue-300 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
-                    >
-                      <UserCheck size={15} />
-                      {assigning ? 'Asignando…' : 'Asignarme este médico'}
-                    </button>
-                  )}
+                  <button
+                    onClick={handleAssignMe}
+                    disabled={assigning}
+                    className={`mt-2 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                      visitDoctor.rep_id === user?.rep_id
+                        ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                        : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-100'
+                    }`}
+                  >
+                    <UserCheck size={15} />
+                    {assigning ? 'Asignando…' : visitDoctor.rep_id === user?.rep_id ? '✓ Asignado a mí — Reconfirmar' : 'Asignarme este médico'}
+                  </button>
                 </div>
               ) : (
                 <div className="pt-1 border-t border-blue-100">
