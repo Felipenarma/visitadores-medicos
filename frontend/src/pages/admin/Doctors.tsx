@@ -294,6 +294,60 @@ export default function Doctors() {
             </div>
           </div>
 
+          {/* Mini dashboard — solo cuando hay filtro activo */}
+          {!loading && (filters.rep_id || filters.business_line_id || filters.search) && doctors.length > 0 && (() => {
+            const withSales    = doctors.filter(d => d.has_sales).length;
+            const withoutSales = doctors.filter(d => !d.has_sales).length;
+            const withoutRep   = doctors.filter(d => !d.rep_id).length;
+            const pctSales     = Math.round((withSales / doctors.length) * 100);
+
+            // Especialidades más frecuentes
+            const specMap: Record<string, number> = {};
+            doctors.forEach(d => { if (d.specialty) specMap[d.specialty] = (specMap[d.specialty] || 0) + 1; });
+            const topSpecs = Object.entries(specMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* Total */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total médicos</p>
+                  <p className="text-3xl font-bold mt-1" style={{ color: '#0F1E2D' }}>{doctors.length}</p>
+                  {topSpecs.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1 truncate">{topSpecs.map(([s]) => s).join(' · ')}</p>
+                  )}
+                </div>
+
+                {/* Con ventas */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Con ventas</p>
+                  <p className="text-3xl font-bold mt-1 text-emerald-600">{withSales}</p>
+                  <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pctSales}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{pctSales}% del filtro</p>
+                </div>
+
+                {/* Sin ventas */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Sin ventas</p>
+                  <p className="text-3xl font-bold mt-1 text-amber-500">{withoutSales}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {withoutSales > 0 ? `${Math.round((withoutSales / doctors.length) * 100)}% sin prescripción` : 'Todos prescriben'}
+                  </p>
+                </div>
+
+                {/* Sin visitador */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Sin visitador</p>
+                  <p className={`text-3xl font-bold mt-1 ${withoutRep > 0 ? 'text-red-500' : 'text-gray-400'}`}>{withoutRep}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {withoutRep > 0 ? `${withoutRep} sin asignar` : 'Todos asignados ✓'}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
