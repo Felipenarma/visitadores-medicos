@@ -10,7 +10,7 @@ import type { Visit, Doctor } from '../../types';
 import Modal from '../../components/Modal';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Phone, Mail, MapPin, Building2, UserCheck } from 'lucide-react';
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: '#3B82F6',
@@ -36,8 +36,10 @@ export default function RepCalendar() {
   const [form, setForm] = useState({ status: '', notes: '', scheduled_date: '', scheduled_time: '' });
   const [createForm, setCreateForm] = useState({ doctor_id: 0, scheduled_date: '', scheduled_time: '09:00', notes: '' });
   const [doctorSearch, setDoctorSearch] = useState('');
-  const [updating, setUpdating] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [updating, setUpdating]       = useState(false);
+  const [creating, setCreating]       = useState(false);
+  const [visitDoctor, setVisitDoctor] = useState<Doctor | null>(null);
+  const [assigning, setAssigning]     = useState(false);
 
   const load = async () => {
     if (!user?.rep_id) return;
@@ -60,14 +62,33 @@ export default function RepCalendar() {
     extendedProps: { visit: v },
   }));
 
-  const handleEventClick = (info: any) => {
+  const handleEventClick = async (info: any) => {
     const visit: Visit = info.event.extendedProps.visit;
     setSelectedVisit(visit);
     const dateObj = new Date(visit.scheduled_date);
     const dateStr = dateObj.toISOString().slice(0, 10);
     const timeStr = dateObj.toTimeString().slice(0, 5);
     setForm({ status: visit.status, notes: visit.notes || '', scheduled_date: dateStr, scheduled_time: timeStr });
+    setVisitDoctor(null);
     setEditModalOpen(true);
+    // Fetch full doctor info
+    if (visit.doctor_id) {
+      try {
+        const doc = await doctorsApi.getOne(visit.doctor_id);
+        setVisitDoctor(doc);
+      } catch { /* silently ignore */ }
+    }
+  };
+
+  const handleAssignMe = async () => {
+    if (!visitDoctor || !user?.rep_id) return;
+    setAssigning(true);
+    try {
+      await doctorsApi.update(visitDoctor.id, { rep_id: user.rep_id });
+      setVisitDoctor({ ...visitDoctor, rep_id: user.rep_id, rep_name: user.name });
+      load();
+    } catch { /* silently ignore */ }
+    finally { setAssigning(false); }
   };
 
   const handleDateClick = (info: any) => {
@@ -184,14 +205,15 @@ export default function RepCalendar() {
       <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="Actualizar Visita">
         {selectedVisit && (
           <div className="space-y-4">
-            <div className="bg-blue-50 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between">
+            {/* Doctor contact card */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-gray-900">{selectedVisit.doctor_name}</p>
-                  <p className="text-sm text-gray-500">{selectedVisit.doctor_specialty || 'Sin especialidad'}</p>
+                  <p className="font-bold text-gray-900 text-base">{selectedVisit.doctor_name}</p>
+                  <p className="text-sm text-blue-700">{selectedVisit.doctor_specialty || 'Sin especialidad'}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-700">
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold text-gray-700">
                     {selectedVisit.scheduled_date
                       ? format(new Date(selectedVisit.scheduled_date), "d 'de' MMMM", { locale: es })
                       : '—'}
@@ -203,6 +225,62 @@ export default function RepCalendar() {
                   </p>
                 </div>
               </div>
+
+              {/* Contact details — shown once doctor is loaded */}
+              {visitDoctor ? (
+                <div className="space-y-1.5 pt-1 border-t border-blue-100">
+                  {visitDoctor.medical_center && (
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Building2 size={14} className="text-blue-400 shrink-0" />
+                      <span>{visitDoctor.medical_center}</span>
+                    </div>
+                  )}
+                  {visitDoctor.address && (
+                    <div className="flex items-start gap-2 text-sm text-gray-700">
+                      <MapPin size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                      <span>{visitDoctor.address}{visitDoctor.city ? `, ${visitDoctor.city}` : ''}</span>
+                    </div>
+                  )}
+                  {!visitDoctor.address && visitDoctor.city && (
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <MapPin size={14} className="text-blue-400 shrink-0" />
+                      <span>{visitDoctor.city}</span>
+                    </div>
+                  )}
+                  {visitDoctor.phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone size={14} className="text-blue-400 shrink-0" />
+                      <a href={`tel:${visitDoctor.phone}`} className="text-blue-600 hover:underline font-medium">
+                        {visitDoctor.phone}
+                      </a>
+                    </div>
+                  )}
+                  {visitDoctor.email && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Mail size={14} className="text-blue-400 shrink-0" />
+                      <a href={`mailto:${visitDoctor.email}`} className="text-blue-600 hover:underline">
+                        {visitDoctor.email}
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Assign button */}
+                  {visitDoctor.rep_id !== user?.rep_id && (
+                    <button
+                      onClick={handleAssignMe}
+                      disabled={assigning}
+                      className="mt-2 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-white border border-blue-300 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+                    >
+                      <UserCheck size={15} />
+                      {assigning ? 'Asignando…' : 'Asignarme este médico'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="pt-1 border-t border-blue-100">
+                  <div className="h-3 bg-blue-100 rounded animate-pulse w-2/3" />
+                </div>
+              )}
             </div>
 
             <div>
