@@ -108,7 +108,7 @@ export default function NewDoctors() {
   // Modal state
   const [editItem, setEditItem]       = useState<NewDoctorItem | null>(null);
   const [deleteItem, setDeleteItem]   = useState<NewDoctorItem | null>(null);
-  const [form, setForm]               = useState<EditForm>({ name: '', rut: '', specialty: '', email: '', phone: '', rep_id: '' });
+  const [form, setForm]               = useState<EditForm>({ name: '', rut: '', specialty: '', email: '', phone: '', rep_id: '', business_line_id: '' });
   const [saving, setSaving]           = useState(false);
   const [deleting, setDeleting]       = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
@@ -133,31 +133,6 @@ export default function NewDoctors() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  };
-
-  const handleSaveCat = async (item: NewDoctorItem) => {
-    if (!editCatValue) return;
-    setSavingCat(true);
-    // Find matching business line by name (case-insensitive partial match)
-    const bl = businessLines.find(b =>
-      b.name.toLowerCase().includes(editCatValue.toLowerCase()) ||
-      editCatValue.toLowerCase().includes(b.name.toLowerCase().split(' ')[0])
-    );
-    try {
-      await salesExtraApi.setDoctorCategoria({
-        doctor_id: item.doctor_id,
-        rut_doctor: item.rut_doctor || undefined,
-        categoria: editCatValue,
-        business_line_id: bl?.id ?? null,
-      });
-      setEditCatKey(null);
-      load();
-    } catch {
-      // silently fail, just close
-      setEditCatKey(null);
-    } finally {
-      setSavingCat(false);
-    }
   };
 
   useEffect(() => { load(); }, [month, year]);
