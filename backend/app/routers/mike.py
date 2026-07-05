@@ -22,19 +22,27 @@ router = APIRouter(prefix="/api/mike", tags=["mike"])
 # Module-level store for Excel exports keyed by token
 _export_store: dict = {}
 
-MIKE_SYSTEM_PROMPT = """Eres Mike, el asistente de IA del laboratorio Narma para el administrador Felipe.
+MIKE_SYSTEM_PROMPT = """Eres Mike, el asistente de IA ejecutivo del laboratorio Narma para el administrador Felipe.
 
-Tu rol es ayudar a Felipe a:
-- Analizar el desempeño de los visitadores médicos (visitas realizadas, tasa de cumplimiento, tendencias)
-- Gestionar y analizar la cartera de médicos (nuevos médicos, ranking por ventas, médicos sin visitar)
+Tu rol principal es:
+- Analizar y gestionar el desempeño de los visitadores médicos (visitas, tasa de cumplimiento, comportamiento, tendencias)
+- Gestionar calendarios y visitas: programar, reagendar y cancelar visitas de cualquier visitador
+- Asignar médicos a visitadores: por línea de productos, especialidad, zona o criterio que decidas
+- Analizar la cartera de médicos (nuevos, ranking, médicos sin visitar, inactivos)
 - Obtener métricas de ventas por período, línea de negocio, visitador o médico
-- Calcular y revisar comisiones de visitadores
-- Identificar oportunidades: médicos que dejaron de comprar, visitadores con bajo rendimiento, etc.
-- Gestionar datos: asignar visitadores a médicos, registrar visitas, etc.
+- Calcular y revisar comisiones
+- Identificar oportunidades y riesgos: médicos que dejaron de comprar, visitadores con bajo rendimiento, médicos sin asignar
 
-Responde siempre en español. Sé analítico, preciso y proactivo: cuando entregues datos, ofrece interpretaciones y recomendaciones. Si el período no se especifica, usa el mes actual. Si detectas algo relevante en los datos (un visitador con pocas visitas, un médico que bajó sus compras), coméntalo sin que te lo pidan.
+Cuando analices el comportamiento de un visitador, examina:
+- Tasa de cumplimiento de visitas (completadas vs programadas)
+- Días de la semana que más trabaja y a qué horas
+- Tendencia mensual: ¿está mejorando o empeorando?
+- Comparación con otros visitadores del equipo
+- Médicos que visita vs médicos asignados (cobertura real)
+- Relación entre visitas y ventas generadas
 
-Cuando el usuario pida exportar datos a Excel, usa la herramienta export_to_excel con el tipo apropiado.
+Responde siempre en español. Sé analítico, preciso y proactivo. Si detectas algo relevante en los datos, coméntalo sin que te lo pidan.
+Cuando el usuario pida exportar datos a Excel, usa export_to_excel.
 
 Fecha actual: {current_date}"""
 
@@ -205,6 +213,88 @@ MIKE_TOOLS = [
                 "rep_id": {"type": "integer", "description": "Filtrar por visitador (opcional)"},
                 "business_line_name": {"type": "string", "description": "Filtrar por línea de negocio (opcional)"}
             }
+        }
+    },
+    {
+        "name": "get_rep_calendar",
+        "description": "Obtiene el calendario de visitas de un visitador para un rango de fechas. Muestra visitas programadas, completadas y perdidas organizadas por día.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rep_id": {"type": "integer", "description": "ID del visitador"},
+                "date_from": {"type": "string", "description": "Fecha inicio en formato YYYY-MM-DD (default: hoy)"},
+                "date_to": {"type": "string", "description": "Fecha fin en formato YYYY-MM-DD (default: 30 días adelante)"},
+                "status": {"type": "string", "description": "Filtrar por estado: scheduled, completed, missed, cancelled (opcional)"}
+            },
+            "required": ["rep_id"]
+        }
+    },
+    {
+        "name": "schedule_visit",
+        "description": "Programa una nueva visita para un visitador con un médico específico.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rep_id": {"type": "integer", "description": "ID del visitador"},
+                "doctor_id": {"type": "integer", "description": "ID del médico a visitar"},
+                "scheduled_date": {"type": "string", "description": "Fecha de la visita en formato YYYY-MM-DD"},
+                "notes": {"type": "string", "description": "Notas opcionales para la visita"}
+            },
+            "required": ["rep_id", "doctor_id", "scheduled_date"]
+        }
+    },
+    {
+        "name": "reschedule_visit",
+        "description": "Reagenda una visita existente a otra fecha.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "visit_id": {"type": "integer", "description": "ID de la visita"},
+                "new_date": {"type": "string", "description": "Nueva fecha en formato YYYY-MM-DD"},
+                "notes": {"type": "string", "description": "Notas opcionales"}
+            },
+            "required": ["visit_id", "new_date"]
+        }
+    },
+    {
+        "name": "cancel_visit",
+        "description": "Cancela una visita programada.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "visit_id": {"type": "integer", "description": "ID de la visita a cancelar"},
+                "reason": {"type": "string", "description": "Motivo de cancelación (opcional)"}
+            },
+            "required": ["visit_id"]
+        }
+    },
+    {
+        "name": "bulk_assign_doctors",
+        "description": "Asigna múltiples médicos a un visitador según criterios: por línea de negocio, especialidad, ciudad, o médicos sin asignar. Útil para organizar la cartera de un visitador.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rep_id": {"type": "integer", "description": "ID del visitador al que asignar los médicos"},
+                "business_line_name": {"type": "string", "description": "Asignar médicos de esta línea de negocio (ej: 'Hormonas', 'Dermatología')"},
+                "specialty": {"type": "string", "description": "Asignar médicos de esta especialidad"},
+                "city": {"type": "string", "description": "Asignar médicos de esta ciudad"},
+                "without_rep_only": {"type": "boolean", "description": "Si es true, solo asigna médicos que no tienen visitador (default: true)"},
+                "limit": {"type": "integer", "description": "Máximo de médicos a asignar (default: 50)"},
+                "doctor_ids": {"type": "array", "items": {"type": "integer"}, "description": "Lista específica de IDs de médicos a asignar (opcional, tiene prioridad sobre filtros)"}
+            },
+            "required": ["rep_id"]
+        }
+    },
+    {
+        "name": "get_rep_behavior_analysis",
+        "description": "Análisis profundo del comportamiento de un visitador: patrones de trabajo, días activos, horarios, tasa de cumplimiento por semana, comparación con el equipo, correlación visitas-ventas.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rep_id": {"type": "integer", "description": "ID del visitador a analizar"},
+                "months": {"type": "integer", "description": "Cuántos meses de historial analizar (default: 3)"}
+            },
+            "required": ["rep_id"]
         }
     },
     {
@@ -1014,6 +1104,266 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "token": token,
             "filename": filename,
             "rows": rows_written
+        }
+
+    # ── get_rep_calendar ──────────────────────────────────────────────────────
+    elif tool_name == "get_rep_calendar":
+        rep_id    = tool_input.get("rep_id")
+        date_from = tool_input.get("date_from", now.strftime("%Y-%m-%d"))
+        date_to   = tool_input.get("date_to", (now + timedelta(days=30)).strftime("%Y-%m-%d"))
+        status    = tool_input.get("status")
+
+        rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
+        if not rep:
+            return {"error": f"Visitador {rep_id} no encontrado"}
+
+        q = db.query(Visit).filter(
+            Visit.rep_id == rep_id,
+            Visit.scheduled_date >= datetime.strptime(date_from, "%Y-%m-%d"),
+            Visit.scheduled_date < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+        )
+        if status:
+            q = q.filter(Visit.status == status)
+        visits = q.order_by(Visit.scheduled_date).all()
+
+        by_day: dict = {}
+        for v in visits:
+            day_key = v.scheduled_date.strftime("%Y-%m-%d") if v.scheduled_date else "sin fecha"
+            doctor  = db.query(Doctor).filter(Doctor.id == v.doctor_id).first()
+            by_day.setdefault(day_key, []).append({
+                "visit_id":   v.id,
+                "medico":     doctor.name if doctor else v.doctor_id,
+                "especialidad": doctor.specialty if doctor else None,
+                "centro":     doctor.medical_center if doctor else None,
+                "ciudad":     doctor.city if doctor else None,
+                "telefono":   doctor.phone if doctor else None,
+                "estado":     v.status,
+                "notas":      v.notes
+            })
+
+        return {
+            "visitador": rep.name,
+            "periodo":   f"{date_from} → {date_to}",
+            "total_visitas": len(visits),
+            "por_dia": by_day
+        }
+
+    # ── schedule_visit ────────────────────────────────────────────────────────
+    elif tool_name == "schedule_visit":
+        rep_id    = tool_input.get("rep_id")
+        doctor_id = tool_input.get("doctor_id")
+        date_str  = tool_input.get("scheduled_date")
+        notes     = tool_input.get("notes")
+
+        rep    = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if not rep:    return {"error": f"Visitador {rep_id} no encontrado"}
+        if not doctor: return {"error": f"Médico {doctor_id} no encontrado"}
+
+        visit = Visit(
+            rep_id=rep_id,
+            doctor_id=doctor_id,
+            scheduled_date=datetime.strptime(date_str, "%Y-%m-%d"),
+            status="scheduled",
+            notes=notes
+        )
+        db.add(visit)
+        db.commit()
+        db.refresh(visit)
+        return {
+            "success": True,
+            "visit_id": visit.id,
+            "visitador": rep.name,
+            "medico": doctor.name,
+            "fecha": date_str
+        }
+
+    # ── reschedule_visit ──────────────────────────────────────────────────────
+    elif tool_name == "reschedule_visit":
+        visit_id = tool_input.get("visit_id")
+        new_date  = tool_input.get("new_date")
+        notes     = tool_input.get("notes")
+
+        visit = db.query(Visit).filter(Visit.id == visit_id).first()
+        if not visit: return {"error": f"Visita {visit_id} no encontrada"}
+
+        old_date = visit.scheduled_date.strftime("%Y-%m-%d") if visit.scheduled_date else "?"
+        visit.scheduled_date = datetime.strptime(new_date, "%Y-%m-%d")
+        if notes: visit.notes = notes
+        db.commit()
+
+        doctor = db.query(Doctor).filter(Doctor.id == visit.doctor_id).first()
+        return {
+            "success": True,
+            "visit_id": visit_id,
+            "medico": doctor.name if doctor else visit.doctor_id,
+            "fecha_anterior": old_date,
+            "fecha_nueva": new_date
+        }
+
+    # ── cancel_visit ──────────────────────────────────────────────────────────
+    elif tool_name == "cancel_visit":
+        visit_id = tool_input.get("visit_id")
+        reason   = tool_input.get("reason", "")
+
+        visit = db.query(Visit).filter(Visit.id == visit_id).first()
+        if not visit: return {"error": f"Visita {visit_id} no encontrada"}
+
+        visit.status = "cancelled"
+        if reason: visit.notes = f"[Cancelada: {reason}] {visit.notes or ''}".strip()
+        db.commit()
+
+        doctor = db.query(Doctor).filter(Doctor.id == visit.doctor_id).first()
+        return {
+            "success": True,
+            "visit_id": visit_id,
+            "medico": doctor.name if doctor else visit.doctor_id,
+            "fecha": visit.scheduled_date.strftime("%Y-%m-%d") if visit.scheduled_date else "?"
+        }
+
+    # ── bulk_assign_doctors ───────────────────────────────────────────────────
+    elif tool_name == "bulk_assign_doctors":
+        rep_id          = tool_input.get("rep_id")
+        business_line_name = tool_input.get("business_line_name")
+        specialty       = tool_input.get("specialty")
+        city            = tool_input.get("city")
+        without_rep_only = tool_input.get("without_rep_only", True)
+        limit           = tool_input.get("limit", 50)
+        doctor_ids      = tool_input.get("doctor_ids")
+
+        rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
+        if not rep: return {"error": f"Visitador {rep_id} no encontrado"}
+
+        if doctor_ids:
+            doctors = db.query(Doctor).filter(Doctor.id.in_(doctor_ids), Doctor.is_active == True).all()
+        else:
+            q = db.query(Doctor).filter(Doctor.is_active == True)
+            if without_rep_only:
+                q = q.filter(Doctor.rep_id == None)
+            if business_line_name:
+                bl = db.query(BusinessLine).filter(BusinessLine.name.ilike(f"%{business_line_name}%")).first()
+                if bl: q = q.filter(Doctor.business_line_id == bl.id)
+            if specialty:
+                q = q.filter(Doctor.specialty.ilike(f"%{specialty}%"))
+            if city:
+                q = q.filter(Doctor.city.ilike(f"%{city}%"))
+            doctors = q.limit(limit).all()
+
+        assigned = []
+        for doc in doctors:
+            doc.rep_id = rep_id
+            assigned.append({"doctor_id": doc.id, "nombre": doc.name, "ciudad": doc.city, "especialidad": doc.specialty})
+        db.commit()
+
+        return {
+            "success": True,
+            "visitador": rep.name,
+            "medicos_asignados": len(assigned),
+            "detalle": assigned
+        }
+
+    # ── get_rep_behavior_analysis ─────────────────────────────────────────────
+    elif tool_name == "get_rep_behavior_analysis":
+        rep_id     = tool_input.get("rep_id")
+        months_back = tool_input.get("months", 3)
+
+        rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
+        if not rep: return {"error": f"Visitador {rep_id} no encontrado"}
+
+        since = now - timedelta(days=30 * months_back)
+        visits = db.query(Visit).filter(
+            Visit.rep_id == rep_id,
+            Visit.scheduled_date >= since
+        ).order_by(Visit.scheduled_date).all()
+
+        # By status
+        total = len(visits)
+        completed = [v for v in visits if v.status == "completed"]
+        missed    = [v for v in visits if v.status == "missed"]
+        scheduled = [v for v in visits if v.status == "scheduled"]
+
+        # Activity by weekday
+        weekday_names = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+        by_weekday = {d: {"programadas": 0, "completadas": 0} for d in weekday_names}
+        for v in visits:
+            if v.scheduled_date:
+                day = weekday_names[v.scheduled_date.weekday()]
+                by_weekday[day]["programadas"] += 1
+                if v.status == "completed":
+                    by_weekday[day]["completadas"] += 1
+
+        # By month
+        by_month: dict = {}
+        for v in visits:
+            if v.scheduled_date:
+                key = v.scheduled_date.strftime("%Y-%m")
+                by_month.setdefault(key, {"programadas": 0, "completadas": 0, "perdidas": 0})
+                by_month[key]["programadas"] += 1
+                if v.status == "completed": by_month[key]["completadas"] += 1
+                if v.status == "missed":    by_month[key]["perdidas"] += 1
+
+        for key in by_month:
+            prog = by_month[key]["programadas"]
+            comp = by_month[key]["completadas"]
+            by_month[key]["tasa"] = round(comp / prog * 100, 1) if prog else 0
+
+        # Doctors visited vs assigned
+        doctors_assigned = db.query(func.count(Doctor.id)).filter(
+            Doctor.rep_id == rep_id, Doctor.is_active == True
+        ).scalar()
+        doctors_visited_ids = {v.doctor_id for v in completed}
+
+        # Sales correlation
+        sales_by_month: dict = {}
+        for i in range(months_back):
+            m = current_month - i
+            y = current_year
+            while m <= 0: m += 12; y -= 1
+            amount = db.query(func.sum(Sale.amount)).join(
+                Doctor, Doctor.id == Sale.doctor_id
+            ).filter(
+                Doctor.rep_id == rep_id,
+                extract('month', Sale.sale_date) == m,
+                extract('year',  Sale.sale_date) == y
+            ).scalar() or 0
+            sales_by_month[f"{y}-{m:02d}"] = round(float(amount), 2)
+
+        # Comparison with other reps
+        all_reps = db.query(MedicalRep).filter(MedicalRep.is_active == True).all()
+        team_rates = []
+        for r in all_reps:
+            rv = db.query(Visit).filter(Visit.rep_id == r.id, Visit.scheduled_date >= since).all()
+            rc = [v for v in rv if v.status == "completed"]
+            team_rates.append({
+                "rep_id": r.id,
+                "nombre": r.name,
+                "tasa": round(len(rc) / len(rv) * 100, 1) if rv else 0,
+                "visitas_totales": len(rv)
+            })
+        team_avg = round(sum(r["tasa"] for r in team_rates) / len(team_rates), 1) if team_rates else 0
+        my_rate  = round(len(completed) / total * 100, 1) if total else 0
+
+        return {
+            "visitador": rep.name,
+            "periodo_analizado": f"Últimos {months_back} meses",
+            "resumen": {
+                "total_visitas_programadas": total,
+                "visitas_completadas": len(completed),
+                "visitas_perdidas": len(missed),
+                "visitas_pendientes": len(scheduled),
+                "tasa_cumplimiento": my_rate,
+                "promedio_equipo": team_avg,
+                "vs_equipo": f"{my_rate - team_avg:+.1f}% vs promedio"
+            },
+            "medicos": {
+                "asignados": doctors_assigned,
+                "visitados_periodo": len(doctors_visited_ids),
+                "cobertura": round(len(doctors_visited_ids) / doctors_assigned * 100, 1) if doctors_assigned else 0
+            },
+            "actividad_por_dia": by_weekday,
+            "tendencia_mensual": by_month,
+            "ventas_por_mes": sales_by_month,
+            "comparacion_equipo": sorted(team_rates, key=lambda x: x["tasa"], reverse=True)
         }
 
     return {"error": f"Herramienta desconocida: {tool_name}"}
