@@ -62,31 +62,40 @@ def _infer_categoria(product: str, tipo_producto: str = "") -> Optional[str]:
         return "Cannabis Medicinal"
 
     # Hormonas — magistrales hormonales
-    hormonas_kw = ["testosterona", "progesterona", "dhea", "estradiol", "estriol", "pregnenolona",
-                   "crema trh", "trh"]
+    hormonas_kw = [
+        "testosterona", "progesterona", "dhea", "estradiol", "estriol", "pregnenolona",
+        "crema trh", "trh", "trilostano", "melatonina", "oxitocina",
+        "anastrozol", "letrozol", "tamoxifeno", "bromocriptina",
+        "espironolactona", "spironolactona", "aldosterona",
+        "cortisol", "hidrocortisona", "prednisona", "dexametasona",
+        "tiroxina", "levotiroxina", "hcg", "hmg", "lh", "fsh",
+        "androstenediona", "androstenediol", "aldosterona",
+        "crema base hrt", "crema base", "hrt",
+    ]
     if any(k in p for k in hormonas_kw):
         return "Hormonas"
 
-    # Dermatología — solo si hay productos específicos cargados
-    derma_kw = ["derma", "retinol", "ácido hialurónico", "acné", "acne"]
+    # Dermatología
+    derma_kw = ["derma", "retinol", "ácido hialurónico", "acné", "acne",
+                "colágeno", "elastina", "vitamina e ", "niacinamida", "azelaic",
+                "tretinoína", "tretinoin", "adapaleno", "adapalene",
+                "peeling", "despigmentante", "hidroquinona"]
     if any(k in p for k in derma_kw):
         return "Dermatología"
 
-    # Control de Peso — solo si hay productos específicos cargados
+    # Control de Peso
     peso_kw = ["semaglutida", "ozempic", "saxenda", "liraglutida", "tirzepatida",
-               "metformina", "orlistat"]
+               "metformina", "orlistat", "mounjaro", "wegovy", "rybelsus"]
     if any(k in p for k in peso_kw):
         return "Control de Peso"
 
-    # Suero Terapia — solo si hay productos específicos cargados
-    suero_kw = ["suero", "glutatión", "nac ", "vitamina c", "vitamina d", "b12"]
+    # Suero Terapia
+    suero_kw = ["suero", "glutatión", "nac ", "vitamina c", "vitamina d", "b12",
+                "zinc", "magnesio", "selenio", "omega", "colageno iv"]
     if any(k in p for k in suero_kw):
         return "Suero Terapia"
 
-    # Magistral a confeccionar sin otro match → Cannabis (mayoría en Narma)
-    if "magistral" in t:
-        return "Cannabis Medicinal"
-
+    # Magistral sin match → no asignar categoría (mejor sin categoría que con categoría incorrecta)
     return None
 
 
@@ -720,3 +729,17 @@ def normalize_doctors(db: Session = Depends(get_db)):
     """Normaliza médicos duplicados manualmente (también se ejecuta automáticamente tras cada carga)."""
     result = _run_normalization(db)
     return {"message": "Normalización completada", **result}
+
+
+@router.post("/recategorize")
+def recategorize_sales(db: Session = Depends(get_db)):
+    """Re-infiere la categoría de todas las ventas usando la lógica actualizada de _infer_categoria."""
+    sales = db.query(Sale).all()
+    updated = 0
+    for sale in sales:
+        new_cat = _infer_categoria(sale.product or "", "")
+        if new_cat != sale.categoria:
+            sale.categoria = new_cat
+            updated += 1
+    db.commit()
+    return {"message": f"Re-categorización completada: {updated} ventas actualizadas de {len(sales)} totales"}
