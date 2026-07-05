@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download, HelpCircle } from 'lucide-react';
-import { dashboardApi, doctorsApi, repsApi, businessLinesApi, salesExtraApi } from '../../api';
+import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download } from 'lucide-react';
+import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
 import type { BusinessLine } from '../../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -92,6 +92,7 @@ interface EditForm {
   email: string;
   phone: string;
   rep_id: string;
+  business_line_id: string;
 }
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -111,11 +112,6 @@ export default function NewDoctors() {
   const [saving, setSaving]           = useState(false);
   const [deleting, setDeleting]       = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
-
-  // Inline category edit state
-  const [editCatKey, setEditCatKey]   = useState<string | null>(null);
-  const [editCatValue, setEditCatValue] = useState('');
-  const [savingCat, setSavingCat]     = useState(false);
 
   const _now = new Date();
   const isCurrentMonth = month === _now.getMonth() + 1 && year === _now.getFullYear();
@@ -169,12 +165,13 @@ export default function NewDoctors() {
   const openEdit = (item: NewDoctorItem) => {
     setEditItem(item);
     setForm({
-      name:      item.doctor_name,
-      rut:       item.rut_doctor,
-      specialty: item.specialty || '',
-      email:     '',
-      phone:     '',
-      rep_id:    item.rep_id ? String(item.rep_id) : '',
+      name:             item.doctor_name,
+      rut:              item.rut_doctor,
+      specialty:        item.specialty || '',
+      email:            '',
+      phone:            '',
+      rep_id:           item.rep_id ? String(item.rep_id) : '',
+      business_line_id: item.business_line_id ? String(item.business_line_id) : '',
     });
     setErrorMsg('');
   };
@@ -186,12 +183,13 @@ export default function NewDoctors() {
     setErrorMsg('');
     try {
       await doctorsApi.update(editItem.doctor_id, {
-        name:      form.name.trim(),
-        rut:       form.rut.trim() || undefined,
-        specialty: form.specialty.trim() || undefined,
-        email:     form.email.trim() || undefined,
-        phone:     form.phone.trim() || undefined,
-        rep_id:    form.rep_id ? parseInt(form.rep_id) : undefined,
+        name:             form.name.trim(),
+        rut:              form.rut.trim() || undefined,
+        specialty:        form.specialty.trim() || undefined,
+        email:            form.email.trim() || undefined,
+        phone:            form.phone.trim() || undefined,
+        rep_id:           form.rep_id ? parseInt(form.rep_id) : undefined,
+        business_line_id: form.business_line_id ? parseInt(form.business_line_id) : undefined,
       });
       setEditItem(null);
       load();
@@ -367,46 +365,14 @@ export default function NewDoctors() {
                       </td>
                       {/* Línea de negocio */}
                       <td className="px-4 py-3 hidden md:table-cell">
-                        {(item.categorias || []).length > 0 ? (
+                        {item.business_line_name ? (
+                          <CategoryBadge cat={item.business_line_name} />
+                        ) : (item.categorias || []).length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {(item.categorias || []).map((cat, i) => <CategoryBadge key={i} cat={cat} />)}
                           </div>
-                        ) : editCatKey === `${item.rut_doctor}-${idx}` ? (
-                          <div className="flex items-center gap-1">
-                            <select
-                              autoFocus
-                              value={editCatValue}
-                              onChange={e => setEditCatValue(e.target.value)}
-                              className="text-xs border border-blue-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-                            >
-                              <option value="">Seleccionar…</option>
-                              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <button
-                              onClick={() => handleSaveCat(item)}
-                              disabled={savingCat || !editCatValue}
-                              className="p-1 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 transition-colors"
-                              title="Confirmar"
-                            >
-                              <Save size={12} />
-                            </button>
-                            <button
-                              onClick={() => setEditCatKey(null)}
-                              className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
-                              title="Cancelar"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
                         ) : (
-                          <button
-                            onClick={() => { setEditCatKey(`${item.rut_doctor}-${idx}`); setEditCatValue(''); }}
-                            className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
-                            title="Asignar categoría"
-                          >
-                            <HelpCircle size={11} />
-                            Por definir
-                          </button>
+                          <span className="text-xs text-amber-500 italic">Por definir</span>
                         )}
                       </td>
                       {/* Productos con tooltip */}
@@ -510,7 +476,7 @@ export default function NewDoctors() {
                     placeholder="+56 9 1234 5678"
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Visitador asignado</label>
                   <select
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -520,6 +486,19 @@ export default function NewDoctors() {
                     <option value="">— Sin asignar —</option>
                     {reps.map(r => (
                       <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Línea de productos</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    value={form.business_line_id}
+                    onChange={e => setForm(f => ({ ...f, business_line_id: e.target.value }))}
+                  >
+                    <option value="">— Sin asignar —</option>
+                    {businessLines.map(bl => (
+                      <option key={bl.id} value={bl.id}>{bl.name}</option>
                     ))}
                   </select>
                 </div>
