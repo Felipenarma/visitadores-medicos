@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download } from 'lucide-react';
-import { dashboardApi, doctorsApi, repsApi } from '../../api';
+import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download, HelpCircle } from 'lucide-react';
+import { dashboardApi, doctorsApi, repsApi, businessLinesApi, salesExtraApi } from '../../api';
+import type { BusinessLine } from '../../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -16,9 +17,17 @@ interface NewDoctorItem {
   rep_id: number | null;
   productos: string[];
   categorias: string[];
+  business_line_id: number | null;
+  business_line_name: string | null;
   total_amount: number;
   sales_count: number;
 }
+
+const ALL_CATEGORIES = [
+  'Hormonas', 'Cannabis Medicinal', 'Dermatología',
+  'Control de Peso', 'Suero Terapia', 'Fertilidad',
+  'Pelo', 'Producto Terminado', 'Veterinario',
+];
 
 const CAT_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   'Hormonas':           { bg: '#F3F0FF', text: '#6D28D9', dot: '#8B5CF6' },
@@ -29,6 +38,7 @@ const CAT_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   'Fertilidad':         { bg: '#FDF4FF', text: '#6B21A8', dot: '#C084FC' },
   'Pelo':               { bg: '#F0FDF4', text: '#14532D', dot: '#4ADE80' },
   'Producto Terminado': { bg: '#F8FAFC', text: '#475569', dot: '#94A3B8' },
+  'Veterinario':        { bg: '#ECFEFF', text: '#155E75', dot: '#06B6D4' },
 };
 
 function CategoryBadge({ cat }: { cat: string }) {
@@ -92,6 +102,7 @@ export default function NewDoctors() {
   const [month, setMonth]     = useState(new Date().getMonth() + 1);
   const [year, setYear]       = useState(new Date().getFullYear());
   const [reps, setReps]       = useState<MedicalRep[]>([]);
+  const [businessLines, setBusinessLines] = useState<BusinessLine[]>([]);
 
   // Modal state
   const [editItem, setEditItem]       = useState<NewDoctorItem | null>(null);
@@ -100,6 +111,11 @@ export default function NewDoctors() {
   const [saving, setSaving]           = useState(false);
   const [deleting, setDeleting]       = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
+
+  // Inline category edit state
+  const [editCatKey, setEditCatKey]   = useState<string | null>(null);
+  const [editCatValue, setEditCatValue] = useState('');
+  const [savingCat, setSavingCat]     = useState(false);
 
   const _now = new Date();
   const isCurrentMonth = month === _now.getMonth() + 1 && year === _now.getFullYear();
@@ -112,13 +128,40 @@ export default function NewDoctors() {
     Promise.all([
       (dashboardApi as any).getNewDoctors(month, year),
       repsApi.getAll(),
+      businessLinesApi.getAll(),
     ])
-      .then(([newDocs, repList]: [NewDoctorItem[], MedicalRep[]]) => {
+      .then(([newDocs, repList, blList]: [NewDoctorItem[], MedicalRep[], BusinessLine[]]) => {
         setData(newDocs);
         setReps(repList);
+        setBusinessLines(blList);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  const handleSaveCat = async (item: NewDoctorItem) => {
+    if (!editCatValue) return;
+    setSavingCat(true);
+    // Find matching business line by name (case-insensitive partial match)
+    const bl = businessLines.find(b =>
+      b.name.toLowerCase().includes(editCatValue.toLowerCase()) ||
+      editCatValue.toLowerCase().includes(b.name.toLowerCase().split(' ')[0])
+    );
+    try {
+      await salesExtraApi.setDoctorCategoria({
+        doctor_id: item.doctor_id,
+        rut_doctor: item.rut_doctor || undefined,
+        categoria: editCatValue,
+        business_line_id: bl?.id ?? null,
+      });
+      setEditCatKey(null);
+      load();
+    } catch {
+      // silently fail, just close
+      setEditCatKey(null);
+    } finally {
+      setSavingCat(false);
+    }
   };
 
   useEffect(() => { load(); }, [month, year]);
@@ -324,12 +367,47 @@ export default function NewDoctors() {
                       </td>
                       {/* Línea de negocio */}
                       <td className="px-4 py-3 hidden md:table-cell">
-                        <div className="flex flex-wrap gap-1">
-                          {(item.categorias || []).length > 0
-                            ? (item.categorias || []).map((cat, i) => <CategoryBadge key={i} cat={cat} />)
-                            : <span className="text-gray-300 text-xs">—</span>
-                          }
-                        </div>
+                        {(item.categorias || []).length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {(item.categorias || []).map((cat, i) => <CategoryBadge key={i} cat={cat} />)}
+                          </div>
+                        ) : editCatKey === `${item.rut_doctor}-${idx}` ? (
+                          <div className="flex items-center gap-1">
+                            <select
+                              autoFocus
+                              value={editCatValue}
+                              onChange={e => setEditCatValue(e.target.value)}
+                              className="text-xs border border-blue-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                            >
+                              <option value="">Seleccionar…</option>
+                              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <button
+                              onClick={() => handleSaveCat(item)}
+                              disabled={savingCat || !editCatValue}
+                              className="p-1 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 transition-colors"
+                              title="Confirmar"
+                            >
+                              <Save size={12} />
+                            </button>
+                            <button
+                              onClick={() => setEditCatKey(null)}
+                              className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+                              title="Cancelar"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditCatKey(`${item.rut_doctor}-${idx}`); setEditCatValue(''); }}
+                            className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                            title="Asignar categoría"
+                          >
+                            <HelpCircle size={11} />
+                            Por definir
+                          </button>
+                        )}
                       </td>
                       {/* Productos con tooltip */}
                       <td className="px-4 py-3 hidden lg:table-cell">
