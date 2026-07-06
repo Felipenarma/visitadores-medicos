@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Phone, Mail, Users,
   CheckCircle, XCircle, Clock, AlertCircle, Calendar, Download,
-  ChevronLeft, ChevronRight, Award, Stethoscope, TrendingUp
+  ChevronLeft, ChevronRight, Award, Stethoscope, TrendingUp,
+  Edit2, X, Building2, Hash
 } from 'lucide-react';
-import { dashboardApi, doctorsApi, repsApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, Doctor } from '../../types';
+import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, Doctor, MedicalRep, BusinessLine } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
@@ -403,11 +404,198 @@ function EffectivenessCard({ e, monthLabel }: { e: RepEffectiveness; monthLabel:
   );
 }
 
-function DoctorListSection({ doctors, repName, onExport, exporting }: {
+// ─── Doctor Edit Modal ───────────────────────────────────────────────────────
+
+interface DoctorForm {
+  name: string; specialty: string; medical_center: string;
+  address: string; city: string; commune: string;
+  phone: string; email: string; rut: string; notes: string;
+  visit_frequency: string; rep_id: string; business_line_id: string;
+  is_active: boolean;
+}
+
+function DoctorEditModal({ doctor, reps, businessLines, onClose, onSaved }: {
+  doctor: Doctor;
+  reps: MedicalRep[];
+  businessLines: BusinessLine[];
+  onClose: () => void;
+  onSaved: (updated: Doctor) => void;
+}) {
+  const [form, setForm] = useState<DoctorForm>({
+    name: doctor.name || '',
+    specialty: doctor.specialty || '',
+    medical_center: (doctor as any).medical_center || '',
+    address: doctor.address || '',
+    city: (doctor as any).city || '',
+    commune: (doctor as any).commune || '',
+    phone: doctor.phone || '',
+    email: doctor.email || '',
+    rut: doctor.rut || '',
+    notes: doctor.notes || '',
+    visit_frequency: String(doctor.visit_frequency ?? 30),
+    rep_id: doctor.rep_id ? String(doctor.rep_id) : '',
+    business_line_id: doctor.business_line_id ? String(doctor.business_line_id) : '',
+    is_active: doctor.is_active ?? true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (field: keyof DoctorForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [field]: e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
+    setSaving(true); setError('');
+    try {
+      const updated = await doctorsApi.update(doctor.id, {
+        name: form.name.trim(),
+        specialty: form.specialty || undefined,
+        medical_center: form.medical_center || undefined,
+        address: form.address || undefined,
+        city: form.city || undefined,
+        commune: form.commune || undefined,
+        phone: form.phone || undefined,
+        email: form.email || undefined,
+        rut: form.rut || undefined,
+        notes: form.notes || undefined,
+        visit_frequency: form.visit_frequency ? parseInt(form.visit_frequency) : 30,
+        rep_id: form.rep_id ? parseInt(form.rep_id) : undefined,
+        business_line_id: form.business_line_id ? parseInt(form.business_line_id) : undefined,
+        is_active: form.is_active,
+      });
+      onSaved(updated);
+    } catch {
+      setError('Error al guardar. Intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+            <Stethoscope size={16} className="text-blue-500" />
+            Editar médico
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          {/* Nombre + RUT */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nombre *</label>
+              <input value={form.name} onChange={set('name')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Hash size={11} /> RUT</label>
+              <input value={form.rut} onChange={set('rut')} placeholder="12.345.678-9" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+          </div>
+
+          {/* Especialidad + Centro */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Especialidad</label>
+              <input value={form.specialty} onChange={set('specialty')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Building2 size={11} /> Centro médico</label>
+              <input value={form.medical_center} onChange={set('medical_center')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+          </div>
+
+          {/* Dirección + Ciudad + Comuna */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-1">
+              <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><MapPin size={11} /> Dirección</label>
+              <input value={form.address} onChange={set('address')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Ciudad</label>
+              <input value={form.city} onChange={set('city')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Comuna</label>
+              <input value={form.commune} onChange={set('commune')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+          </div>
+
+          {/* Teléfono + Email */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Phone size={11} /> Teléfono</label>
+              <input value={form.phone} onChange={set('phone')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Mail size={11} /> Email</label>
+              <input value={form.email} onChange={set('email')} type="email" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+          </div>
+
+          {/* Visitador + Línea + Frecuencia */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><Users size={11} /> Visitador</label>
+              <select value={form.rep_id} onChange={set('rep_id')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                <option value="">Sin asignar</option>
+                {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Línea de negocio</label>
+              <select value={form.business_line_id} onChange={set('business_line_id')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                <option value="">Sin línea</option>
+                {businessLines.map(bl => <option key={bl.id} value={bl.id}>{bl.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Frec. visita (días)</label>
+              <input value={form.visit_frequency} onChange={set('visit_frequency')} type="number" min="1" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+          </div>
+
+          {/* Notas */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notas</label>
+            <textarea value={form.notes} onChange={set('notes')} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
+          </div>
+
+          {/* Activo */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.is_active} onChange={set('is_active')} className="rounded" />
+            <span className="text-sm text-gray-600">Médico activo</span>
+          </label>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+            Cancelar
+          </button>
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium">
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DoctorListSection({ doctors, repName, onExport, exporting, onDoctorClick }: {
   doctors: Doctor[];
   repName: string;
   onExport: () => void;
   exporting: boolean;
+  onDoctorClick: (doc: Doctor) => void;
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -431,20 +619,25 @@ function DoctorListSection({ doctors, repName, onExport, exporting }: {
       ) : (
         <div className="divide-y divide-gray-50">
           {doctors.map(doc => (
-            <div key={doc.id} className="px-6 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors">
-              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+            <div
+              key={doc.id}
+              onClick={() => onDoctorClick(doc)}
+              className="px-6 py-3 flex items-center gap-4 hover:bg-blue-50 transition-colors cursor-pointer group"
+            >
+              <div className="w-8 h-8 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center shrink-0 transition-colors">
                 <span className="text-blue-600 font-semibold text-sm">{doc.name.charAt(0).toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-800 text-sm truncate">{doc.name}</p>
                 <p className="text-xs text-gray-400 truncate">
-                  {[doc.specialty, doc.medical_center, doc.commune].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+                  {[doc.specialty, (doc as any).medical_center, (doc as any).city].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
                 </p>
               </div>
               {doc.rut && <span className="text-xs text-gray-400 shrink-0">{doc.rut}</span>}
               {doc.has_sales && (
                 <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full shrink-0">Con ventas</span>
               )}
+              <Edit2 size={13} className="text-gray-300 group-hover:text-blue-400 shrink-0 transition-colors" />
             </div>
           ))}
         </div>
@@ -461,6 +654,11 @@ export default function RepDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+
+  // Doctor edit modal
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [allReps, setAllReps] = useState<MedicalRep[]>([]);
+  const [allBusinessLines, setAllBusinessLines] = useState<BusinessLine[]>([]);
 
   const now = new Date();
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
@@ -512,6 +710,13 @@ export default function RepDetail() {
     } catch { /* ignore */ }
     finally { setSavingTarget(false); }
   };
+
+  // Load reps + business lines once for the edit modal
+  useEffect(() => {
+    Promise.all([repsApi.getAll(), businessLinesApi.getAll()])
+      .then(([r, bl]) => { setAllReps(r); setAllBusinessLines(bl); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -741,7 +946,22 @@ export default function RepDetail() {
         repName={rep.name}
         onExport={handleExportDoctors}
         exporting={exporting}
+        onDoctorClick={setSelectedDoctor}
       />
+
+      {/* Doctor edit modal */}
+      {selectedDoctor && (
+        <DoctorEditModal
+          doctor={selectedDoctor}
+          reps={allReps}
+          businessLines={allBusinessLines}
+          onClose={() => setSelectedDoctor(null)}
+          onSaved={(updated) => {
+            setDoctors(prev => prev.map(d => d.id === updated.id ? updated : d));
+            setSelectedDoctor(null);
+          }}
+        />
+      )}
     </div>
   );
 }
