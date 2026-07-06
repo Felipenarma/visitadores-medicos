@@ -120,6 +120,9 @@ VISIT_DATES = [
     "2026-07-15",  # Zona 8 + 9: Biobío / Los Lagos
 ]
 
+# Horarios para las 5 visitas del día
+VISIT_TIMES = ["09:00:00", "10:30:00", "12:00:00", "14:00:00", "15:30:00"]
+
 # ─── 1. Eliminar visitas ya programadas para Angelo desde Jul 7 ───────────────
 print("🗑️  Eliminando visitas previas de Angelo desde Jul 7...")
 try:
@@ -148,7 +151,7 @@ ZONA_LABELS = [
 for day_idx, (date_str, medicos_dia) in enumerate(zip(VISIT_DATES, AGENDA)):
     print(f"📅 {date_str} — {ZONA_LABELS[day_idx]}")
 
-    for med in medicos_dia:
+    for visit_idx, med in enumerate(medicos_dia):
         # Buscar si el médico ya existe
         try:
             results = api_get("/doctors/", {"search": med["name"]})
@@ -194,13 +197,14 @@ for day_idx, (date_str, medicos_dia) in enumerate(zip(VISIT_DATES, AGENDA)):
                 print(f"  ❌ Error creando {med['name']}: {status} — {str(body)[:80]}")
                 continue
 
-        # Programar visita
+        # Programar visita con horario escalonado
+        visit_datetime = f"{date_str}T{VISIT_TIMES[visit_idx]}"
         status, body = api_post("/visits/", {
             "doctor_id":      doctor_id,
             "rep_id":         REP_ID,
-            "scheduled_date": date_str,
+            "scheduled_date": visit_datetime,
             "status":         "scheduled",
-            "notes":          f"Agenda Jun 2026 — {med['city']} — {med['medical_center'] or ''}".strip(" —"),
+            "notes":          f"Agenda Jul 2026 — {med['city']} — {med['medical_center'] or ''}".strip(" —"),
         })
         if status in (200, 201):
             total_visits += 1

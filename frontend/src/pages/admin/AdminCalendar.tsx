@@ -34,14 +34,16 @@ export default function AdminCalendar() {
 
   useEffect(() => { load(); }, [filterRep]);
 
-  const events = visits.map(v => ({
-    id: String(v.id),
-    title: `${v.doctor_name || 'Dr.'} - ${v.rep_name || ''}`,
-    start: v.scheduled_date,
-    backgroundColor: STATUS_COLORS[v.status] || STATUS_COLORS.scheduled,
-    borderColor: STATUS_COLORS[v.status] || STATUS_COLORS.scheduled,
-    extendedProps: { visit: v },
-  }));
+  const events = visits
+    .filter(v => v.status !== 'cancelled')
+    .map(v => ({
+      id: String(v.id),
+      title: `${v.doctor_name || 'Dr.'} - ${v.rep_name || ''}`,
+      start: v.scheduled_date,
+      backgroundColor: STATUS_COLORS[v.status] || STATUS_COLORS.scheduled,
+      borderColor: STATUS_COLORS[v.status] || STATUS_COLORS.scheduled,
+      extendedProps: { visit: v },
+    }));
 
   const handleEventClick = (info: any) => {
     const visit: Visit = info.event.extendedProps.visit;

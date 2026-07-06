@@ -53,14 +53,16 @@ export default function RepCalendar() {
 
   useEffect(() => { load(); }, [user?.rep_id]);
 
-  const events = visits.map(v => ({
-    id: String(v.id),
-    title: v.doctor_name || 'Visita',
-    start: v.scheduled_date,
-    backgroundColor: STATUS_COLORS[v.status],
-    borderColor: STATUS_COLORS[v.status],
-    extendedProps: { visit: v },
-  }));
+  const events = visits
+    .filter(v => v.status !== 'cancelled')
+    .map(v => ({
+      id: String(v.id),
+      title: v.doctor_name || 'Visita',
+      start: v.scheduled_date,
+      backgroundColor: STATUS_COLORS[v.status],
+      borderColor: STATUS_COLORS[v.status],
+      extendedProps: { visit: v },
+    }));
 
   const handleEventClick = async (info: any) => {
     const visit: Visit = info.event.extendedProps.visit;
