@@ -1475,6 +1475,23 @@ def mike_chat(request: MikeChatRequest, db: Session = Depends(get_db)):
     if not api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY no configurada")
 
+    try:
+        return _run_mike_chat(request, db, api_key)
+    except HTTPException:
+        raise
+    except anthropic.AuthenticationError:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY inválida o expirada")
+    except anthropic.RateLimitError:
+        raise HTTPException(status_code=429, detail="Límite de API alcanzado. Intenta en unos segundos.")
+    except anthropic.APIConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"No se pudo conectar con la API de Anthropic: {str(e)}")
+    except anthropic.BadRequestError as e:
+        raise HTTPException(status_code=500, detail=f"Error en la solicitud a la API: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {type(e).__name__}: {str(e)}")
+
+
+def _run_mike_chat(request: MikeChatRequest, db: Session, api_key: str) -> MikeChatResponse:
     client = anthropic.Anthropic(api_key=api_key)
 
     messages = []
@@ -1489,13 +1506,13 @@ def mike_chat(request: MikeChatRequest, db: Session = Depends(get_db)):
     iteration = 0
 
     # Track tool calls and results for chart building
-    tool_calls_results: list[dict] = []
+    tool_calls_results: list = []
     export_url: Optional[str] = None
 
     while iteration < max_iterations:
         iteration += 1
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             system=system,
             tools=MIKE_TOOLS,
