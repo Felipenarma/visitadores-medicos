@@ -162,6 +162,14 @@ export default function RepDoctors() {
     }
   };
 
+  const totalDoctors = doctors.length;
+  const withSales = doctors.filter(d => d.has_sales).length;
+  const withoutSales = totalDoctors - withSales;
+  const pct = totalDoctors > 0 ? Math.round((withSales / totalDoctors) * 100) : 0;
+  const RADIUS = 42;
+  const CIRC = 2 * Math.PI * RADIUS;
+  const dash = (pct / 100) * CIRC;
+
   const filtered = doctors
     .filter(d =>
       (!search || d.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -290,6 +298,54 @@ export default function RepDoctors() {
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre, RUT o centro médico..." className="input pl-9 w-full" />
       </div>
+
+      {/* Gráfico de efectividad */}
+      {!loadingDoctors && totalDoctors > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex items-center gap-6">
+          {/* Donut */}
+          <div className="relative flex-shrink-0">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r={RADIUS} fill="none" stroke="#F3F4F6" strokeWidth="12" />
+              <circle
+                cx="50" cy="50" r={RADIUS} fill="none"
+                stroke={pct >= 60 ? '#10B981' : pct >= 30 ? '#F59E0B' : '#EF4444'}
+                strokeWidth="12"
+                strokeDasharray={`${dash} ${CIRC}`}
+                strokeLinecap="round"
+                transform="rotate(-90 50 50)"
+                style={{ transition: 'stroke-dasharray 0.6s ease' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-xl font-bold text-gray-900">{pct}%</span>
+            </div>
+          </div>
+          {/* Stats */}
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-700 mb-2">Efectividad de cartera</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-gray-600">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
+                  Con prescripción
+                </span>
+                <span className="font-semibold text-gray-900">{withSales}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-gray-600">
+                  <span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" />
+                  Sin prescripción
+                </span>
+                <span className="font-semibold text-gray-900">{withoutSales}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-1.5 mt-1.5">
+                <span className="text-gray-500">Total médicos</span>
+                <span className="font-semibold text-gray-900">{totalDoctors}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-2 mb-4">
