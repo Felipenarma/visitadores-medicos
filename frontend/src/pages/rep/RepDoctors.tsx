@@ -389,9 +389,14 @@ export default function RepDoctors() {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                {doc.business_line_name && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">{doc.business_line_name}</span>
-                )}
+                <div className="flex flex-wrap gap-1 justify-end">
+                  {doc.business_line_name && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">{doc.business_line_name}</span>
+                  )}
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${doc.has_sales ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                    {doc.has_sales ? '✓ Con venta' : 'Sin venta'}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => openEdit(doc)}
