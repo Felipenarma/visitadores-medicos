@@ -12,6 +12,8 @@ export default function RepDoctors() {
   const [doctors, setDoctors] = useState<any[]>([]);
   const [businessLines, setBusinessLines] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [filterBL, setFilterBL] = useState('');
+  const [filterSales, setFilterSales] = useState<'all' | 'con' | 'sin'>('all');
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
@@ -162,9 +164,11 @@ export default function RepDoctors() {
 
   const filtered = doctors
     .filter(d =>
-      !search || d.name.toLowerCase().includes(search.toLowerCase()) ||
+      (!search || d.name.toLowerCase().includes(search.toLowerCase()) ||
       (d.medical_center || '').toLowerCase().includes(search.toLowerCase()) ||
-      (d.rut || '').includes(search)
+      (d.rut || '').includes(search)) &&
+      (!filterBL || String(d.business_line_id) === filterBL) &&
+      (filterSales === 'all' || (filterSales === 'con' ? d.has_sales : !d.has_sales))
     )
     .sort((a, b) => {
       // Vencidas primero, luego por días sin visita descendente
@@ -282,9 +286,43 @@ export default function RepDoctors() {
 
       {/* ── TAB LISTA ── */}
       {activeTab === 'lista' && <>
-      <div className="relative mb-4">
+      <div className="relative mb-3">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre, RUT o centro médico..." className="input pl-9 w-full" />
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <select
+          value={filterBL}
+          onChange={e => setFilterBL(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Todas las líneas</option>
+          {businessLines.map(bl => (
+            <option key={bl.id} value={String(bl.id)}>{bl.name}</option>
+          ))}
+        </select>
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+          {(['all', 'con', 'sin'] as const).map(opt => (
+            <button
+              key={opt}
+              onClick={() => setFilterSales(opt)}
+              className={`px-3 py-1.5 font-medium transition-colors ${filterSales === opt ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              {opt === 'all' ? 'Todas' : opt === 'con' ? 'Con venta' : 'Sin venta'}
+            </button>
+          ))}
+        </div>
+        {(filterBL || filterSales !== 'all') && (
+          <button
+            onClick={() => { setFilterBL(''); setFilterSales('all'); }}
+            className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1 px-2"
+          >
+            <X size={14} /> Limpiar
+          </button>
+        )}
+        <span className="text-sm text-gray-400 self-center ml-auto">{filtered.length} médico{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
       {loadingDoctors ? (
