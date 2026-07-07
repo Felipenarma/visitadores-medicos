@@ -49,7 +49,7 @@ export default function RepDoctors() {
     setLoadingDoctors(true);
     try {
       const [docs, bls] = await Promise.all([
-        doctorsApi.getAll({ rep_id: user.rep_id }),
+        doctorsApi.getAll({ rep_id: user.rep_id, is_active: true }),
         businessLinesApi.getAll(),
       ]);
       setDoctors(docs);
