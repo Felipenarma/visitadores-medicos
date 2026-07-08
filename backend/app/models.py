@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, LargeBinary
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, LargeBinary, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
+
+# Tabla de asociación rep ↔ líneas de negocio
+rep_business_lines = Table(
+    "rep_business_lines",
+    Base.metadata,
+    Column("rep_id", Integer, ForeignKey("medical_reps.id"), primary_key=True),
+    Column("business_line_id", Integer, ForeignKey("business_lines.id"), primary_key=True),
+)
 
 
 class BusinessLine(Base):
@@ -30,6 +38,7 @@ class MedicalRep(Base):
 
     doctors = relationship("Doctor", back_populates="rep")
     visits = relationship("Visit", back_populates="rep")
+    business_lines = relationship("BusinessLine", secondary=rep_business_lines, lazy="selectin")
 
 
 class Doctor(Base):

@@ -17,6 +17,8 @@ export interface MedicalRep {
   is_active: boolean;
   created_at?: string;
   doctor_count?: number;
+  business_lines?: BusinessLine[];
+  business_line_ids?: number[];
 }
 
 export interface Doctor {

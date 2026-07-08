@@ -38,18 +38,20 @@ class MedicalRepBase(BaseModel):
 
 
 class MedicalRepCreate(MedicalRepBase):
-    pass
+    business_line_ids: Optional[List[int]] = []
 
 
 class MedicalRepUpdate(MedicalRepBase):
     name: Optional[str] = None
     email: Optional[str] = None
+    business_line_ids: Optional[List[int]] = None
 
 
 class MedicalRepOut(MedicalRepBase):
     id: int
     created_at: Optional[datetime] = None
     doctor_count: Optional[int] = 0
+    business_lines: Optional[List["BusinessLineOut"]] = []
 
     class Config:
         from_attributes = True

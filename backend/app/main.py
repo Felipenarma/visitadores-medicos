@@ -31,6 +31,7 @@ def run_migrations():
         "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS file_data BYTEA",
         "ALTER TABLE knowledge_entries ADD COLUMN IF NOT EXISTS original_filename VARCHAR(255)",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_rep_targets_rep_month_year ON rep_targets (rep_id, month, year)",
+        "CREATE TABLE IF NOT EXISTS rep_business_lines (rep_id INTEGER REFERENCES medical_reps(id) ON DELETE CASCADE, business_line_id INTEGER REFERENCES business_lines(id) ON DELETE CASCADE, PRIMARY KEY (rep_id, business_line_id))",
     ]
     for stmt in migrations:
         try:
