@@ -89,6 +89,7 @@ def seed_business_lines(db: Session):
         {"name": "Dermatología", "description": "Productos dermatológicos", "color": "#F59E0B"},
         {"name": "Control de Peso", "description": "Soluciones para control de peso", "color": "#EF4444"},
         {"name": "Suero Terapia", "description": "Terapias con sueros", "color": "#3B82F6"},
+        {"name": "Veterinaria", "description": "Productos veterinarios", "color": "#84CC16"},
     ]
     for line_data in default_lines:
         existing = db.query(BusinessLine).filter(BusinessLine.name == line_data["name"]).first()
