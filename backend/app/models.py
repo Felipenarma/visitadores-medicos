@@ -168,6 +168,16 @@ class UserSession(Base):
     rep = relationship("MedicalRep")
 
 
+class MikeMemory(Base):
+    __tablename__ = "mike_memory"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(Text, nullable=False)          # El hecho o conclusión a recordar
+    category = Column(String(50), default="general")  # general, visitador, medico, venta, decision
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class ImageFile(Base):
     __tablename__ = "image_files"
 

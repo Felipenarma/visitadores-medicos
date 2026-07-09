@@ -14,7 +14,7 @@ from email.mime.multipart import MIMEMultipart
 import anthropic
 import openpyxl
 from ..database import get_db
-from ..models import Visit, Doctor, MedicalRep, Sale, BusinessLine
+from ..models import Visit, Doctor, MedicalRep, Sale, BusinessLine, MikeMemory
 from ..schemas import AgentMessage
 
 router = APIRouter(prefix="/api/mike", tags=["mike"])
@@ -295,6 +295,43 @@ MIKE_TOOLS = [
                 "months": {"type": "integer", "description": "Cuántos meses de historial analizar (default: 3)"}
             },
             "required": ["rep_id"]
+        }
+    },
+    {
+        "name": "save_to_memory",
+        "description": "Guarda un hecho, decisión o conclusión importante en la memoria persistente de Mike. Úsala al final de conversaciones relevantes para recordar acuerdos, patrones detectados, cambios de estrategia o cualquier dato importante para futuras sesiones.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "El hecho o conclusión a recordar (ej: 'Angelo tiene 436 médicos activos, 43 reasignados a Marco en julio 2026')"},
+                "category": {
+                    "type": "string",
+                    "enum": ["general", "visitador", "medico", "venta", "decision", "alerta"],
+                    "description": "Categoría del recuerdo"
+                }
+            },
+            "required": ["content"]
+        }
+    },
+    {
+        "name": "get_memories",
+        "description": "Recupera todo lo guardado en la memoria persistente de Mike. Úsala cuando necesites recordar conversaciones anteriores, decisiones pasadas o contexto histórico.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "description": "Filtrar por categoría (opcional)"}
+            }
+        }
+    },
+    {
+        "name": "delete_memory",
+        "description": "Elimina un recuerdo obsoleto o incorrecto de la memoria de Mike.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "integer", "description": "ID del recuerdo a eliminar"}
+            },
+            "required": ["memory_id"]
         }
     },
     {
@@ -1390,6 +1427,44 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "comparacion_equipo": sorted(team_rates, key=lambda x: x["tasa"], reverse=True)
         }
 
+    # ── save_to_memory ────────────────────────────────────────────────────────
+    elif tool_name == "save_to_memory":
+        content  = tool_input.get("content", "").strip()
+        category = tool_input.get("category", "general")
+        if not content:
+            return {"error": "El contenido no puede estar vacío"}
+        mem = MikeMemory(content=content, category=category)
+        db.add(mem)
+        db.commit()
+        db.refresh(mem)
+        return {"success": True, "memory_id": mem.id, "content": mem.content, "category": mem.category}
+
+    # ── get_memories ──────────────────────────────────────────────────────────
+    elif tool_name == "get_memories":
+        category = tool_input.get("category")
+        q = db.query(MikeMemory)
+        if category:
+            q = q.filter(MikeMemory.category == category)
+        mems = q.order_by(MikeMemory.created_at.desc()).all()
+        return {
+            "total": len(mems),
+            "memories": [
+                {"id": m.id, "content": m.content, "category": m.category,
+                 "fecha": m.created_at.strftime("%d/%m/%Y") if m.created_at else ""}
+                for m in mems
+            ]
+        }
+
+    # ── delete_memory ─────────────────────────────────────────────────────────
+    elif tool_name == "delete_memory":
+        mem_id = tool_input.get("memory_id")
+        mem = db.query(MikeMemory).filter(MikeMemory.id == mem_id).first()
+        if not mem:
+            return {"error": f"Recuerdo {mem_id} no encontrado"}
+        db.delete(mem)
+        db.commit()
+        return {"success": True, "deleted_id": mem_id}
+
     # ── assign_business_line_to_doctor ────────────────────────────────────────
     elif tool_name == "assign_business_line_to_doctor":
         doctor_id = tool_input.get("doctor_id")
@@ -1635,7 +1710,14 @@ def _run_mike_chat(request: MikeChatRequest, db: Session, api_key: str) -> MikeC
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": request.message})
 
-    system = MIKE_SYSTEM_PROMPT.format(current_date=datetime.utcnow().strftime("%d/%m/%Y %H:%M"))
+    # Cargar memorias persistentes e inyectarlas en el system prompt
+    memories = db.query(MikeMemory).order_by(MikeMemory.created_at.desc()).limit(30).all()
+    memory_block = ""
+    if memories:
+        lines = [f"[{m.id}|{m.category}] {m.content}" for m in reversed(memories)]
+        memory_block = "\n\n## Memoria persistente (lo que recuerdas de sesiones anteriores)\n" + "\n".join(lines)
+
+    system = MIKE_SYSTEM_PROMPT.format(current_date=datetime.utcnow().strftime("%d/%m/%Y %H:%M")) + memory_block
 
     final_response = ""
     max_iterations = 8
@@ -1767,3 +1849,25 @@ def _run_mike_chat(request: MikeChatRequest, db: Session, api_key: str) -> MikeC
         charts=charts,
         export_url=export_url
     )
+
+
+# ── Memory endpoints ──────────────────────────────────────────────────────────
+
+@router.get("/memory")
+def get_mike_memory(db: Session = Depends(get_db)):
+    mems = db.query(MikeMemory).order_by(MikeMemory.created_at.desc()).all()
+    return [
+        {"id": m.id, "content": m.content, "category": m.category,
+         "created_at": m.created_at.isoformat() if m.created_at else None}
+        for m in mems
+    ]
+
+
+@router.delete("/memory/{memory_id}")
+def delete_mike_memory(memory_id: int, db: Session = Depends(get_db)):
+    mem = db.query(MikeMemory).filter(MikeMemory.id == memory_id).first()
+    if not mem:
+        raise HTTPException(status_code=404, detail="Recuerdo no encontrado")
+    db.delete(mem)
+    db.commit()
+    return {"ok": True}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Send, Bot, User, Loader2, Sparkles, BarChart2, TrendingUp, Users, Activity, Download
+  Send, Bot, User, Loader2, Sparkles, BarChart2, TrendingUp, Users, Activity, Download,
+  Brain, Trash2, ChevronDown, ChevronUp, X
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -35,11 +36,20 @@ interface DisplayMessage extends AgentMessage {
   export_url?: string;
 }
 
+interface Memory {
+  id: number;
+  content: string;
+  category: string;
+  created_at: string;
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const mikeApi = {
   chat: (data: { message: string; conversation_history: AgentMessage[] }) =>
     api.post<MikeApiResponse>(`${BASE}/chat`, data).then(r => r.data),
+  getMemory: () => api.get<Memory[]>(`${BASE}/memory`).then(r => r.data),
+  deleteMemory: (id: number) => api.delete(`${BASE}/memory/${id}`),
 };
 
 // ── Chart component ────────────────────────────────────────────────────────
@@ -88,7 +98,6 @@ function DownloadButton({ exportUrl }: { exportUrl: string }) {
     setDownloading(true);
     setError('');
     try {
-      // exportUrl is relative to /api (e.g. /mike/export/{token})
       const response = await api.get(exportUrl, { responseType: 'blob' });
       const blob = new Blob([response.data as BlobPart], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -136,6 +145,83 @@ function RenderMessage({ content }: { content: string }) {
   );
 }
 
+// ── Memory panel ───────────────────────────────────────────────────────────
+
+const CATEGORY_COLORS: Record<string, string> = {
+  general: 'bg-gray-100 text-gray-600',
+  visitador: 'bg-blue-50 text-blue-700',
+  medico: 'bg-green-50 text-green-700',
+  venta: 'bg-amber-50 text-amber-700',
+  decision: 'bg-violet-50 text-violet-700',
+  alerta: 'bg-red-50 text-red-700',
+};
+
+function MemoryPanel({ onRefresh }: { onRefresh?: () => void }) {
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try { setMemories(await mikeApi.getMemory()); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleDelete = async (id: number) => {
+    await mikeApi.deleteMemory(id);
+    setMemories(prev => prev.filter(m => m.id !== id));
+  };
+
+  return (
+    <div className="mb-3 border border-violet-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-violet-50 hover:bg-violet-100 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-sm font-medium text-violet-700">
+          <Brain size={15} />
+          Memoria de Mike
+          <span className="text-xs bg-violet-200 text-violet-700 px-1.5 py-0.5 rounded-full font-semibold">
+            {memories.length}
+          </span>
+        </div>
+        {open ? <ChevronUp size={15} className="text-violet-400" /> : <ChevronDown size={15} className="text-violet-400" />}
+      </button>
+
+      {open && (
+        <div className="bg-white px-4 py-3 max-h-52 overflow-y-auto space-y-2">
+          {loading ? (
+            <div className="flex justify-center py-3">
+              <Loader2 size={16} className="animate-spin text-violet-400" />
+            </div>
+          ) : memories.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-2">
+              Sin recuerdos aún. Mike guardará automáticamente lo importante de las conversaciones.
+            </p>
+          ) : (
+            memories.map(m => (
+              <div key={m.id} className="flex items-start gap-2 group">
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 mt-0.5 ${CATEGORY_COLORS[m.category] || CATEGORY_COLORS.general}`}>
+                  {m.category}
+                </span>
+                <p className="text-sm text-gray-700 flex-1 leading-snug">{m.content}</p>
+                <button
+                  onClick={() => handleDelete(m.id)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 hover:text-red-400 transition-all flex-shrink-0"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Suggestions ────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
@@ -157,23 +243,18 @@ export default function Mike() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) return JSON.parse(stored) as DisplayMessage[];
-    } catch {
-      // ignore parse errors
-    }
+    } catch { }
     return [];
   });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [memoryKey, setMemoryKey] = useState(0); // para forzar recarga del panel
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Persist messages to localStorage on every change
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    } catch {
-      // ignore storage errors
-    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); }
+    catch { }
   }, [messages]);
 
   useEffect(() => {
@@ -185,7 +266,6 @@ export default function Mike() {
     if (!msg || loading) return;
 
     const userMsg: DisplayMessage = { role: 'user', content: msg };
-    // Build history from current messages for API (only role/content)
     const historyForApi: AgentMessage[] = messages.map(m => ({ role: m.role, content: m.content }));
 
     setMessages(prev => [...prev, userMsg]);
@@ -204,6 +284,8 @@ export default function Mike() {
         export_url: res.export_url ?? undefined,
       };
       setMessages(prev => [...prev, assistantMsg]);
+      // Refrescar panel de memoria por si Mike guardó algo
+      setMemoryKey(k => k + 1);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
       setMessages(prev => [...prev, {
@@ -240,6 +322,9 @@ export default function Mike() {
           <p className="text-gray-500 text-sm">Agente IA de análisis — Narma</p>
         </div>
       </div>
+
+      {/* Memory panel */}
+      <MemoryPanel key={memoryKey} />
 
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto bg-white border border-gray-200 rounded-xl p-4 space-y-4">
@@ -288,8 +373,6 @@ export default function Mike() {
                   }`}>
                     <RenderMessage content={msg.content} />
                   </div>
-
-                  {/* Charts below assistant messages */}
                   {msg.role === 'assistant' && msg.charts && msg.charts.length > 0 && (
                     <div className="space-y-2">
                       {msg.charts.map((chart, ci) => (
@@ -297,8 +380,6 @@ export default function Mike() {
                       ))}
                     </div>
                   )}
-
-                  {/* Download button when export is ready */}
                   {msg.role === 'assistant' && msg.export_url && (
                     <DownloadButton exportUrl={msg.export_url} />
                   )}
@@ -344,10 +425,7 @@ export default function Mike() {
 
       {messages.length > 0 && (
         <div className="mt-2 text-center">
-          <button
-            onClick={handleClear}
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <button onClick={handleClear} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
             Limpiar conversación
           </button>
         </div>
