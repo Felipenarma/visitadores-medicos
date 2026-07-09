@@ -298,6 +298,30 @@ MIKE_TOOLS = [
         }
     },
     {
+        "name": "assign_business_line_to_doctor",
+        "description": "Asigna una línea de negocio a un médico específico. Usa esto cuando el usuario quiera cambiar o establecer la línea de un médico en particular.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "doctor_id": {"type": "integer", "description": "ID del médico"},
+                "business_line_name": {"type": "string", "description": "Nombre de la línea de negocio (ej: 'Hormonas', 'Dermatología', 'Cannabis Medicinal', 'Control de Peso', 'Suero Terapia', 'Veterinaria')"}
+            },
+            "required": ["doctor_id", "business_line_name"]
+        }
+    },
+    {
+        "name": "auto_assign_business_lines",
+        "description": "Asigna automáticamente líneas de negocio a médicos basándose en las categorías de sus prescripciones/ventas. Analiza las ventas de cada médico, determina la categoría dominante y la mapea a la línea de negocio correspondiente. Puede aplicarse a todos los médicos sin línea asignada, o a todos.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "only_without_line": {"type": "boolean", "description": "Si es true (default), solo asigna a médicos que aún no tienen línea. Si es false, reasigna a todos según sus ventas actuales."},
+                "rep_id": {"type": "integer", "description": "Limitar a médicos de un visitador específico (opcional)"},
+                "dry_run": {"type": "boolean", "description": "Si es true, solo muestra qué se asignaría sin hacer cambios (preview). Default: false."}
+            }
+        }
+    },
+    {
         "name": "export_to_excel",
         "description": "Exporta datos a un archivo Excel descargable. Úsalo cuando el usuario pida exportar, descargar o generar un Excel.",
         "input_schema": {
@@ -1364,6 +1388,118 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "tendencia_mensual": by_month,
             "ventas_por_mes": sales_by_month,
             "comparacion_equipo": sorted(team_rates, key=lambda x: x["tasa"], reverse=True)
+        }
+
+    # ── assign_business_line_to_doctor ────────────────────────────────────────
+    elif tool_name == "assign_business_line_to_doctor":
+        doctor_id = tool_input.get("doctor_id")
+        bl_name   = tool_input.get("business_line_name", "")
+
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if not doctor:
+            return {"error": f"Médico {doctor_id} no encontrado"}
+
+        bl = db.query(BusinessLine).filter(BusinessLine.name.ilike(f"%{bl_name}%")).first()
+        if not bl:
+            all_bls = [b.name for b in db.query(BusinessLine).all()]
+            return {"error": f"Línea '{bl_name}' no encontrada. Disponibles: {', '.join(all_bls)}"}
+
+        old_bl = doctor.business_line.name if doctor.business_line else "Sin línea"
+        doctor.business_line_id = bl.id
+        db.commit()
+
+        return {
+            "success": True,
+            "doctor": doctor.name,
+            "linea_anterior": old_bl,
+            "linea_nueva": bl.name
+        }
+
+    # ── auto_assign_business_lines ────────────────────────────────────────────
+    elif tool_name == "auto_assign_business_lines":
+        only_without = tool_input.get("only_without_line", True)
+        rep_id_filter = tool_input.get("rep_id")
+        dry_run = tool_input.get("dry_run", False)
+
+        # Mapeo categoría de venta → nombre de línea de negocio
+        CATEGORY_TO_LINE = {
+            "hormonas": "Hormonas",
+            "dermatología": "Dermatología",
+            "dermatologia": "Dermatología",
+            "control de peso": "Control de Peso",
+            "cannabis medicinal": "Cannabis Medicinal",
+            "suero terapia": "Suero Terapia",
+            "fertilidad": "Hormonas",
+            "pelo": "Dermatología",
+            "producto terminado": "Hormonas",
+            "veterinaria": "Veterinaria",
+        }
+
+        # Precargar líneas de negocio
+        all_bls = {bl.name: bl for bl in db.query(BusinessLine).all()}
+
+        # Médicos a procesar
+        q = db.query(Doctor).filter(Doctor.is_active == True)
+        if only_without:
+            q = q.filter(Doctor.business_line_id == None)
+        if rep_id_filter:
+            q = q.filter(Doctor.rep_id == rep_id_filter)
+        doctors = q.all()
+
+        assigned = []
+        skipped = []
+
+        for doc in doctors:
+            # Contar ventas por categoría para este médico
+            cat_counts = db.query(
+                Sale.categoria, func.count(Sale.id).label("n")
+            ).filter(
+                Sale.doctor_id == doc.id,
+                Sale.categoria != None
+            ).group_by(Sale.categoria).order_by(func.count(Sale.id).desc()).all()
+
+            if not cat_counts:
+                skipped.append({"doctor_id": doc.id, "nombre": doc.name, "razon": "sin ventas registradas"})
+                continue
+
+            # Categoría más frecuente
+            top_cat = cat_counts[0].categoria or ""
+            bl_name = CATEGORY_TO_LINE.get(top_cat.lower())
+
+            if not bl_name:
+                # Intentar match parcial
+                for key, val in CATEGORY_TO_LINE.items():
+                    if key in top_cat.lower():
+                        bl_name = val
+                        break
+
+            if not bl_name or bl_name not in all_bls:
+                skipped.append({"doctor_id": doc.id, "nombre": doc.name, "razon": f"categoría '{top_cat}' sin mapeo"})
+                continue
+
+            bl = all_bls[bl_name]
+            old_bl = doc.business_line.name if doc.business_line else "Sin línea"
+
+            if not dry_run:
+                doc.business_line_id = bl.id
+
+            assigned.append({
+                "doctor_id": doc.id,
+                "nombre": doc.name,
+                "linea_anterior": old_bl,
+                "linea_nueva": bl_name,
+                "categoria_principal": top_cat
+            })
+
+        if not dry_run:
+            db.commit()
+
+        return {
+            "modo": "preview (sin cambios)" if dry_run else "aplicado",
+            "asignados": len(assigned),
+            "omitidos": len(skipped),
+            "detalle_asignados": assigned[:50],
+            "detalle_omitidos": skipped[:20]
         }
 
     return {"error": f"Herramienta desconocida: {tool_name}"}
