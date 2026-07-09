@@ -21,6 +21,7 @@ export default function BusinessLines() {
   const [expandedLine, setExpandedLine] = useState<number | null>(null);
   const [doctorsByLine, setDoctorsByLine] = useState<Record<number, Doctor[]>>({});
   const [loadingDoctors, setLoadingDoctors] = useState<number | null>(null);
+  const [salesFilter, setSalesFilter] = useState<'all' | 'con' | 'sin'>('all');
 
   const load = async () => {
     setLoading(true);
@@ -36,6 +37,7 @@ export default function BusinessLines() {
       return;
     }
     setExpandedLine(line.id);
+    setSalesFilter('all');
     if (doctorsByLine[line.id]) return; // ya cargados
     setLoadingDoctors(line.id);
     try {
@@ -162,23 +164,58 @@ export default function BusinessLines() {
                       <div className="flex justify-center py-4">
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: line.color }} />
                       </div>
-                    ) : doctors.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-3">Sin médicos asignados a esta línea</p>
                     ) : (
-                      <div className="max-h-64 overflow-y-auto space-y-1">
-                        {doctors.map(doc => (
-                          <div key={doc.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-sm">
-                            <Stethoscope size={13} className="text-gray-300 flex-shrink-0" />
-                            <span className="font-medium text-gray-800 flex-1 truncate">{doc.name}</span>
-                            {doc.specialty && (
-                              <span className="text-xs text-gray-400 flex-shrink-0">{doc.specialty}</span>
-                            )}
-                            {doc.rep_name && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{doc.rep_name}</span>
-                            )}
+                      <>
+                        {/* Filtro con/sin venta */}
+                        {doctors.length > 0 && (
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                              {(['all', 'con', 'sin'] as const).map(opt => (
+                                <button
+                                  key={opt}
+                                  onClick={() => setSalesFilter(opt)}
+                                  className={`px-3 py-1.5 font-medium transition-colors ${salesFilter === opt ? 'text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                                  style={salesFilter === opt ? { backgroundColor: line.color } : {}}
+                                >
+                                  {opt === 'all' ? 'Todos' : opt === 'con' ? 'Con venta' : 'Sin venta'}
+                                </button>
+                              ))}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {(() => {
+                                const visible = doctors.filter(d =>
+                                  salesFilter === 'all' || (salesFilter === 'con' ? d.has_sales : !d.has_sales)
+                                ).length;
+                                return `${visible} médico${visible !== 1 ? 's' : ''}`;
+                              })()}
+                            </span>
                           </div>
-                        ))}
-                      </div>
+                        )}
+
+                        {doctors.length === 0 ? (
+                          <p className="text-sm text-gray-400 text-center py-3">Sin médicos asignados a esta línea</p>
+                        ) : (
+                          <div className="max-h-64 overflow-y-auto space-y-1">
+                            {doctors
+                              .filter(d => salesFilter === 'all' || (salesFilter === 'con' ? d.has_sales : !d.has_sales))
+                              .map(doc => (
+                                <div key={doc.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-sm">
+                                  <Stethoscope size={13} className="text-gray-300 flex-shrink-0" />
+                                  <span className="font-medium text-gray-800 flex-1 truncate">{doc.name}</span>
+                                  {doc.specialty && (
+                                    <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">{doc.specialty}</span>
+                                  )}
+                                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${doc.has_sales ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                                    {doc.has_sales ? '✓' : '–'}
+                                  </span>
+                                  {doc.rep_name && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">{doc.rep_name}</span>
+                                  )}
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
