@@ -10,7 +10,9 @@ import type { Visit, Doctor } from '../../types';
 import Modal from '../../components/Modal';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, Search, Phone, Mail, MapPin, Building2, UserCheck } from 'lucide-react';
+import { Plus, Search, Phone, Mail, MapPin, Building2, UserCheck, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { businessLinesApi } from '../../api';
+import type { BusinessLine } from '../../types';
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: '#3B82F6',
@@ -40,6 +42,14 @@ export default function RepCalendar() {
   const [creating, setCreating]       = useState(false);
   const [visitDoctor, setVisitDoctor] = useState<Doctor | null>(null);
   const [assigning, setAssigning]     = useState(false);
+  const [editDoctorOpen, setEditDoctorOpen] = useState(false);
+  const [doctorForm, setDoctorForm] = useState<Partial<Doctor>>({});
+  const [savingDoctor, setSavingDoctor] = useState(false);
+  const [businessLines, setBusinessLines] = useState<BusinessLine[]>([]);
+
+  useEffect(() => {
+    businessLinesApi.getAll().then(setBusinessLines).catch(() => {});
+  }, []);
 
   const load = async () => {
     if (!user?.rep_id) return;
@@ -64,6 +74,18 @@ export default function RepCalendar() {
       extendedProps: { visit: v },
     }));
 
+  const handleSaveDoctor = async () => {
+    if (!visitDoctor) return;
+    setSavingDoctor(true);
+    try {
+      const updated = await doctorsApi.update(visitDoctor.id, doctorForm);
+      setVisitDoctor(updated);
+      setEditDoctorOpen(false);
+      load();
+    } catch { alert('Error al guardar los datos del médico'); }
+    finally { setSavingDoctor(false); }
+  };
+
   const handleEventClick = async (info: any) => {
     const visit: Visit = info.event.extendedProps.visit;
     setSelectedVisit(visit);
@@ -72,6 +94,7 @@ export default function RepCalendar() {
     const timeStr = dateObj.toTimeString().slice(0, 5);
     setForm({ status: visit.status, notes: visit.notes || '', scheduled_date: dateStr, scheduled_time: timeStr });
     setVisitDoctor(null);
+    setEditDoctorOpen(false);
     setEditModalOpen(true);
     // Fetch full doctor info
     if (visit.doctor_id) {
@@ -279,6 +302,99 @@ export default function RepCalendar() {
                     <UserCheck size={15} />
                     {assigning ? 'Asignando…' : visitDoctor.rep_id === user?.rep_id ? '✓ Asignado a mí — Reconfirmar' : 'Asignarme este médico'}
                   </button>
+
+                  {/* Toggle editar médico */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!editDoctorOpen) {
+                        setDoctorForm({
+                          name: visitDoctor.name,
+                          rut: visitDoctor.rut || '',
+                          specialty: visitDoctor.specialty || '',
+                          medical_center: visitDoctor.medical_center || '',
+                          address: visitDoctor.address || '',
+                          city: visitDoctor.city || '',
+                          commune: visitDoctor.commune || '',
+                          phone: visitDoctor.phone || '',
+                          email: visitDoctor.email || '',
+                          notes: visitDoctor.notes || '',
+                          business_line_id: visitDoctor.business_line_id || undefined,
+                        });
+                      }
+                      setEditDoctorOpen(v => !v);
+                    }}
+                    className="mt-1 w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <Edit2 size={14} />
+                    {editDoctorOpen ? 'Cerrar edición' : 'Editar información del médico'}
+                    {editDoctorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {/* Inline doctor edit form */}
+                  {editDoctorOpen && (
+                    <div className="mt-2 pt-3 border-t border-blue-200 space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                          <label className="label text-xs">Nombre</label>
+                          <input className="input w-full text-sm" value={doctorForm.name || ''} onChange={e => setDoctorForm(f => ({ ...f, name: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label text-xs">RUT</label>
+                          <input className="input w-full text-sm" placeholder="12.345.678-9" value={doctorForm.rut || ''} onChange={e => setDoctorForm(f => ({ ...f, rut: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Especialidad</label>
+                          <input className="input w-full text-sm" value={doctorForm.specialty || ''} onChange={e => setDoctorForm(f => ({ ...f, specialty: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="label text-xs">Centro médico</label>
+                          <input className="input w-full text-sm" value={doctorForm.medical_center || ''} onChange={e => setDoctorForm(f => ({ ...f, medical_center: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Teléfono</label>
+                          <input className="input w-full text-sm" value={doctorForm.phone || ''} onChange={e => setDoctorForm(f => ({ ...f, phone: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Email</label>
+                          <input className="input w-full text-sm" type="email" value={doctorForm.email || ''} onChange={e => setDoctorForm(f => ({ ...f, email: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Ciudad</label>
+                          <input className="input w-full text-sm" value={doctorForm.city || ''} onChange={e => setDoctorForm(f => ({ ...f, city: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Comuna</label>
+                          <input className="input w-full text-sm" value={doctorForm.commune || ''} onChange={e => setDoctorForm(f => ({ ...f, commune: e.target.value }))} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="label text-xs">Dirección</label>
+                          <input className="input w-full text-sm" value={doctorForm.address || ''} onChange={e => setDoctorForm(f => ({ ...f, address: e.target.value }))} />
+                        </div>
+                        {businessLines.length > 0 && (
+                          <div className="col-span-2">
+                            <label className="label text-xs">Línea de negocio</label>
+                            <select className="input w-full text-sm" value={doctorForm.business_line_id || ''} onChange={e => setDoctorForm(f => ({ ...f, business_line_id: e.target.value ? Number(e.target.value) : undefined }))}>
+                              <option value="">Sin línea</option>
+                              {businessLines.map(bl => (
+                                <option key={bl.id} value={bl.id}>{bl.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <div className="col-span-2">
+                          <label className="label text-xs">Notas</label>
+                          <textarea className="input w-full text-sm" rows={2} value={doctorForm.notes || ''} onChange={e => setDoctorForm(f => ({ ...f, notes: e.target.value }))} placeholder="Preferencias, horarios, observaciones..." />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditDoctorOpen(false)} className="btn-secondary flex-1 text-sm py-1.5">Cancelar</button>
+                        <button onClick={handleSaveDoctor} disabled={savingDoctor} className="btn-primary flex-1 text-sm py-1.5 disabled:opacity-50">
+                          {savingDoctor ? 'Guardando…' : 'Guardar médico'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="pt-1 border-t border-blue-100">
