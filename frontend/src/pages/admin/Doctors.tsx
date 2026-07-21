@@ -44,7 +44,7 @@ export default function Doctors() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: searchParams.get('search') || '' });
+  const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: searchParams.get('search') || '', has_sales: '' });
   const [exporting, setExporting] = useState(false);
 
   // Historial ventas state
@@ -109,8 +109,11 @@ export default function Doctors() {
         repsApi.getAll(),
         businessLinesApi.getAll(),
       ]);
-      // Filtro cliente: sin visitador asignado
-      setDoctors(filters.rep_id === 'none' ? d.filter((doc: Doctor) => !doc.rep_id) : d);
+      // Filtros cliente
+      let filtered = filters.rep_id === 'none' ? d.filter((doc: Doctor) => !doc.rep_id) : d;
+      if (filters.has_sales === 'true') filtered = filtered.filter((doc: Doctor) => doc.has_sales);
+      if (filters.has_sales === 'false') filtered = filtered.filter((doc: Doctor) => !doc.has_sales);
+      setDoctors(filtered);
       setReps(r);
       setBusinessLines(bl);
     } finally {
@@ -291,6 +294,26 @@ export default function Doctors() {
                 <option value="">Todas las líneas</option>
                 {businessLines.map(bl => <option key={bl.id} value={bl.id}>{bl.name}</option>)}
               </select>
+            </div>
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+              <span className="text-xs text-gray-500 font-medium">Ventas:</span>
+              {(['', 'true', 'false'] as const).map(val => (
+                <button
+                  key={val}
+                  onClick={() => setFilters(f => ({ ...f, has_sales: val }))}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                    filters.has_sales === val
+                      ? val === 'true'
+                        ? 'bg-emerald-500 text-white border-emerald-500'
+                        : val === 'false'
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-gray-700 text-white border-gray-700'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                  }`}
+                >
+                  {val === '' ? 'Todos' : val === 'true' ? 'Con venta' : 'Sin venta'}
+                </button>
+              ))}
             </div>
           </div>
 
