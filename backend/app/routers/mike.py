@@ -29,9 +29,10 @@ Tu rol principal es:
 - Gestionar calendarios y visitas: programar, reagendar y cancelar visitas de cualquier visitador
 - Asignar médicos a visitadores: por línea de productos, especialidad, zona o criterio que decidas
 - Analizar la cartera de médicos (nuevos, ranking, médicos sin visitar, inactivos)
-- Obtener métricas de ventas por período, línea de negocio, visitador o médico
+- Analizar la cartera de pacientes (ranking por volumen, nuevos pacientes, retención, historial por paciente, qué médicos los atienden)
+- Obtener métricas de ventas por período, línea de negocio, visitador, médico o paciente
 - Calcular y revisar comisiones
-- Identificar oportunidades y riesgos: médicos que dejaron de comprar, visitadores con bajo rendimiento, médicos sin asignar
+- Identificar oportunidades y riesgos: médicos que dejaron de comprar, pacientes que no han comprado recientemente, visitadores con bajo rendimiento, médicos sin asignar
 
 Cuando analices el comportamiento de un visitador, examina:
 - Tasa de cumplimiento de visitas (completadas vs programadas)
@@ -359,6 +360,38 @@ MIKE_TOOLS = [
         }
     },
     {
+        "name": "get_patient_analysis",
+        "description": "Analiza la cartera de pacientes: ranking de los que más compran, pacientes nuevos en un período, pacientes que no han comprado en N días (retención), y distribución por producto/categoría. Úsalo cuando el usuario pregunte por pacientes, quiera ver quiénes son los mejores clientes, o detectar pacientes en riesgo de abandono.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "month": {"type": "integer", "description": "Mes (1-12). Si no se indica, usa el mes actual."},
+                "year": {"type": "integer", "description": "Año. Si no se indica, usa el año actual."},
+                "top": {"type": "integer", "description": "Cuántos pacientes mostrar en el ranking (default: 20)"},
+                "analysis_type": {
+                    "type": "string",
+                    "enum": ["ranking", "new_patients", "retention", "by_category"],
+                    "description": "Tipo de análisis: ranking (top pacientes por volumen), new_patients (pacientes nuevos en el período), retention (pacientes que no han comprado en N días), by_category (distribución por categoría de producto)"
+                },
+                "days_without_purchase": {"type": "integer", "description": "Para retention: días sin compra para considerar en riesgo (default: 60)"},
+                "doctor_id": {"type": "integer", "description": "Filtrar pacientes de un médico específico (opcional)"},
+                "rep_id": {"type": "integer", "description": "Filtrar por visitador (opcional)"},
+                "categoria": {"type": "string", "description": "Filtrar por categoría de producto (opcional)"}
+            }
+        }
+    },
+    {
+        "name": "get_patient_detail",
+        "description": "Información completa de un paciente específico: historial de compras, productos que recibe, médicos que lo atienden, evolución mensual de gasto. Úsalo cuando el usuario quiera saber todo sobre un paciente en particular.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rut_paciente": {"type": "string", "description": "RUT del paciente (con o sin guión/puntos)"},
+                "nombre_paciente": {"type": "string", "description": "Nombre parcial del paciente (alternativa al RUT)"}
+            }
+        }
+    },
+    {
         "name": "export_to_excel",
         "description": "Exporta datos a un archivo Excel descargable. Úsalo cuando el usuario pida exportar, descargar o generar un Excel.",
         "input_schema": {
@@ -366,7 +399,7 @@ MIKE_TOOLS = [
             "properties": {
                 "data_type": {
                     "type": "string",
-                    "enum": ["ranking_medicos", "visitadores", "nuevos_medicos", "tendencia_ventas", "comisiones"],
+                    "enum": ["ranking_medicos", "visitadores", "nuevos_medicos", "tendencia_ventas", "comisiones", "ranking_pacientes", "pacientes_nuevos"],
                     "description": "Tipo de datos a exportar"
                 },
                 "month": {"type": "integer", "description": "Mes (1-12). Si no se indica, usa el mes actual."},
@@ -1139,6 +1172,31 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
                 ])
                 rows_written += 1
 
+        elif data_type == "ranking_pacientes":
+            ws.title = "Ranking Pacientes"
+            data = execute_mike_tool("get_patient_analysis", {"month": month, "year": year, "top": 100, "analysis_type": "ranking"}, db)
+            headers = ["Posición", "RUT", "Nombre", "Total Monto", "N° Compras", "Última Compra", "Médico"]
+            style_headers(ws, headers)
+            for row in data.get("ranking", []):
+                ws.append([
+                    row.get("posicion"), row.get("rut"), row.get("nombre"),
+                    row.get("total_monto"), row.get("total_compras"),
+                    row.get("ultima_compra"), row.get("medico")
+                ])
+                rows_written += 1
+
+        elif data_type == "pacientes_nuevos":
+            ws.title = "Pacientes Nuevos"
+            data = execute_mike_tool("get_patient_analysis", {"month": month, "year": year, "analysis_type": "new_patients"}, db)
+            headers = ["RUT", "Nombre", "Primera Compra", "Médico", "Visitador", "Total Mes"]
+            style_headers(ws, headers)
+            for row in data.get("pacientes_nuevos", []):
+                ws.append([
+                    row.get("rut"), row.get("nombre"), row.get("primera_compra"),
+                    row.get("medico"), row.get("visitador"), row.get("total_mes")
+                ])
+                rows_written += 1
+
         # Auto-size columns
         for col in ws.columns:
             max_len = 0
@@ -1577,6 +1635,278 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "detalle_omitidos": skipped[:20]
         }
 
+    # ── get_patient_analysis ──────────────────────────────────────────────────
+    elif tool_name == "get_patient_analysis":
+        month = tool_input.get("month", current_month)
+        year = tool_input.get("year", current_year)
+        top = tool_input.get("top", 20)
+        analysis_type = tool_input.get("analysis_type", "ranking")
+        days_threshold = tool_input.get("days_without_purchase", 60)
+        doctor_id_filter = tool_input.get("doctor_id")
+        rep_id_filter = tool_input.get("rep_id")
+        categoria_filter = tool_input.get("categoria")
+
+        # Base filter for rep/doctor
+        def base_patient_query(db):
+            q = db.query(Sale).filter(Sale.rut_paciente != None, Sale.rut_paciente != "")
+            if doctor_id_filter:
+                q = q.filter(Sale.doctor_id == doctor_id_filter)
+            if rep_id_filter:
+                doc_ids = [d.id for d in db.query(Doctor.id).filter(Doctor.rep_id == rep_id_filter).all()]
+                q = q.filter(Sale.doctor_id.in_(doc_ids))
+            if categoria_filter:
+                q = q.filter(Sale.categoria.ilike(f"%{categoria_filter}%"))
+            return q
+
+        if analysis_type == "ranking":
+            # Top patients by purchase volume this month
+            rows = db.query(
+                Sale.rut_paciente,
+                Sale.nombre_paciente,
+                func.sum(Sale.amount).label("total"),
+                func.count(Sale.id).label("count"),
+                func.max(Sale.sale_date).label("ultima_compra")
+            ).filter(
+                Sale.rut_paciente != None, Sale.rut_paciente != "",
+                extract('month', Sale.sale_date) == month,
+                extract('year', Sale.sale_date) == year
+            )
+            if doctor_id_filter:
+                rows = rows.filter(Sale.doctor_id == doctor_id_filter)
+            if rep_id_filter:
+                doc_ids = [d.id for d in db.query(Doctor.id).filter(Doctor.rep_id == rep_id_filter).all()]
+                rows = rows.filter(Sale.doctor_id.in_(doc_ids))
+            if categoria_filter:
+                rows = rows.filter(Sale.categoria.ilike(f"%{categoria_filter}%"))
+
+            rows = rows.group_by(Sale.rut_paciente, Sale.nombre_paciente
+                                 ).order_by(func.sum(Sale.amount).desc()).limit(top).all()
+
+            result = []
+            for i, r in enumerate(rows):
+                # Get doctor info for this patient this month
+                doctor_row = db.query(Sale.doctor_id).filter(
+                    Sale.rut_paciente == r.rut_paciente,
+                    extract('month', Sale.sale_date) == month,
+                    extract('year', Sale.sale_date) == year
+                ).first()
+                doctor = db.query(Doctor).filter(Doctor.id == doctor_row.doctor_id).first() if doctor_row else None
+                result.append({
+                    "posicion": i + 1,
+                    "rut": r.rut_paciente,
+                    "nombre": r.nombre_paciente,
+                    "total_monto": round(float(r.total or 0), 2),
+                    "total_compras": r.count,
+                    "ultima_compra": r.ultima_compra.strftime("%d/%m/%Y") if r.ultima_compra else None,
+                    "medico": doctor.name if doctor else None
+                })
+            total_patients = db.query(func.count(func.distinct(Sale.rut_paciente))).filter(
+                Sale.rut_paciente != None,
+                extract('month', Sale.sale_date) == month,
+                extract('year', Sale.sale_date) == year
+            ).scalar()
+            return {"periodo": f"{month:02d}/{year}", "total_pacientes_mes": total_patients, "ranking": result}
+
+        elif analysis_type == "new_patients":
+            # Patients whose first purchase ever is in this month/year
+            subq = db.query(
+                Sale.rut_paciente,
+                func.min(Sale.sale_date).label("primera_compra")
+            ).filter(Sale.rut_paciente != None, Sale.rut_paciente != ""
+            ).group_by(Sale.rut_paciente).subquery()
+
+            rows = db.query(
+                subq.c.rut_paciente,
+                Sale.nombre_paciente,
+                subq.c.primera_compra,
+                Sale.doctor_id
+            ).join(Sale, (Sale.rut_paciente == subq.c.rut_paciente) & (Sale.sale_date == subq.c.primera_compra)
+            ).filter(
+                extract('month', subq.c.primera_compra) == month,
+                extract('year', subq.c.primera_compra) == year
+            ).all()
+
+            result = []
+            for r in rows:
+                doctor = db.query(Doctor).filter(Doctor.id == r.doctor_id).first()
+                total_mes = db.query(func.sum(Sale.amount)).filter(
+                    Sale.rut_paciente == r.rut_paciente,
+                    extract('month', Sale.sale_date) == month,
+                    extract('year', Sale.sale_date) == year
+                ).scalar() or 0
+                result.append({
+                    "rut": r.rut_paciente,
+                    "nombre": r.nombre_paciente,
+                    "primera_compra": r.primera_compra.strftime("%d/%m/%Y") if r.primera_compra else None,
+                    "medico": doctor.name if doctor else None,
+                    "visitador": doctor.rep.name if doctor and doctor.rep else None,
+                    "total_mes": round(float(total_mes), 2)
+                })
+            return {"periodo": f"{month:02d}/{year}", "pacientes_nuevos": result, "total": len(result)}
+
+        elif analysis_type == "retention":
+            # Patients who haven't purchased in N days
+            cutoff = now - timedelta(days=days_threshold)
+            # Get all known patients with their last purchase date
+            rows = db.query(
+                Sale.rut_paciente,
+                Sale.nombre_paciente,
+                func.max(Sale.sale_date).label("ultima_compra"),
+                func.count(Sale.id).label("total_historico")
+            ).filter(Sale.rut_paciente != None, Sale.rut_paciente != ""
+            ).group_by(Sale.rut_paciente, Sale.nombre_paciente
+            ).having(func.max(Sale.sale_date) < cutoff
+            ).order_by(func.max(Sale.sale_date).asc()).limit(top).all()
+
+            result = []
+            for r in rows:
+                last_doctor_sale = db.query(Sale).filter(
+                    Sale.rut_paciente == r.rut_paciente
+                ).order_by(Sale.sale_date.desc()).first()
+                doctor = db.query(Doctor).filter(Doctor.id == last_doctor_sale.doctor_id).first() if last_doctor_sale else None
+                dias_sin_compra = (now - r.ultima_compra).days if r.ultima_compra else None
+                result.append({
+                    "rut": r.rut_paciente,
+                    "nombre": r.nombre_paciente,
+                    "ultima_compra": r.ultima_compra.strftime("%d/%m/%Y") if r.ultima_compra else None,
+                    "dias_sin_compra": dias_sin_compra,
+                    "total_compras_historico": r.total_historico,
+                    "ultimo_medico": doctor.name if doctor else None,
+                    "visitador": doctor.rep.name if doctor and doctor.rep else None
+                })
+            return {
+                "criterio_dias": days_threshold,
+                "pacientes_en_riesgo": result,
+                "total": len(result)
+            }
+
+        elif analysis_type == "by_category":
+            # Distribution by product category this month
+            rows = db.query(
+                Sale.categoria,
+                func.count(func.distinct(Sale.rut_paciente)).label("pacientes_unicos"),
+                func.count(Sale.id).label("compras"),
+                func.sum(Sale.amount).label("monto")
+            ).filter(
+                Sale.rut_paciente != None, Sale.rut_paciente != "",
+                extract('month', Sale.sale_date) == month,
+                extract('year', Sale.sale_date) == year
+            ).group_by(Sale.categoria).order_by(func.count(func.distinct(Sale.rut_paciente)).desc()).all()
+
+            return {
+                "periodo": f"{month:02d}/{year}",
+                "por_categoria": [
+                    {
+                        "categoria": r.categoria or "Sin categoría",
+                        "pacientes_unicos": r.pacientes_unicos,
+                        "compras": r.compras,
+                        "monto": round(float(r.monto or 0), 2)
+                    }
+                    for r in rows
+                ]
+            }
+
+        return {"error": "analysis_type no reconocido"}
+
+    # ── get_patient_detail ────────────────────────────────────────────────────
+    elif tool_name == "get_patient_detail":
+        rut = tool_input.get("rut_paciente", "")
+        nombre = tool_input.get("nombre_paciente", "")
+
+        import re
+        rut_norm = re.sub(r'[\.\-\s]', '', rut).upper() if rut else None
+
+        q = db.query(Sale).filter(Sale.rut_paciente != None, Sale.rut_paciente != "")
+        if rut_norm:
+            # Match normalized RUT
+            all_sales_ruts = db.query(Sale.rut_paciente).distinct().all()
+            matching_ruts = [
+                r[0] for r in all_sales_ruts
+                if re.sub(r'[\.\-\s]', '', r[0] or '').upper() == rut_norm
+            ]
+            if matching_ruts:
+                q = q.filter(Sale.rut_paciente.in_(matching_ruts))
+            else:
+                return {"error": f"No se encontraron compras para RUT '{rut}'"}
+        elif nombre:
+            q = q.filter(Sale.nombre_paciente.ilike(f"%{nombre}%"))
+        else:
+            return {"error": "Debes proporcionar rut_paciente o nombre_paciente"}
+
+        sales = q.order_by(Sale.sale_date.desc()).all()
+        if not sales:
+            return {"error": "No se encontraron compras para este paciente"}
+
+        patient_name = sales[0].nombre_paciente
+        patient_rut = sales[0].rut_paciente
+
+        # Monthly trend
+        monthly: dict = {}
+        for s in sales:
+            if s.sale_date:
+                key = s.sale_date.strftime("%Y-%m")
+                monthly.setdefault(key, {"monto": 0, "compras": 0, "productos": set()})
+                monthly[key]["monto"] += float(s.amount or 0)
+                monthly[key]["compras"] += 1
+                if s.product:
+                    monthly[key]["productos"].add(s.product)
+
+        # Doctors attended
+        doctor_ids = {s.doctor_id for s in sales if s.doctor_id}
+        doctors_info = []
+        for did in doctor_ids:
+            doc = db.query(Doctor).filter(Doctor.id == did).first()
+            if doc:
+                doc_sales = [s for s in sales if s.doctor_id == did]
+                doctors_info.append({
+                    "doctor_id": did,
+                    "nombre": doc.name,
+                    "especialidad": doc.specialty,
+                    "visitador": doc.rep.name if doc.rep else None,
+                    "compras": len(doc_sales),
+                    "ultima_consulta": max((s.sale_date for s in doc_sales if s.sale_date), default=None)
+                })
+
+        # Products summary
+        products: dict = {}
+        for s in sales:
+            cat = s.categoria or "Sin categoría"
+            prod = s.product or "Sin producto"
+            key = (cat, prod)
+            products.setdefault(key, {"count": 0, "monto": 0})
+            products[key]["count"] += 1
+            products[key]["monto"] += float(s.amount or 0)
+
+        products_list = sorted(
+            [{"categoria": k[0], "producto": k[1], "compras": v["count"], "monto": round(v["monto"], 2)}
+             for k, v in products.items()],
+            key=lambda x: x["compras"], reverse=True
+        )
+
+        total_lifetime = sum(float(s.amount or 0) for s in sales)
+        monthly_sorted = sorted(
+            [{"mes": k, "monto": round(v["monto"], 2), "compras": v["compras"], "productos": list(v["productos"])}
+             for k, v in monthly.items()],
+            key=lambda x: x["mes"]
+        )
+
+        doctors_info.sort(key=lambda x: x["compras"], reverse=True)
+        for d in doctors_info:
+            if d["ultima_consulta"]:
+                d["ultima_consulta"] = d["ultima_consulta"].strftime("%d/%m/%Y")
+
+        return {
+            "rut": patient_rut,
+            "nombre": patient_name,
+            "total_compras_historico": len(sales),
+            "gasto_total": round(total_lifetime, 2),
+            "primera_compra": min((s.sale_date for s in sales if s.sale_date), default=None).strftime("%d/%m/%Y") if any(s.sale_date for s in sales) else None,
+            "ultima_compra": max((s.sale_date for s in sales if s.sale_date), default=None).strftime("%d/%m/%Y") if any(s.sale_date for s in sales) else None,
+            "medicos_atendidos": doctors_info,
+            "productos": products_list[:20],
+            "evolucion_mensual": monthly_sorted
+        }
+
     return {"error": f"Herramienta desconocida: {tool_name}"}
 
 
@@ -1837,6 +2167,34 @@ def _run_mike_chat(request: MikeChatRequest, db: Session, api_key: str) -> MikeC
                 "data": result["comisiones"],
                 "xKey": "nombre",
                 "yKey": "total_ventas"
+            })
+
+        elif name == "get_patient_analysis":
+            analysis_type = tc["input"].get("analysis_type", "ranking")
+            if analysis_type == "ranking" and "ranking" in result:
+                charts.append({
+                    "type": "bar",
+                    "title": "Ranking de pacientes",
+                    "data": result["ranking"][:15],
+                    "xKey": "nombre",
+                    "yKey": "total_monto"
+                })
+            elif analysis_type == "by_category" and "por_categoria" in result:
+                charts.append({
+                    "type": "bar",
+                    "title": "Pacientes por categoría de producto",
+                    "data": result["por_categoria"],
+                    "xKey": "categoria",
+                    "yKey": "pacientes_unicos"
+                })
+
+        elif name == "get_patient_detail" and "evolucion_mensual" in result:
+            charts.append({
+                "type": "line",
+                "title": f"Evolución de compras — {result.get('nombre', 'Paciente')}",
+                "data": result["evolucion_mensual"],
+                "xKey": "mes",
+                "yKey": "monto"
             })
 
     updated_history = list(request.conversation_history)
