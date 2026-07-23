@@ -214,9 +214,10 @@ export default function Doctors() {
     setExporting(true);
     try {
       const params: any = { is_active: true };
-      if (filters.rep_id) params.rep_id = parseInt(filters.rep_id);
+      if (filters.rep_id && filters.rep_id !== 'none') params.rep_id = parseInt(filters.rep_id);
       if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
       if (filters.search) params.search = filters.search;
+      if (filters.has_sales !== '') params.has_sales = filters.has_sales === 'true';
       const blob = await doctorsApi.exportExcel(params);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

@@ -144,6 +144,7 @@ def export_doctors(
     business_line_id: Optional[int] = Query(None),
     specialty: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
+    has_sales: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -163,6 +164,7 @@ def export_doctors(
 
     doctors = query.all()
 
+    # Filtro has_sales se aplica después de construir sale_count_map
     if search:
         search_lower = search.lower()
         search_rut_norm = re.sub(r'[\.\-\s]', '', search).upper()
@@ -195,6 +197,10 @@ def export_doctors(
         Sale.doctor_id, func.count(Sale.id).label("cnt")
     ).filter(Sale.doctor_id.in_(doctor_ids)).group_by(Sale.doctor_id).all()
     sale_count_map = {r.doctor_id: r.cnt for r in sale_counts_q}
+
+    # Aplicar filtro has_sales
+    if has_sales is not None:
+        doctors = [d for d in doctors if (sale_count_map.get(d.id, 0) > 0) == has_sales]
 
     # Construir filas
     rows = []
