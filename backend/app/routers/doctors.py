@@ -76,6 +76,36 @@ def _enrich_batch(doctors: list, db: Session, sales_month: Optional[int] = None,
     sale_counts = sale_q.group_by(Sale.doctor_id).all()
     sale_count_map = {r.doctor_id: r.cnt for r in sale_counts}
 
+    # Fallback: médicos con RUT pero sin ventas por doctor_id → buscar por rut_doctor
+    # Cubre casos donde las ventas tienen rut_doctor pero doctor_id nulo o desvinculado
+    docs_without_sales = [d for d in doctors if sale_count_map.get(d.id, 0) == 0 and d.rut]
+    if docs_without_sales:
+        def _nr(rut: str) -> str:
+            return re.sub(r'[\.\-\s]', '', rut or '').upper()
+
+        rut_q = db.query(
+            Sale.rut_doctor,
+            func.count(Sale.id).label("cnt")
+        ).filter(Sale.rut_doctor.isnot(None), Sale.rut_doctor != "")
+        if sales_month and sales_year:
+            rut_q = rut_q.filter(
+                extract('month', Sale.sale_date) == sales_month,
+                extract('year', Sale.sale_date) == sales_year
+            )
+        rut_counts = rut_q.group_by(Sale.rut_doctor).all()
+
+        # Mapa: rut normalizado → conteo
+        rut_count_norm = {}
+        for rc in rut_counts:
+            norm = _nr(rc.rut_doctor)
+            if norm:
+                rut_count_norm[norm] = rut_count_norm.get(norm, 0) + rc.cnt
+
+        for doc in docs_without_sales:
+            norm = _nr(doc.rut)
+            if norm and norm in rut_count_norm:
+                sale_count_map[doc.id] = rut_count_norm[norm]
+
     results = []
     for doc in doctors:
         out = DoctorOut.model_validate(doc)
@@ -203,6 +233,25 @@ def export_doctors(
         Sale.doctor_id, func.count(Sale.id).label("cnt")
     ).filter(Sale.doctor_id.in_(doctor_ids)).group_by(Sale.doctor_id).all()
     sale_count_map = {r.doctor_id: r.cnt for r in sale_counts_q}
+
+    # Fallback por rut_doctor (igual que en _enrich_batch)
+    def _nr(rut: str) -> str:
+        return re.sub(r'[\.\-\s]', '', rut or '').upper()
+
+    docs_without_sales = [d for d in doctors if sale_count_map.get(d.id, 0) == 0 and d.rut]
+    if docs_without_sales:
+        rut_counts_q = db.query(
+            Sale.rut_doctor, func.count(Sale.id).label("cnt")
+        ).filter(Sale.rut_doctor.isnot(None), Sale.rut_doctor != "").group_by(Sale.rut_doctor).all()
+        rut_count_norm = {}
+        for rc in rut_counts_q:
+            norm = _nr(rc.rut_doctor)
+            if norm:
+                rut_count_norm[norm] = rut_count_norm.get(norm, 0) + rc.cnt
+        for doc in docs_without_sales:
+            norm = _nr(doc.rut)
+            if norm and norm in rut_count_norm:
+                sale_count_map[doc.id] = rut_count_norm[norm]
 
     # Aplicar filtro has_sales
     if has_sales is not None:
