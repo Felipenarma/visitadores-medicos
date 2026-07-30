@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from typing import List, Optional
 import pandas as pd
 from ..database import get_db
@@ -37,7 +37,7 @@ def enrich_doctor(doctor: Doctor, db: Session) -> DoctorOut:
     return out
 
 
-def _enrich_batch(doctors: list, db: Session) -> List[DoctorOut]:
+def _enrich_batch(doctors: list, db: Session, sales_month: Optional[int] = None, sales_year: Optional[int] = None) -> List[DoctorOut]:
     """Enriquece una lista de médicos con 3 queries batch en lugar de N*3 queries."""
     if not doctors:
         return []
@@ -63,13 +63,17 @@ def _enrich_batch(doctors: list, db: Session) -> List[DoctorOut]:
     ).group_by(Visit.doctor_id).all()
     visit_count_map = {r.doctor_id: r.cnt for r in visit_counts}
 
-    # Tiene ventas por médico (1 query)
-    sale_counts = db.query(
+    # Tiene ventas por médico — filtrado por período si se indica (1 query)
+    sale_q = db.query(
         Sale.doctor_id,
         func.count(Sale.id).label("cnt")
-    ).filter(
-        Sale.doctor_id.in_(doctor_ids)
-    ).group_by(Sale.doctor_id).all()
+    ).filter(Sale.doctor_id.in_(doctor_ids))
+    if sales_month and sales_year:
+        sale_q = sale_q.filter(
+            extract('month', Sale.sale_date) == sales_month,
+            extract('year', Sale.sale_date) == sales_year
+        )
+    sale_counts = sale_q.group_by(Sale.doctor_id).all()
     sale_count_map = {r.doctor_id: r.cnt for r in sale_counts}
 
     results = []
@@ -94,6 +98,8 @@ def get_doctors(
     specialty: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     has_sales: Optional[bool] = Query(None),
+    sales_month: Optional[int] = Query(None),
+    sales_year: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -129,7 +135,7 @@ def get_doctors(
         doctors = [d for d in doctors if _matches(d)]
 
     # Enriquecer con batch queries (evita N+1)
-    enriched = _enrich_batch(doctors, db)
+    enriched = _enrich_batch(doctors, db, sales_month=sales_month, sales_year=sales_year)
 
     # Filtro has_sales sobre datos ya cargados (sin queries extra)
     if has_sales is not None:

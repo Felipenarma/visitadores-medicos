@@ -44,7 +44,10 @@ export default function Doctors() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [filters, setFilters] = useState({ rep_id: '', business_line_id: '', search: searchParams.get('search') || '', has_sales: '' });
+  const [filters, setFilters] = useState({
+    rep_id: '', business_line_id: '', search: searchParams.get('search') || '',
+    has_sales: '', sales_month: '', sales_year: '',
+  });
   const [exporting, setExporting] = useState(false);
 
   // Historial ventas state
@@ -104,6 +107,8 @@ export default function Doctors() {
       if (filters.rep_id && filters.rep_id !== 'none') params.rep_id = parseInt(filters.rep_id);
       if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
       if (filters.search) params.search = filters.search;
+      if (filters.sales_month) params.sales_month = parseInt(filters.sales_month);
+      if (filters.sales_year) params.sales_year = parseInt(filters.sales_year);
       const [d, r, bl] = await Promise.all([
         doctorsApi.getAll(params),
         repsApi.getAll(),
@@ -296,25 +301,64 @@ export default function Doctors() {
                 {businessLines.map(bl => <option key={bl.id} value={bl.id}>{bl.name}</option>)}
               </select>
             </div>
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-              <span className="text-xs text-gray-500 font-medium">Ventas:</span>
-              {(['', 'true', 'false'] as const).map(val => (
-                <button
-                  key={val}
-                  onClick={() => setFilters(f => ({ ...f, has_sales: val }))}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                    filters.has_sales === val
-                      ? val === 'true'
-                        ? 'bg-emerald-500 text-white border-emerald-500'
-                        : val === 'false'
-                        ? 'bg-amber-500 text-white border-amber-500'
-                        : 'bg-gray-700 text-white border-gray-700'
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                  }`}
+            <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+              {/* Filtro con/sin venta */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 font-medium">Ventas:</span>
+                {(['', 'true', 'false'] as const).map(val => (
+                  <button
+                    key={val}
+                    onClick={() => setFilters(f => ({ ...f, has_sales: val }))}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                      filters.has_sales === val
+                        ? val === 'true'
+                          ? 'bg-emerald-500 text-white border-emerald-500'
+                          : val === 'false'
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'bg-gray-700 text-white border-gray-700'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {val === '' ? 'Todos' : val === 'true' ? 'Con venta' : 'Sin venta'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Separador */}
+              <div className="h-4 w-px bg-gray-200" />
+
+              {/* Filtro período */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 font-medium">Período:</span>
+                <select
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  value={filters.sales_month}
+                  onChange={e => setFilters(f => ({ ...f, sales_month: e.target.value }))}
                 >
-                  {val === '' ? 'Todos' : val === 'true' ? 'Con venta' : 'Sin venta'}
-                </button>
-              ))}
+                  <option value="">Todos los meses</option>
+                  {MONTH_NAMES.map((m, i) => (
+                    <option key={i} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+                <select
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  value={filters.sales_year}
+                  onChange={e => setFilters(f => ({ ...f, sales_year: e.target.value }))}
+                >
+                  <option value="">Año</option>
+                  {[2023, 2024, 2025, 2026, 2027].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                {(filters.sales_month || filters.sales_year) && (
+                  <button
+                    onClick={() => setFilters(f => ({ ...f, sales_month: '', sales_year: '' }))}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
