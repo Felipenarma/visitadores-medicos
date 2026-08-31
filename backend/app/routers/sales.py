@@ -682,7 +682,8 @@ def _run_normalization(db: Session) -> dict:
 
     # ── 6. Fusionar doctors duplicados por nombre (mismo nombre, distinto id) ─
     # Cubre el caso donde un doctor sin RUT tiene el mismo nombre que uno con RUT
-    all_docs2 = db.query(Doctor).all()
+    # IMPORTANTE: solo considerar activos — los inactivos del paso 4 no deben volver a mezclarse
+    all_docs2 = db.query(Doctor).filter(Doctor.is_active == True).all()
     name_to_docs: dict = defaultdict(list)
     for d in all_docs2:
         key = d.name.strip().lower()
@@ -692,8 +693,8 @@ def _run_normalization(db: Session) -> dict:
     for name_key, docs in name_to_docs.items():
         if len(docs) <= 1:
             continue
-        # Canónico: el que tiene RUT, o el con más ventas (más alto id)
-        canonical_doc = next((d for d in docs if d.rut), None) or max(docs, key=lambda d: d.id)
+        # Canónico: primero el que tiene RUT y está activo, luego max id
+        canonical_doc = next((d for d in docs if d.rut and d.is_active), None) or max(docs, key=lambda d: d.id)
         for doc in docs:
             if doc.id == canonical_doc.id:
                 continue
