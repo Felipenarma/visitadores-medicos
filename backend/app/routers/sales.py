@@ -334,6 +334,14 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         "categoria_producto": "categoria",       # archivo normalizado
         # Orden
         "n_orden": "n_orden",
+        # ── Formato recetas-por-prescriptor (Narma pharmacy output) ──────────
+        "prescriptor": "nombre_medico",
+        "rut_prescriptor": "rut_doctor",
+        "paciente": "nombre_paciente",
+        "rut_/_pasaporte_paciente": "rut_paciente",
+        "tipo_de_preparacion": "producto",       # Tipo de preparación
+        "monto_facturado": "monto",
+        "fecha_creacionot": "fecha_venta",       # Fecha creación OT
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
@@ -405,10 +413,13 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
                     sale_date = None
 
             date_str = sale_date.strftime("%Y%m%d") if sale_date else "nodate"
-            # Prioridad: N° Cotización > N° Orden > hash compuesto
+            # Prioridad: OT (recetas-por-prescriptor) > N° Cotización > N° Orden > hash compuesto
+            ot_val = clean(row.get("ot", ""))
             ncot = clean(row.get("ncotizacion", ""))
             n_orden = clean(row.get("n_orden", "")) or clean(row.get("norden", ""))
-            if ncot:
+            if ot_val:
+                ext_id = f"ot_{ot_val}"[:200]
+            elif ncot:
                 ext_id = f"cot_{ncot}"[:200]
             elif n_orden:
                 ext_id = f"orden_{n_orden}"[:200]
