@@ -733,11 +733,39 @@ def _run_normalization(db: Session) -> dict:
             rut_synced += 1
     db.commit()
 
+    # ── 8. Enlazar ventas sin doctor_id usando lookup directo en tabla doctors ─
+    # Caso clave: ventas del nuevo formato (recetas-por-prescriptor) que traen
+    # rut_doctor pero no pudieron hacer match durante la carga porque el médico
+    # no tenía RUT guardado en ese momento.
+    active_docs = db.query(Doctor).filter(Doctor.is_active == True).all()
+    rut_doc_map: dict = {}
+    name_doc_map: dict = {}
+    for d in active_docs:
+        nr = _norm_rut(d.rut)
+        if nr:
+            rut_doc_map[nr] = d.id
+        name_doc_map[d.name.strip().lower()] = d.id
+
+    rut_linked = 0
+    name_linked = 0
+    unmatched_sales = db.query(Sale).filter(Sale.doctor_id.is_(None)).all()
+    for s in unmatched_sales:
+        nr = _norm_rut(s.rut_doctor)
+        if nr and nr in rut_doc_map:
+            s.doctor_id = rut_doc_map[nr]
+            rut_linked += 1
+        elif s.doctor_name_raw and s.doctor_name_raw.strip().lower() in name_doc_map:
+            s.doctor_id = name_doc_map[s.doctor_name_raw.strip().lower()]
+            name_linked += 1
+    db.commit()
+
     return {
         "ruts_procesados": len(canonical),
         "ventas_actualizadas": sales_updated,
         "medicos_fusionados": doctors_merged + name_merged,
         "rut_sincronizados": rut_synced,
+        "ventas_enlazadas_por_rut": rut_linked,
+        "ventas_enlazadas_por_nombre": name_linked,
     }
 
 
