@@ -32,6 +32,10 @@ interface RepCommissionItem {
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+const formatCLP = (v: number) => '$' + Math.round(v).toLocaleString('es-CL');
+const formatCLPShort = (v: number) =>
+  v >= 1000000 ? '$' + (v / 1000000).toFixed(1) + 'M' : '$' + Math.round(v / 1000) + 'K';
+
 const CATEGORY_COLORS: Record<string, string> = {
   'Cannabis Medicinal': 'bg-green-100 text-green-700',
   'Hormonas': 'bg-purple-100 text-purple-700',
@@ -79,6 +83,7 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
 
       {/* Stats row */}
       <div className="px-4 pb-3 flex gap-2 flex-wrap">
+        <StatPill label="Monto total" value={formatCLPShort(item.total_amount)} color="bg-emerald-50 text-emerald-700" />
         <StatPill label="Unidades" value={item.sales_count} color="bg-blue-50 text-blue-700" />
         <StatPill label="Médicos activos" value={item.doctors_with_sales} color="bg-indigo-50 text-indigo-700" />
         <StatPill
@@ -121,6 +126,7 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left px-4 py-2 text-gray-500 font-medium">Médico</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium hidden sm:table-cell">Especialidad</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Monto</th>
                       <th className="text-center px-4 py-2 text-gray-500 font-medium">Unidades</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium">Categorías</th>
                     </tr>
@@ -140,6 +146,7 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
                         <td className="px-4 py-2.5 text-gray-500 hidden sm:table-cell">
                           {doc.specialty || <span className="text-gray-300">—</span>}
                         </td>
+                        <td className="px-4 py-2.5 text-right font-medium text-emerald-700">{formatCLP(doc.amount)}</td>
                         <td className="px-4 py-2.5 text-center font-bold text-gray-800">{doc.units}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex flex-wrap gap-1">
@@ -191,6 +198,7 @@ export default function RepCommissions() {
   }, [month, year]);
 
   const totalUnits = data.reduce((s, r) => s + r.sales_count, 0);
+  const totalAmount = data.reduce((s, r) => s + r.total_amount, 0);
   const totalNewDoctors = data.reduce((s, r) => s + r.new_doctors_count, 0);
   const totalDoctors = data.reduce((s, r) => s + r.doctors_with_sales, 0);
 
@@ -200,13 +208,13 @@ export default function RepCommissions() {
 
     // Hoja 1: Resumen por visitador
     const resumenRows = [
-      ['Visitador', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...allCats],
+      ['Visitador', 'Monto Total ($)', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...allCats],
       ...data.map(r => [
-        r.rep_name, r.sales_count, r.doctors_with_sales, r.new_doctors_count,
+        r.rep_name, r.total_amount, r.sales_count, r.doctors_with_sales, r.new_doctors_count,
         ...allCats.map(cat => r.categories[cat] || 0),
       ]),
       [],
-      ['TOTAL', totalUnits, totalDoctors, totalNewDoctors, ...allCats.map(cat => data.reduce((s, r) => s + (r.categories[cat] || 0), 0))],
+      ['TOTAL', totalAmount, totalUnits, totalDoctors, totalNewDoctors, ...allCats.map(cat => data.reduce((s, r) => s + (r.categories[cat] || 0), 0))],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(resumenRows);
     ws1['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, ...allCats.map(() => ({ wch: 18 }))];
@@ -214,17 +222,17 @@ export default function RepCommissions() {
 
     // Hoja 2: Detalle por médico
     const detalleRows = [
-      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Unidades', 'Médico Nuevo', ...allCats],
+      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Monto ($)', 'Unidades', 'Médico Nuevo', ...allCats],
       ...data.flatMap(r =>
         (r.doctors_detail || []).map(d => [
-          r.rep_name, d.doctor_name, d.rut || '', d.specialty || '', d.units,
+          r.rep_name, d.doctor_name, d.rut || '', d.specialty || '', d.amount, d.units,
           d.is_new ? 'Sí' : 'No',
           ...allCats.map(cat => d.categories[cat] || 0),
         ])
       ),
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(detalleRows);
-    ws2['!cols'] = [{ wch: 25 }, { wch: 35 }, { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 14 }, ...allCats.map(() => ({ wch: 18 }))];
+    ws2['!cols'] = [{ wch: 25 }, { wch: 35 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, ...allCats.map(() => ({ wch: 18 }))];
     XLSX.utils.book_append_sheet(wb, ws2, 'Detalle Médicos');
 
     XLSX.writeFile(wb, `Comisiones_${MONTH_NAMES[month - 1]}_${year}.xlsx`);
@@ -279,9 +287,10 @@ export default function RepCommissions() {
           <div className="rounded-xl p-4 text-white shadow-sm" style={{ backgroundColor: '#0F1E2D' }}>
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp size={16} className="opacity-70" />
-              <p className="text-sm opacity-70">Unidades totales del mes</p>
+              <p className="text-sm opacity-70">Venta total del mes</p>
             </div>
-            <p className="text-2xl font-bold">{totalUnits.toLocaleString('es-CL')}</p>
+            <p className="text-2xl font-bold">{formatCLPShort(totalAmount)}</p>
+            <p className="text-xs opacity-50 mt-0.5">{totalUnits.toLocaleString('es-CL')} unidades</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
@@ -323,6 +332,7 @@ export default function RepCommissions() {
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">#</th>
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Visitador</th>
+                    <th className="text-right px-4 py-2.5 text-gray-500 font-medium">Monto total</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Unidades</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos activos</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos nuevos</th>
@@ -334,6 +344,7 @@ export default function RepCommissions() {
                     <tr key={item.rep_id} className={`border-t border-gray-100 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-4 py-3 font-bold text-gray-400">{idx + 1}</td>
                       <td className="px-4 py-3 font-semibold text-gray-900">{item.rep_name}</td>
+                      <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(item.total_amount)}</td>
                       <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{item.sales_count}</td>
                       <td className="px-4 py-3 text-center">{item.doctors_with_sales}</td>
                       <td className="px-4 py-3 text-center">
@@ -354,6 +365,7 @@ export default function RepCommissions() {
                 <tfoot>
                   <tr className="border-t-2 border-gray-200" style={{ backgroundColor: '#E8F4F8' }}>
                     <td colSpan={2} className="px-4 py-3 font-bold text-gray-700">TOTAL</td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(totalAmount)}</td>
                     <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{totalUnits}</td>
                     <td className="px-4 py-3 text-center font-bold text-gray-700">—</td>
                     <td className="px-4 py-3 text-center font-bold text-green-700">{totalNewDoctors}</td>
