@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download } from 'lucide-react';
-import { dashboardApi } from '../../api';
+import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download, UserX, UserCheck } from 'lucide-react';
+import { dashboardApi, repsApi, doctorsApi } from '../../api';
 import * as XLSX from 'xlsx';
 
 interface CategoryBreakdown {
@@ -19,7 +19,7 @@ interface DoctorDetail {
 }
 
 interface RepCommissionItem {
-  rep_id: number;
+  rep_id: number | null;
   rep_name: string;
   doctors_with_sales: number;
   new_doctors: string[];
@@ -52,6 +52,113 @@ function StatPill({ label, value, color }: { label: string; value: string | numb
     <div className={`flex flex-col items-center px-4 py-2 rounded-xl ${color}`}>
       <span className="text-lg font-bold">{value}</span>
       <span className="text-xs opacity-75">{label}</span>
+    </div>
+  );
+}
+
+function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; reps: { id: number; name: string }[]; onAssigned: () => void }) {
+  const [showDoctors, setShowDoctors] = useState(false);
+  const [assigning, setAssigning] = useState<number | null>(null);
+  const [selectedRep, setSelectedRep] = useState<Record<number, string>>({});
+
+  const handleAssign = async (doctorId: number) => {
+    const repId = parseInt(selectedRep[doctorId] || '');
+    if (!repId) return;
+    setAssigning(doctorId);
+    try {
+      await doctorsApi.assignRep(doctorId, repId);
+      onAssigned();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAssigning(null);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-amber-200 shadow-sm overflow-hidden">
+      <div className="p-4 flex items-center gap-4 bg-amber-50">
+        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100">
+          <UserX size={18} className="text-amber-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-amber-900 text-base">Sin visitador asignado</h3>
+          <p className="text-xs text-amber-600">{item.doctors_with_sales} médico(s) con ventas sin rep</p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-2xl font-bold text-amber-700">{item.sales_count.toLocaleString('es-CL')}</p>
+          <p className="text-xs text-amber-500">unidades</p>
+        </div>
+      </div>
+
+      <div className="px-4 pb-3 pt-3 flex gap-2 flex-wrap">
+        <StatPill label="Monto total" value={formatCLPShort(item.total_amount)} color="bg-emerald-50 text-emerald-700" />
+        <StatPill label="Unidades" value={item.sales_count} color="bg-amber-50 text-amber-700" />
+        <StatPill label="Médicos" value={item.doctors_with_sales} color="bg-orange-50 text-orange-700" />
+      </div>
+
+      {item.doctors_detail.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowDoctors(!showDoctors)}
+            className="w-full flex items-center justify-between px-4 py-2.5 border-t border-amber-100 text-sm text-amber-700 hover:bg-amber-50 transition-colors font-medium"
+          >
+            <span className="flex items-center gap-2">
+              <UserCheck size={14} className="text-amber-500" />
+              Asignar visitador a {item.doctors_with_sales} médico(s)
+            </span>
+            {showDoctors ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+
+          {showDoctors && (
+            <div className="border-t border-amber-100">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-amber-50 border-b border-amber-100">
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium">Médico</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Monto</th>
+                      <th className="text-center px-4 py-2 text-gray-500 font-medium">Uds.</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[200px]">Asignar visitador</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {item.doctors_detail.map((doc) => (
+                      <tr key={doc.doctor_id} className="border-t border-gray-50 hover:bg-amber-50 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <span className="font-medium text-gray-800 truncate max-w-[130px] block">{doc.doctor_name}</span>
+                          {doc.rut && <p className="text-gray-400 text-[10px]">{doc.rut}</p>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium text-emerald-700">{formatCLP(doc.amount)}</td>
+                        <td className="px-4 py-2.5 text-center font-bold text-gray-800">{doc.units}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white flex-1"
+                              value={selectedRep[doc.doctor_id] || ''}
+                              onChange={e => setSelectedRep(prev => ({ ...prev, [doc.doctor_id]: e.target.value }))}
+                            >
+                              <option value="">Seleccionar...</option>
+                              {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                            </select>
+                            <button
+                              onClick={() => handleAssign(doc.doctor_id)}
+                              disabled={!selectedRep[doc.doctor_id] || assigning === doc.doctor_id}
+                              className="flex-shrink-0 px-2 py-1 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                            >
+                              {assigning === doc.doctor_id ? '...' : 'Asignar'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -175,6 +282,7 @@ export default function RepCommissions() {
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [reps, setReps] = useState<{ id: number; name: string }[]>([]);
 
   const _now = new Date();
   const isCurrentMonth = month === _now.getMonth() + 1 && year === _now.getFullYear();
@@ -189,17 +297,25 @@ export default function RepCommissions() {
     else setMonth(m => m + 1);
   };
 
-  useEffect(() => {
+  const loadData = () => {
     setLoading(true);
     (dashboardApi as any).getRepCommissions(month, year)
       .then((res: RepCommissionItem[]) => setData(res))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [month, year]);
+  };
+
+  useEffect(() => { loadData(); }, [month, year]);
+  useEffect(() => {
+    repsApi.getAll().then(r => setReps(r.filter((rep: any) => rep.is_active).map((rep: any) => ({ id: rep.id, name: rep.name }))));
+  }, []);
+
+  const repData = data.filter(r => r.rep_id !== null);
+  const unassignedData = data.find(r => r.rep_id === null) || null;
 
   const totalUnits = data.reduce((s, r) => s + r.sales_count, 0);
   const totalAmount = data.reduce((s, r) => s + r.total_amount, 0);
-  const totalNewDoctors = data.reduce((s, r) => s + r.new_doctors_count, 0);
+  const totalNewDoctors = repData.reduce((s, r) => s + r.new_doctors_count, 0);
   const totalDoctors = data.reduce((s, r) => s + r.doctors_with_sales, 0);
 
   const exportExcel = () => {
@@ -340,7 +456,7 @@ export default function RepCommissions() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((item, idx) => (
+                  {repData.map((item, idx) => (
                     <tr key={item.rep_id} className={`border-t border-gray-100 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-4 py-3 font-bold text-gray-400">{idx + 1}</td>
                       <td className="px-4 py-3 font-semibold text-gray-900">{item.rep_name}</td>
@@ -380,11 +496,22 @@ export default function RepCommissions() {
           <div>
             <h2 className="font-semibold text-gray-700 mb-3">Detalle por Visitador</h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {data.map((item, idx) => (
+              {repData.map((item, idx) => (
                 <RepCard key={item.rep_id} item={item} rank={idx + 1} totalUnits={totalUnits} />
               ))}
             </div>
           </div>
+
+          {/* Sin visitador */}
+          {unassignedData && unassignedData.sales_count > 0 && (
+            <div className="mt-4">
+              <h2 className="font-semibold text-amber-700 mb-3 flex items-center gap-2">
+                <UserX size={16} />
+                Ventas sin visitador asignado — asignar para incluir en comisiones
+              </h2>
+              <UnassignedCard item={unassignedData} reps={reps} onAssigned={loadData} />
+            </div>
+          )}
         </>
       )}
     </div>

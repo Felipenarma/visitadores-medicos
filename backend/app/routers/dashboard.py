@@ -909,4 +909,58 @@ def get_rep_commissions(
         })
 
     result.sort(key=lambda x: x["total_amount"], reverse=True)
+
+    # ── Grupo "Sin visitador": médicos activos sin rep_id asignado ────────────
+    unassigned_docs = db.query(Doctor).filter(
+        Doctor.rep_id.is_(None), Doctor.is_active == True
+    ).all()
+    unassigned_ids = [d.id for d in unassigned_docs]
+
+    if unassigned_ids:
+        ua_sales = db.query(Sale).filter(
+            Sale.doctor_id.in_(unassigned_ids),
+            Sale.sale_date >= period_start,
+            Sale.sale_date <= period_end
+        ).all()
+
+        ua_total = sum(safe_float(s.amount) for s in ua_sales)
+        ua_count = len(ua_sales)
+        ua_cat: dict = {}
+        ua_doc_map: dict = {}
+        for s in ua_sales:
+            if not s.doctor_id:
+                continue
+            if s.doctor_id not in ua_doc_map:
+                doc = next((d for d in unassigned_docs if d.id == s.doctor_id), None)
+                ua_doc_map[s.doctor_id] = {
+                    "doctor_id": s.doctor_id,
+                    "doctor_name": doc.name if doc else (s.doctor_name_raw or "Sin nombre"),
+                    "rut": (doc.rut if doc else "") or "",
+                    "specialty": doc.specialty if doc else None,
+                    "is_new": False,
+                    "units": 0, "amount": 0.0, "categories": {},
+                }
+            ua_doc_map[s.doctor_id]["units"] += 1
+            ua_doc_map[s.doctor_id]["amount"] += safe_float(s.amount)
+            cat = s.categoria or "Sin categoría"
+            ua_cat[cat] = ua_cat.get(cat, 0) + 1
+            ua_doc_map[s.doctor_id]["categories"][cat] = ua_doc_map[s.doctor_id]["categories"].get(cat, 0) + 1
+
+        ua_detail = sorted(
+            [{"amount": round(v["amount"], 2), **{k: val for k, val in v.items() if k != "amount"}} for v in ua_doc_map.values()],
+            key=lambda x: x["units"], reverse=True
+        )
+
+        result.append({
+            "rep_id": None,
+            "rep_name": "Sin visitador",
+            "doctors_with_sales": len(ua_doc_map),
+            "new_doctors": [],
+            "new_doctors_count": 0,
+            "total_amount": ua_total,
+            "sales_count": ua_count,
+            "categories": ua_cat,
+            "doctors_detail": ua_detail,
+        })
+
     return result
