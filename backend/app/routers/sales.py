@@ -558,6 +558,15 @@ def delete_upload(upload_id: int, db: Session = Depends(get_db)):
     return {"ok": True, "deleted_upload_id": upload_id}
 
 
+@router.post("/clear-all")
+def clear_all_sales(db: Session = Depends(get_db)):
+    """Elimina TODAS las ventas y uploads. Útil para limpiar datos corruptos antes de re-cargar."""
+    sales_deleted = db.query(Sale).delete()
+    uploads_deleted = db.query(SalesUpload).delete()
+    db.commit()
+    return {"ok": True, "sales_deleted": sales_deleted, "uploads_deleted": uploads_deleted}
+
+
 @router.get("/summary")
 def get_sales_summary(db: Session = Depends(get_db)):
     doctors = db.query(Doctor).filter(Doctor.is_active == True).all()
