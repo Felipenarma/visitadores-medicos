@@ -477,6 +477,19 @@ export default function RepCommissions() {
                       </td>
                     </tr>
                   ))}
+                  {unassignedData && unassignedData.sales_count > 0 && (
+                    <tr className="border-t border-amber-200 bg-amber-50">
+                      <td className="px-4 py-3 text-amber-400">—</td>
+                      <td className="px-4 py-3 font-semibold text-amber-700">Sin visitador</td>
+                      <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(unassignedData.total_amount)}</td>
+                      <td className="px-4 py-3 text-center font-bold text-amber-700">{unassignedData.sales_count}</td>
+                      <td className="px-4 py-3 text-center text-amber-600">{unassignedData.doctors_with_sales}</td>
+                      <td className="px-4 py-3 text-center"><span className="text-gray-300">—</span></td>
+                      <td className="px-4 py-3 text-right text-amber-500 hidden sm:table-cell">
+                        {totalUnits > 0 ? ((unassignedData.sales_count / totalUnits) * 100).toFixed(1) : 0}%
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-200" style={{ backgroundColor: '#E8F4F8' }}>

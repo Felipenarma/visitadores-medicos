@@ -910,29 +910,39 @@ def get_rep_commissions(
 
     result.sort(key=lambda x: x["total_amount"], reverse=True)
 
-    # ── Grupo "Sin visitador": médicos activos sin rep_id asignado ────────────
+    # ── Grupo "Sin visitador": médicos sin rep + ventas sin doctor ───────────
     unassigned_docs = db.query(Doctor).filter(
         Doctor.rep_id.is_(None), Doctor.is_active == True
     ).all()
     unassigned_ids = [d.id for d in unassigned_docs]
 
-    if unassigned_ids:
-        ua_sales = db.query(Sale).filter(
-            Sale.doctor_id.in_(unassigned_ids),
-            Sale.sale_date >= period_start,
-            Sale.sale_date <= period_end
-        ).all()
+    # Sales from doctors without a rep (doctor exists but rep_id is NULL)
+    ua_sales_with_doc = db.query(Sale).filter(
+        Sale.doctor_id.in_(unassigned_ids) if unassigned_ids else False,
+        Sale.sale_date >= period_start,
+        Sale.sale_date <= period_end
+    ).all() if unassigned_ids else []
 
-        ua_total = sum(safe_float(s.amount) for s in ua_sales)
-        ua_count = len(ua_sales)
+    # Sales with no doctor record at all (doctor_id = NULL)
+    ua_sales_orphaned = db.query(Sale).filter(
+        Sale.doctor_id.is_(None),
+        Sale.sale_date >= period_start,
+        Sale.sale_date <= period_end
+    ).all()
+
+    all_ua_sales = ua_sales_with_doc + ua_sales_orphaned
+
+    if all_ua_sales:
+        ua_total = sum(safe_float(s.amount) for s in all_ua_sales)
+        ua_count = len(all_ua_sales)
         ua_cat: dict = {}
         ua_doc_map: dict = {}
-        for s in ua_sales:
-            if not s.doctor_id:
-                continue
-            if s.doctor_id not in ua_doc_map:
+
+        for s in ua_sales_with_doc:
+            key = s.doctor_id
+            if key not in ua_doc_map:
                 doc = next((d for d in unassigned_docs if d.id == s.doctor_id), None)
-                ua_doc_map[s.doctor_id] = {
+                ua_doc_map[key] = {
                     "doctor_id": s.doctor_id,
                     "doctor_name": doc.name if doc else (s.doctor_name_raw or "Sin nombre"),
                     "rut": (doc.rut if doc else "") or "",
@@ -940,11 +950,30 @@ def get_rep_commissions(
                     "is_new": False,
                     "units": 0, "amount": 0.0, "categories": {},
                 }
-            ua_doc_map[s.doctor_id]["units"] += 1
-            ua_doc_map[s.doctor_id]["amount"] += safe_float(s.amount)
+            ua_doc_map[key]["units"] += 1
+            ua_doc_map[key]["amount"] += safe_float(s.amount)
             cat = s.categoria or "Sin categoría"
             ua_cat[cat] = ua_cat.get(cat, 0) + 1
-            ua_doc_map[s.doctor_id]["categories"][cat] = ua_doc_map[s.doctor_id]["categories"].get(cat, 0) + 1
+            ua_doc_map[key]["categories"][cat] = ua_doc_map[key]["categories"].get(cat, 0) + 1
+
+        for s in ua_sales_orphaned:
+            # Use a string key so it doesn't collide with integer doctor_ids
+            raw_name = (s.doctor_name_raw or "Sin nombre").strip()
+            key = f"orphan_{raw_name.lower()}"
+            if key not in ua_doc_map:
+                ua_doc_map[key] = {
+                    "doctor_id": None,
+                    "doctor_name": raw_name,
+                    "rut": s.rut_doctor or "",
+                    "specialty": None,
+                    "is_new": False,
+                    "units": 0, "amount": 0.0, "categories": {},
+                }
+            ua_doc_map[key]["units"] += 1
+            ua_doc_map[key]["amount"] += safe_float(s.amount)
+            cat = s.categoria or "Sin categoría"
+            ua_cat[cat] = ua_cat.get(cat, 0) + 1
+            ua_doc_map[key]["categories"][cat] = ua_doc_map[key]["categories"].get(cat, 0) + 1
 
         ua_detail = sorted(
             [{"amount": round(v["amount"], 2), **{k: val for k, val in v.items() if k != "amount"}} for v in ua_doc_map.values()],
