@@ -992,4 +992,75 @@ def get_rep_commissions(
             "doctors_detail": ua_detail,
         })
 
+    # ── Catch-all: ventas del período no contabilizadas en ningún grupo ───────
+    # Captura ventas de doctores asignados a reps inactivos u otros casos edge
+    accounted_ids = set()
+    for group in result:
+        for d in group.get("doctors_detail", []):
+            if d.get("doctor_id"):
+                accounted_ids.add(d["doctor_id"])
+
+    all_period_sales = db.query(Sale).filter(
+        Sale.sale_date >= period_start,
+        Sale.sale_date <= period_end
+    ).all()
+
+    missed = [s for s in all_period_sales
+              if s.doctor_id not in accounted_ids and s.doctor_id is not None]
+    missed_orphaned = [s for s in all_period_sales if s.doctor_id is None]
+    # orphaned ya fueron incluidos en ua_sales_orphaned si all_ua_sales corrió
+    # Solo agregar los que no estén ya en el grupo sin visitador
+    unaccounted = missed
+    if not all_ua_sales:
+        unaccounted += missed_orphaned
+
+    if unaccounted:
+        uc_total = sum(safe_float(s.amount) for s in unaccounted)
+        uc_count = len(unaccounted)
+        uc_cat: dict = {}
+        uc_doc_map: dict = {}
+        for s in unaccounted:
+            key = s.doctor_id or f"orphan_{(s.doctor_name_raw or '').strip().lower()}"
+            if key not in uc_doc_map:
+                uc_doc_map[key] = {
+                    "doctor_id": s.doctor_id,
+                    "doctor_name": s.doctor_name_raw or "Sin nombre",
+                    "rut": s.rut_doctor or "",
+                    "specialty": None,
+                    "is_new": False,
+                    "units": 0, "amount": 0.0, "categories": {},
+                }
+            uc_doc_map[key]["units"] += 1
+            uc_doc_map[key]["amount"] += safe_float(s.amount)
+            cat = s.categoria or "Sin categoría"
+            uc_cat[cat] = uc_cat.get(cat, 0) + 1
+            uc_doc_map[key]["categories"][cat] = uc_doc_map[key]["categories"].get(cat, 0) + 1
+
+        # Agregar al grupo "Sin visitador" existente si ya existe, o crear nuevo
+        sin_vis = next((g for g in result if g["rep_id"] is None), None)
+        if sin_vis:
+            sin_vis["total_amount"] += uc_total
+            sin_vis["sales_count"] += uc_count
+            sin_vis["doctors_with_sales"] += len(uc_doc_map)
+            for cat, cnt in uc_cat.items():
+                sin_vis["categories"][cat] = sin_vis["categories"].get(cat, 0) + cnt
+            sin_vis["doctors_detail"] += [
+                {"amount": round(v["amount"], 2), **{k: val for k, val in v.items() if k != "amount"}}
+                for v in uc_doc_map.values()
+            ]
+        else:
+            result.append({
+                "rep_id": None,
+                "rep_name": "Sin visitador",
+                "doctors_with_sales": len(uc_doc_map),
+                "new_doctors": [], "new_doctors_count": 0,
+                "total_amount": uc_total,
+                "sales_count": uc_count,
+                "categories": uc_cat,
+                "doctors_detail": [
+                    {"amount": round(v["amount"], 2), **{k: val for k, val in v.items() if k != "amount"}}
+                    for v in uc_doc_map.values()
+                ],
+            })
+
     return result
