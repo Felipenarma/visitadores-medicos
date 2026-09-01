@@ -119,7 +119,12 @@ export default function AdminDashboard() {
     if (chartMonth === 1) { setChartMonth(12); setChartYear(y => y - 1); }
     else setChartMonth(m => m - 1);
   };
+  const _dashNow = new Date();
+  const isChartCurrentMonth = chartMonth === _dashNow.getMonth() + 1 && chartYear === _dashNow.getFullYear();
+  const isSalesCurrentMonth = salesMonth === _dashNow.getMonth() + 1 && salesYear === _dashNow.getFullYear();
+
   const nextMonth = () => {
+    if (isChartCurrentMonth) return;
     if (chartMonth === 12) { setChartMonth(1); setChartYear(y => y + 1); }
     else setChartMonth(m => m + 1);
   };
@@ -129,6 +134,7 @@ export default function AdminDashboard() {
     else setSalesMonth(m => m - 1);
   };
   const nextSalesMonth = () => {
+    if (isSalesCurrentMonth) return;
     if (salesMonth === 12) { setSalesMonth(1); setSalesYear(y => y + 1); }
     else setSalesMonth(m => m + 1);
   };
@@ -289,7 +295,7 @@ export default function AdminDashboard() {
               <span className="text-sm font-medium text-gray-700 min-w-[120px] text-center">
                 {MONTH_NAMES[chartMonth - 1]} {chartYear}
               </span>
-              <button onClick={nextMonth} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <button onClick={nextMonth} disabled={isChartCurrentMonth} className={`p-1.5 rounded-lg transition-colors ${isChartCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100'}`}>
                 <ChevronRight size={18} className="text-gray-600" />
               </button>
             </div>
@@ -443,7 +449,7 @@ export default function AdminDashboard() {
             <span className="text-sm font-medium text-gray-700 min-w-[130px] text-center">
               {MONTH_NAMES[salesMonth - 1]} {salesYear}
             </span>
-            <button onClick={nextSalesMonth} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <button onClick={nextSalesMonth} disabled={isSalesCurrentMonth} className={`p-1.5 rounded-lg transition-colors ${isSalesCurrentMonth ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100'}`}>
               <ChevronRight size={18} className="text-gray-600" />
             </button>
           </div>
@@ -496,7 +502,7 @@ export default function AdminDashboard() {
                   cursor={{ fill: '#f8fafc' }}
                   formatter={(value: number, name: string) => [
                     `${value} unidades`,
-                    name === 'units_current'
+                    (name === 'mes_actual' || name === 'units_current')
                       ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}`
                       : prevMonthLabel()
                   ]}
