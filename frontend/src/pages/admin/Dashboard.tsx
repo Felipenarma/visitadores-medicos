@@ -115,6 +115,24 @@ export default function AdminDashboard() {
   useEffect(() => { loadTracking(trackingDate); }, [trackingDate]);
 
   const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  // Custom tooltip para el comparativo de médicos (evita bug del parámetro 'name' en Recharts)
+  const SalesTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg p-2.5 shadow-sm text-xs">
+        <p className="font-semibold mb-1.5 text-gray-800">{label}</p>
+        {payload.map((entry: any) => (
+          <p key={entry.dataKey} className="mb-0.5" style={{ color: entry.dataKey === 'units_current' ? '#3b82f6' : '#9ca3af' }}>
+            {entry.dataKey === 'units_current'
+              ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}`
+              : prevMonthLabel()
+            }: <span className="font-semibold">{entry.value} uds.</span>
+          </p>
+        ))}
+      </div>
+    );
+  };
   const prevMonth = () => {
     if (chartMonth === 1) { setChartMonth(12); setChartYear(y => y - 1); }
     else setChartMonth(m => m - 1);
@@ -514,16 +532,7 @@ export default function AdminDashboard() {
                   axisLine={false}
                   tickFormatter={(v: string) => v.length > 22 ? v.slice(0, 21) + '…' : v}
                 />
-                <Tooltip
-                  cursor={{ fill: '#f8fafc' }}
-                  formatter={(value: number, _name: string, props: any) => [
-                    `${value} unidades`,
-                    props?.dataKey === 'units_current'
-                      ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}`
-                      : prevMonthLabel()
-                  ]}
-                  labelFormatter={(label: string) => <span className="font-semibold">{label}</span>}
-                />
+                <Tooltip content={<SalesTooltip />} cursor={{ fill: '#f8fafc' }} />
                 <Bar dataKey="units_prev" name="mes_anterior" fill="#d1d5db" radius={[0, 4, 4, 0]} maxBarSize={14} />
                 <Bar dataKey="units_current" name="mes_actual" fill="#3b82f6" radius={[0, 4, 4, 0]} maxBarSize={14} />
               </BarChart>
