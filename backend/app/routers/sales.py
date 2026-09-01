@@ -462,7 +462,10 @@ async def upload_consolidado(
             sale_date = None
             if date_raw:
                 try:
-                    sale_date = pd.to_datetime(date_raw, dayfirst=True).to_pydatetime()
+                    # Si el valor empieza con año (YYYY-MM-DD), parsear como ISO sin dayfirst
+                    _date_str = str(date_raw).strip()
+                    _is_iso = len(_date_str) >= 10 and _date_str[4:5] == '-' and _date_str[7:8] == '-'
+                    sale_date = pd.to_datetime(date_raw, dayfirst=not _is_iso).to_pydatetime()
                     # Limitar al último día del mes de referencia (evita desfase OT/RM entre meses)
                     if _cap_dates and sale_date > _ref_max_date:
                         sale_date = _ref_max_date
