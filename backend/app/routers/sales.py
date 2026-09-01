@@ -388,6 +388,26 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         s = str(val).strip()
         return None if s in ("nan", "None", "", "NaN") else s
 
+    def _parse_monto(val) -> float:
+        """Parsea montos en formato chileno: '78.000' → 78000.0, '1.234,56' → 1234.56"""
+        if val is None:
+            return 0.0
+        s = str(val).strip().replace('$', '').replace('\xa0', '').replace(' ', '')
+        if not s or s in ('nan', 'None', 'NaN', '-', ''):
+            return 0.0
+        if ',' in s:
+            s = s.replace('.', '').replace(',', '.')
+        else:
+            parts = s.split('.')
+            if len(parts) > 2:
+                s = ''.join(parts)
+            elif len(parts) == 2 and len(parts[1]) == 3 and parts[1].isdigit():
+                s = ''.join(parts)
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return 0.0
+
     matched = 0
     new_doctors_count = 0
     duplicates = 0
@@ -414,10 +434,7 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
             amount_raw = row.get("monto", 0)
             date_raw = row.get("fecha_venta", None)
 
-            try:
-                amount = float(amount_raw) if amount_raw else 0.0
-            except (ValueError, TypeError):
-                amount = 0.0
+            amount = _parse_monto(amount_raw)
 
             sale_date = None
             if date_raw:
