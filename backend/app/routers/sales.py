@@ -331,6 +331,10 @@ async def upload_consolidado(
     # Guardar tipo_producto original antes de que sea renombrado a categoria
     if "tipo_producto" in df.columns:
         df["_tipo_producto_raw"] = df["tipo_producto"]
+    # Para archivos recetas-por-prescriptor: rellenar fecha RM/OP vacía con fecha OT
+    if "fecha_creacionrm/op" in df.columns and "fecha_creacionot" in df.columns:
+        df["fecha_creacionrm/op"] = df["fecha_creacionrm/op"].fillna(df["fecha_creacionot"])
+        df = df.drop(columns=["fecha_creacionot"])
     # Preferir fecha_pago (fecha real de pago) sobre fecha_y_hora (creación)
     if "fecha_pago" in df.columns and "fecha_y_hora" in df.columns:
         df = df.drop(columns=["fecha_y_hora"])
