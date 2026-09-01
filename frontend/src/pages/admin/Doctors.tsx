@@ -579,7 +579,7 @@ export default function Doctors() {
                           cursor={{ fill: '#f8fafc' }}
                           formatter={(value: number, name: string) => [
                             `${value} unidades`,
-                            name === 'mes_actual' ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}` : `${prevMonthLabel()} ${salesMonth === 1 ? salesYear - 1 : salesYear}`
+                            (name === 'mes_actual' || name === 'units_current') ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}` : `${prevMonthLabel()} ${salesMonth === 1 ? salesYear - 1 : salesYear}`
                           ]}
                           labelFormatter={(label: string) => <span className="font-semibold">{label}</span>}
                         />
