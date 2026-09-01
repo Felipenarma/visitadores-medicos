@@ -227,7 +227,13 @@ async def upload_sales(file: UploadFile = File(...), db: Session = Depends(get_d
 
 
 @router.post("/upload-consolidado")
-async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_consolidado(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    ref_month: Optional[int] = Form(None),
+    ref_year: Optional[int] = Form(None),
+    db: Session = Depends(get_db)
+):
     """Carga el archivo consolidado de ventas con RUT doctor/paciente y categoría."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No se proporcionó archivo")
@@ -243,15 +249,21 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error al leer archivo: {str(e)}")
 
-    # Extraer mes de referencia del nombre del archivo (ej: "..._2026-08-31_...xlsx" → ago 2026)
-    # Todas las ventas del archivo se limitan a ese mes para evitar desfase de fechas
+    # Mes de referencia: 1) parámetro explícito del form, 2) fecha en nombre de archivo, 3) mes anterior
     import re as _re
-    _ref_date_match = _re.search(r'(\d{4})-(\d{2})-\d{2}', file.filename or "")
-    if _ref_date_match:
-        _ref_year, _ref_month = int(_ref_date_match.group(1)), int(_ref_date_match.group(2))
+    if ref_month and ref_year:
+        _ref_year, _ref_month = ref_year, ref_month
     else:
-        _now = datetime.utcnow()
-        _ref_year, _ref_month = _now.year, _now.month
+        _ref_date_match = _re.search(r'(\d{4})-(\d{2})-\d{2}', file.filename or "")
+        if _ref_date_match:
+            _ref_year, _ref_month = int(_ref_date_match.group(1)), int(_ref_date_match.group(2))
+        else:
+            # Fallback: mes anterior (no el actual, para evitar desfase al subir el 1ro del mes)
+            _now = datetime.utcnow()
+            if _now.month == 1:
+                _ref_year, _ref_month = _now.year - 1, 12
+            else:
+                _ref_year, _ref_month = _now.year, _now.month - 1
     from calendar import monthrange as _monthrange
     _, _ref_last_day = _monthrange(_ref_year, _ref_month)
     _ref_max_date = datetime(_ref_year, _ref_month, _ref_last_day, 23, 59, 59)

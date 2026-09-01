@@ -140,9 +140,11 @@ export const dashboardApi = {
 
 // Consolidated Sales
 export const consolidatedSalesApi = {
-  upload: (file: File) => {
+  upload: (file: File, refMonth?: number, refYear?: number) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (refMonth) formData.append('ref_month', String(refMonth));
+    if (refYear) formData.append('ref_year', String(refYear));
     return api.post('/sales/upload-consolidado', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(r => r.data);

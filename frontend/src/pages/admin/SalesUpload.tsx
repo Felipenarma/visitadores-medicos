@@ -3,6 +3,8 @@ import { Upload, TrendingUp, CheckCircle, AlertCircle, FileText } from 'lucide-r
 import { salesApi, consolidatedSalesApi } from '../../api';
 import type { SalesSummaryItem } from '../../types';
 
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
 export default function SalesUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -11,6 +13,11 @@ export default function SalesUpload() {
   const [summary, setSummary] = useState<SalesSummaryItem[]>([]);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [lastUpload, setLastUpload] = useState<{ id: number; filename: string; upload_date: string; rows_processed: number } | null>(null);
+  const _now = new Date();
+  const _prevMonth = _now.getMonth() === 0 ? 12 : _now.getMonth(); // mes anterior (1-based)
+  const _prevYear = _now.getMonth() === 0 ? _now.getFullYear() - 1 : _now.getFullYear();
+  const [refMonth, setRefMonth] = useState<number>(_prevMonth);
+  const [refYear, setRefYear] = useState<number>(_prevYear);
 
   const loadSummary = async () => {
     setLoadingSummary(true);
@@ -29,7 +36,7 @@ export default function SalesUpload() {
     if (!file) return;
     setUploading(true); setError(''); setResult(null);
     try {
-      const res = await consolidatedSalesApi.upload(file);
+      const res = await consolidatedSalesApi.upload(file, refMonth, refYear);
       setResult(res);
       loadSummary();
       loadLastUpload();
@@ -100,6 +107,30 @@ export default function SalesUpload() {
             }}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
           />
+        </div>
+
+        {/* Mes de referencia */}
+        <div className="mt-4 flex items-center gap-3">
+          <span className="text-sm text-gray-600 font-medium shrink-0">Mes del archivo:</span>
+          <select
+            value={refMonth}
+            onChange={e => setRefMonth(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {MONTH_NAMES.map((m, i) => (
+              <option key={i+1} value={i+1}>{m}</option>
+            ))}
+          </select>
+          <select
+            value={refYear}
+            onChange={e => setRefYear(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {[_prevYear - 1, _prevYear, _now.getFullYear()].map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <span className="text-xs text-gray-400">Las fechas del archivo se limitarán a este mes</span>
         </div>
 
         <div className="flex gap-3 mt-4">
