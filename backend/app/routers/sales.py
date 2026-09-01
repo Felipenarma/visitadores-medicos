@@ -761,6 +761,54 @@ def _run_normalization(db: Session) -> dict:
             name_linked += 1
     db.commit()
 
+    # ── 9. Crear médicos nuevos para ventas que siguen sin doctor_id ──────────
+    # Médicos que están en el archivo de ventas pero no existen en la tabla doctors
+    from collections import defaultdict, Counter
+    still_unmatched = db.query(Sale).filter(Sale.doctor_id.is_(None)).all()
+    doctors_created = 0
+
+    rut_groups: dict = defaultdict(list)
+    name_groups: dict = defaultdict(list)
+    for s in still_unmatched:
+        nr = _norm_rut(s.rut_doctor)
+        if nr:
+            rut_groups[nr].append(s)
+        elif s.doctor_name_raw and s.doctor_name_raw.strip():
+            name_groups[s.doctor_name_raw.strip().lower()].append(s)
+
+    for nr, sales in rut_groups.items():
+        if nr in rut_doc_map:
+            for s in sales:
+                s.doctor_id = rut_doc_map[nr]
+            continue
+        name_counts = Counter(s.doctor_name_raw.strip() for s in sales if s.doctor_name_raw)
+        canon_name = name_counts.most_common(1)[0][0] if name_counts else "Médico sin nombre"
+        raw_rut = next((s.rut_doctor for s in sales if s.rut_doctor), None)
+        new_doc = Doctor(name=canon_name, rut=raw_rut, is_active=True)
+        db.add(new_doc)
+        db.flush()
+        rut_doc_map[nr] = new_doc.id
+        name_doc_map[canon_name.lower()] = new_doc.id
+        for s in sales:
+            s.doctor_id = new_doc.id
+        doctors_created += 1
+
+    for name_key, sales in name_groups.items():
+        if name_key in name_doc_map:
+            for s in sales:
+                s.doctor_id = name_doc_map[name_key]
+            continue
+        canon_name = sales[0].doctor_name_raw.strip()
+        new_doc = Doctor(name=canon_name, is_active=True)
+        db.add(new_doc)
+        db.flush()
+        name_doc_map[name_key] = new_doc.id
+        for s in sales:
+            s.doctor_id = new_doc.id
+        doctors_created += 1
+
+    db.commit()
+
     return {
         "ruts_procesados": len(canonical),
         "ventas_actualizadas": sales_updated,
@@ -768,6 +816,7 @@ def _run_normalization(db: Session) -> dict:
         "rut_sincronizados": rut_synced,
         "ventas_enlazadas_por_rut": rut_linked,
         "ventas_enlazadas_por_nombre": name_linked,
+        "medicos_creados": doctors_created,
     }
 
 
