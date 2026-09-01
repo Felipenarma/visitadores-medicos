@@ -851,6 +851,46 @@ def _run_normalization(db: Session) -> dict:
 
     db.commit()
 
+    # ── 10. Reparar médicos inactivos que aún tienen ventas apuntando a ellos ─
+    # Busca doctores inactivos con ventas vigentes. Si hay un doctor activo con
+    # el mismo RUT → reasigna. Si no → reactiva el doctor inactivo.
+    inactive_with_sales = (
+        db.query(Doctor)
+        .filter(Doctor.is_active == False)
+        .join(Sale, Sale.doctor_id == Doctor.id)
+        .distinct()
+        .all()
+    )
+    reactivated = 0
+    sales_reassigned_step10 = 0
+
+    # Construir mapa RUT→doctor_id de activos
+    active_rut_map: dict = {}
+    for d in db.query(Doctor).filter(Doctor.is_active == True).all():
+        nr = _norm_rut(d.rut)
+        if nr:
+            active_rut_map[nr] = d.id
+
+    for doc in inactive_with_sales:
+        nr = _norm_rut(doc.rut)
+        if nr and nr in active_rut_map:
+            target_id = active_rut_map[nr]
+            if target_id != doc.id:
+                db.query(Sale).filter(Sale.doctor_id == doc.id).update(
+                    {"doctor_id": target_id}, synchronize_session=False
+                )
+                db.query(Visit).filter(Visit.doctor_id == doc.id).update(
+                    {"doctor_id": target_id}, synchronize_session=False
+                )
+                sales_reassigned_step10 += 1
+                db.commit()
+                continue
+        # Sin match activo — reactivar para no perder ventas
+        doc.is_active = True
+        reactivated += 1
+
+    db.commit()
+
     return {
         "ruts_procesados": len(canonical),
         "ventas_actualizadas": sales_updated,
@@ -859,6 +899,8 @@ def _run_normalization(db: Session) -> dict:
         "ventas_enlazadas_por_rut": rut_linked,
         "ventas_enlazadas_por_nombre": name_linked,
         "medicos_creados": doctors_created,
+        "medicos_reactivados": reactivated,
+        "ventas_reasignadas_paso10": sales_reassigned_step10,
     }
 
 
