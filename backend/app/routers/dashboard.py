@@ -629,6 +629,7 @@ def get_rep_sales_trend(
         ).join(Doctor, Sale.doctor_id == Doctor.id)\
          .filter(
              Doctor.rep_id == rep_id,
+             Doctor.is_active == True,
              Sale.sale_date >= start,
              Sale.sale_date <= end
          ).first()
