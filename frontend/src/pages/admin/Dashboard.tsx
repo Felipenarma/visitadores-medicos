@@ -120,11 +120,27 @@ export default function AdminDashboard() {
     else setChartMonth(m => m - 1);
   };
   const _dashNow = new Date();
-  const isChartCurrentMonth = chartMonth === _dashNow.getMonth() + 1 && chartYear === _dashNow.getFullYear();
-  const isSalesCurrentMonth = salesMonth === _dashNow.getMonth() + 1 && salesYear === _dashNow.getFullYear();
+  const _cm = _dashNow.getMonth() + 1;
+  const _cy = _dashNow.getFullYear();
+  // Bloqueado si es el mes actual O cualquier mes futuro
+  const isChartCurrentOrFuture = chartYear > _cy || (chartYear === _cy && chartMonth >= _cm);
+  const isSalesCurrentOrFuture = salesYear > _cy || (salesYear === _cy && salesMonth >= _cm);
+  // Alias para deshabilitar botones
+  const isChartCurrentMonth = isChartCurrentOrFuture;
+  const isSalesCurrentMonth = isSalesCurrentOrFuture;
+
+  // Resetear a mes actual si se quedó en un mes futuro (sesión anterior)
+  useEffect(() => {
+    if (chartYear > _cy || (chartYear === _cy && chartMonth > _cm)) {
+      setChartMonth(_cm); setChartYear(_cy);
+    }
+    if (salesYear > _cy || (salesYear === _cy && salesMonth > _cm)) {
+      setSalesMonth(_cm); setSalesYear(_cy);
+    }
+  }, []);
 
   const nextMonth = () => {
-    if (isChartCurrentMonth) return;
+    if (isChartCurrentOrFuture) return;
     if (chartMonth === 12) { setChartMonth(1); setChartYear(y => y + 1); }
     else setChartMonth(m => m + 1);
   };
@@ -134,7 +150,7 @@ export default function AdminDashboard() {
     else setSalesMonth(m => m - 1);
   };
   const nextSalesMonth = () => {
-    if (isSalesCurrentMonth) return;
+    if (isSalesCurrentOrFuture) return;
     if (salesMonth === 12) { setSalesMonth(1); setSalesYear(y => y + 1); }
     else setSalesMonth(m => m + 1);
   };
@@ -500,9 +516,9 @@ export default function AdminDashboard() {
                 />
                 <Tooltip
                   cursor={{ fill: '#f8fafc' }}
-                  formatter={(value: number, name: string) => [
+                  formatter={(value: number, _name: string, props: any) => [
                     `${value} unidades`,
-                    (name === 'mes_actual' || name === 'units_current')
+                    props?.dataKey === 'units_current'
                       ? `${MONTH_NAMES[salesMonth - 1]} ${salesYear}`
                       : prevMonthLabel()
                   ]}

@@ -150,7 +150,14 @@ export default function Doctors() {
 
   const prevMonthLabel = () => MONTH_NAMES[salesMonth === 1 ? 11 : salesMonth - 2];
   const _now = new Date();
-  const isSalesCurrentMonth = salesMonth === _now.getMonth() + 1 && salesYear === _now.getFullYear();
+  const _dcm = _now.getMonth() + 1;
+  const _dcy = _now.getFullYear();
+  const isSalesCurrentMonth = salesYear > _dcy || (salesYear === _dcy && salesMonth >= _dcm);
+  useEffect(() => {
+    if (salesYear > _dcy || (salesYear === _dcy && salesMonth > _dcm)) {
+      setSalesMonth(_dcm); setSalesYear(_dcy);
+    }
+  }, []);
   const prevSalesMonth = () => { if (salesMonth === 1) { setSalesMonth(12); setSalesYear(y => y - 1); } else setSalesMonth(m => m - 1); };
   const nextSalesMonth = () => { if (isSalesCurrentMonth) return; if (salesMonth === 12) { setSalesMonth(1); setSalesYear(y => y + 1); } else setSalesMonth(m => m + 1); };
 
