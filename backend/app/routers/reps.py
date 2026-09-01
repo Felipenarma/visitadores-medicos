@@ -4,7 +4,7 @@ from sqlalchemy import func
 from typing import List
 from datetime import datetime
 from ..database import get_db
-from ..models import MedicalRep, Doctor, Visit, RepTarget, BusinessLine
+from ..models import MedicalRep, Doctor, Visit, RepTarget, BusinessLine, UserSession, rep_business_lines
 from ..schemas import MedicalRepCreate, MedicalRepUpdate, MedicalRepOut
 
 router = APIRouter(prefix="/api/reps", tags=["reps"])
@@ -111,6 +111,9 @@ def delete_rep(rep_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Visitador no encontrado")
     doctors_updated = db.query(Doctor).filter(Doctor.rep_id == rep_id).update({Doctor.rep_id: None})
     visits_deleted = db.query(Visit).filter(Visit.rep_id == rep_id).delete()
+    db.query(RepTarget).filter(RepTarget.rep_id == rep_id).delete()
+    db.query(UserSession).filter(UserSession.rep_id == rep_id).delete()
+    db.execute(rep_business_lines.delete().where(rep_business_lines.c.rep_id == rep_id))
     db.delete(rep)
     db.commit()
     return {
