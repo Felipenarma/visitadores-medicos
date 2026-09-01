@@ -17,6 +17,47 @@ from ..schemas import DashboardStats, RepStats
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
+@router.get("/debug-sales-total")
+def debug_sales_total(
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Debug: muestra total real de ventas en DB para el período."""
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+    from calendar import monthrange
+    _, last_day = monthrange(year, month)
+    p_start = datetime(year, month, 1)
+    p_end = datetime(year, month, last_day, 23, 59, 59)
+
+    all_sales = db.query(Sale).filter(Sale.sale_date >= p_start, Sale.sale_date <= p_end).all()
+    null_date = db.query(Sale).filter(Sale.sale_date.is_(None)).count()
+    total = sum(safe_float(s.amount) for s in all_sales)
+    zero_amount = sum(1 for s in all_sales if safe_float(s.amount) == 0)
+    null_doctor = sum(1 for s in all_sales if s.doctor_id is None)
+
+    from ..models import Doctor, MedicalRep
+    inactive_rep_ids = [r.id for r in db.query(MedicalRep).filter(MedicalRep.is_active == False).all()]
+    inactive_rep_doctors = db.query(Doctor).filter(Doctor.rep_id.in_(inactive_rep_ids)).all() if inactive_rep_ids else []
+    inactive_rep_doc_ids = {d.id for d in inactive_rep_doctors}
+    inactive_rep_sales = [s for s in all_sales if s.doctor_id in inactive_rep_doc_ids]
+    inactive_rep_total = sum(safe_float(s.amount) for s in inactive_rep_sales)
+
+    return {
+        "period": f"{year}-{month:02d}",
+        "total_sales_in_db": len(all_sales),
+        "total_amount_in_db": round(total, 2),
+        "sales_with_zero_amount": zero_amount,
+        "sales_with_null_doctor": null_doctor,
+        "sales_with_null_date_total": null_date,
+        "inactive_rep_doctors_count": len(inactive_rep_doctors),
+        "sales_under_inactive_reps": len(inactive_rep_sales),
+        "amount_under_inactive_reps": round(inactive_rep_total, 2),
+    }
+
+
 @router.get("/stats", response_model=DashboardStats)
 def get_stats(db: Session = Depends(get_db)):
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
