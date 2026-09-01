@@ -361,7 +361,7 @@ async def upload_consolidado(
         "nombre_usuario": "nombre_paciente",     # archivo normalizado
         # Montos
         "precio_total": "monto", "amount": "monto", "total": "monto",
-        "precio_productos": "monto",
+        "precio_productos": "monto", "monto_pagado": "monto", "monto_cotizado": "monto",
         # Fechas
         "fecha_ingresado": "fecha_venta", "fecha_y_hora": "fecha_venta",
         "fecha": "fecha_venta", "fecha_pago": "fecha_venta",
