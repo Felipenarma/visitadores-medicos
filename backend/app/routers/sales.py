@@ -269,6 +269,15 @@ async def upload_consolidado(
     _, _ref_last_day = _monthrange(_ref_year, _ref_month)
     _ref_max_date = datetime(_ref_year, _ref_month, _ref_last_day, 23, 59, 59)
     _cap_dates = (cap_dates == "true")
+    # Tope global: nunca guardar fechas del mes en curso (siempre incompleto)
+    _now_dt = datetime.utcnow()
+    if _now_dt.month == 1:
+        _global_cap_year, _global_cap_month = _now_dt.year - 1, 12
+    else:
+        _global_cap_year, _global_cap_month = _now_dt.year, _now_dt.month - 1
+    from calendar import monthrange as _mr2
+    _, _global_cap_last = _mr2(_global_cap_year, _global_cap_month)
+    _global_max_date = datetime(_global_cap_year, _global_cap_month, _global_cap_last, 23, 59, 59)
 
     # Normalizar nombres de columnas: minúsculas, sin espacios, sin tildes básicas
     def norm_col(c):
@@ -457,6 +466,8 @@ async def upload_consolidado(
                     # Limitar al último día del mes de referencia (evita desfase OT/RM entre meses)
                     if _cap_dates and sale_date > _ref_max_date:
                         sale_date = _ref_max_date
+                    elif sale_date > _global_max_date:
+                        sale_date = _global_max_date
                 except Exception:
                     sale_date = None
 
