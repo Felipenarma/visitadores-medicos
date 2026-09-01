@@ -341,7 +341,8 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
         "rut_/_pasaporte_paciente": "rut_paciente",
         "tipo_de_preparacion": "producto",       # Tipo de preparación
         "monto_facturado": "monto",
-        "fecha_creacionot": "fecha_venta",       # Fecha creación OT
+        "fecha_creacionrm/op": "fecha_venta",    # Fecha creación RM/OP — fecha de prescripción (prioridad)
+        "fecha_creacionot": "fecha_venta",       # Fecha creación OT — fallback
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
