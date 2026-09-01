@@ -18,6 +18,7 @@ export default function SalesUpload() {
   const _prevYear = _now.getMonth() === 0 ? _now.getFullYear() - 1 : _now.getFullYear();
   const [refMonth, setRefMonth] = useState<number>(_prevMonth);
   const [refYear, setRefYear] = useState<number>(_prevYear);
+  const [capDates, setCapDates] = useState<boolean>(true);
 
   const loadSummary = async () => {
     setLoadingSummary(true);
@@ -36,7 +37,7 @@ export default function SalesUpload() {
     if (!file) return;
     setUploading(true); setError(''); setResult(null);
     try {
-      const res = await consolidatedSalesApi.upload(file, refMonth, refYear);
+      const res = await consolidatedSalesApi.upload(file, refMonth, refYear, capDates);
       setResult(res);
       loadSummary();
       loadLastUpload();
@@ -130,7 +131,16 @@ export default function SalesUpload() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <span className="text-xs text-gray-400">Las fechas del archivo se limitarán a este mes</span>
+          <label className="flex items-center gap-2 cursor-pointer ml-2">
+            <input
+              type="checkbox"
+              checked={capDates}
+              onChange={e => setCapDates(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600"
+            />
+            <span className="text-sm text-gray-600">Limitar fechas a este mes</span>
+          </label>
+          {!capDates && <span className="text-xs text-amber-500 ml-1">Archivo multi-mes</span>}
         </div>
 
         <div className="flex gap-3 mt-4">

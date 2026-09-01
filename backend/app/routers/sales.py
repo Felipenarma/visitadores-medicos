@@ -232,6 +232,7 @@ async def upload_consolidado(
     file: UploadFile = File(...),
     ref_month: Optional[int] = Form(None),
     ref_year: Optional[int] = Form(None),
+    cap_dates: Optional[str] = Form(None),  # "true" para limitar fechas al mes de referencia
     db: Session = Depends(get_db)
 ):
     """Carga el archivo consolidado de ventas con RUT doctor/paciente y categoría."""
@@ -267,6 +268,7 @@ async def upload_consolidado(
     from calendar import monthrange as _monthrange
     _, _ref_last_day = _monthrange(_ref_year, _ref_month)
     _ref_max_date = datetime(_ref_year, _ref_month, _ref_last_day, 23, 59, 59)
+    _cap_dates = (cap_dates == "true")
 
     # Normalizar nombres de columnas: minúsculas, sin espacios, sin tildes básicas
     def norm_col(c):
@@ -453,7 +455,7 @@ async def upload_consolidado(
                 try:
                     sale_date = pd.to_datetime(date_raw, dayfirst=True).to_pydatetime()
                     # Limitar al último día del mes de referencia (evita desfase OT/RM entre meses)
-                    if sale_date > _ref_max_date:
+                    if _cap_dates and sale_date > _ref_max_date:
                         sale_date = _ref_max_date
                 except Exception:
                     sale_date = None
