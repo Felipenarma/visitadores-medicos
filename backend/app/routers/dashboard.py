@@ -836,7 +836,7 @@ def get_rep_commissions(
 
     for rep in reps:
         rep_doctor_ids = [d.id for d in db.query(Doctor).filter(
-            Doctor.rep_id == rep.id, Doctor.is_active == True
+            Doctor.rep_id == rep.id  # incluye doctores inactivos para no perder ventas
         ).all()]
 
         sales_period = db.query(Sale).filter(
@@ -912,7 +912,7 @@ def get_rep_commissions(
 
     # ── Grupo "Sin visitador": médicos sin rep + ventas sin doctor ───────────
     unassigned_docs = db.query(Doctor).filter(
-        Doctor.rep_id.is_(None), Doctor.is_active == True
+        Doctor.rep_id.is_(None)  # incluye doctores inactivos para no perder ventas
     ).all()
     unassigned_ids = [d.id for d in unassigned_docs]
 
