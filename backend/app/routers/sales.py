@@ -243,6 +243,19 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error al leer archivo: {str(e)}")
 
+    # Extraer mes de referencia del nombre del archivo (ej: "..._2026-08-31_...xlsx" → ago 2026)
+    # Todas las ventas del archivo se limitan a ese mes para evitar desfase de fechas
+    import re as _re
+    _ref_date_match = _re.search(r'(\d{4})-(\d{2})-\d{2}', file.filename or "")
+    if _ref_date_match:
+        _ref_year, _ref_month = int(_ref_date_match.group(1)), int(_ref_date_match.group(2))
+    else:
+        _now = datetime.utcnow()
+        _ref_year, _ref_month = _now.year, _now.month
+    from calendar import monthrange as _monthrange
+    _, _ref_last_day = _monthrange(_ref_year, _ref_month)
+    _ref_max_date = datetime(_ref_year, _ref_month, _ref_last_day, 23, 59, 59)
+
     # Normalizar nombres de columnas: minúsculas, sin espacios, sin tildes básicas
     def norm_col(c):
         c = c.lower().strip()
@@ -410,6 +423,9 @@ async def upload_consolidado(background_tasks: BackgroundTasks, file: UploadFile
             if date_raw:
                 try:
                     sale_date = pd.to_datetime(date_raw, dayfirst=True).to_pydatetime()
+                    # Limitar al último día del mes de referencia (evita desfase OT/RM entre meses)
+                    if sale_date > _ref_max_date:
+                        sale_date = _ref_max_date
                 except Exception:
                     sale_date = None
 
