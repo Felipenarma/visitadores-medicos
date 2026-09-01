@@ -672,6 +672,7 @@ export default function RepDetail() {
 
   // Monthly trend state
   const [monthlyTrend, setMonthlyTrend] = useState<{ label: string; completed: number; missed: number; total: number }[]>([]);
+  const [salesTrend, setSalesTrend] = useState<{ label: string; units: number; total_amount: number }[]>([]);
   const [loadingTrend, setLoadingTrend] = useState(false);
 
   const handlePeriodChange = (m: number, y: number) => {
@@ -745,8 +746,11 @@ export default function RepDetail() {
   useEffect(() => {
     if (!id) return;
     setLoadingTrend(true);
-    dashboardApi.getRepMonthlyTrend(Number(id), 6)
-      .then(setMonthlyTrend)
+    Promise.all([
+      dashboardApi.getRepMonthlyTrend(Number(id), 6),
+      (dashboardApi as any).getRepSalesTrend(Number(id), 6),
+    ])
+      .then(([visits, sales]) => { setMonthlyTrend(visits); setSalesTrend(sales); })
       .catch(() => {})
       .finally(() => setLoadingTrend(false));
   }, [id]);
@@ -886,13 +890,13 @@ export default function RepDetail() {
         );
       })()}
 
-      {/* Tendencia mensual — últimos 6 meses */}
-      {(monthlyTrend.length > 0 || loadingTrend) && (
+      {/* Tendencia mensual — unidades vendidas (gráfico principal) */}
+      {(salesTrend.length > 0 || loadingTrend) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-              <TrendingUp size={16} className="text-blue-500" />
-              Tendencia de Visitas — Últimos 6 meses
+              <TrendingUp size={16} className="text-emerald-500" />
+              Unidades Vendidas — Últimos 6 meses
             </h2>
           </div>
           {loadingTrend ? (
@@ -901,20 +905,49 @@ export default function RepDetail() {
             </div>
           ) : (
             <div className="p-4">
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={monthlyTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={salesTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip />
-                  <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="completed" name="Completadas" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                  <Line type="monotone" dataKey="missed" name="Perdidas" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 5 }} />
-                  <Line type="monotone" dataKey="total" name="Total" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+                  <Tooltip formatter={(value: number) => [value.toLocaleString('es-CL'), 'Unidades']} />
+                  <Line type="monotone" dataKey="units" name="Unidades" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
+              {salesTrend.length > 0 && (
+                <div className="mt-2 flex gap-6 px-2 text-xs text-gray-400">
+                  <span>Total período: <span className="font-semibold text-gray-700">{salesTrend.reduce((s, r) => s + r.units, 0).toLocaleString('es-CL')} uds.</span></span>
+                  <span>Venta: <span className="font-semibold text-gray-700">${salesTrend.reduce((s, r) => s + r.total_amount, 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span></span>
+                </div>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tendencia de visitas — últimos 6 meses (secundario) */}
+      {monthlyTrend.length > 0 && !loadingTrend && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+              <TrendingUp size={16} className="text-blue-400" />
+              Tendencia de Visitas — Últimos 6 meses
+            </h2>
+          </div>
+          <div className="p-4">
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={monthlyTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="completed" name="Completadas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="missed" name="Perdidas" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="total" name="Total" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
 

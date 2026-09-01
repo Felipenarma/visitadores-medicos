@@ -600,6 +600,48 @@ def get_rep_monthly_trend(
     return result
 
 
+@router.get("/rep/{rep_id}/sales-trend")
+def get_rep_sales_trend(
+    rep_id: int,
+    months: int = Query(default=6),
+    db: Session = Depends(get_db)
+):
+    """Tendencia mensual de unidades vendidas (recetas) de un visitador en los últimos N meses."""
+    from calendar import monthrange
+
+    now = datetime.utcnow()
+    LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+    result = []
+    for i in range(months - 1, -1, -1):
+        m = now.month - i
+        y = now.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        _, last_day = monthrange(y, m)
+        start = datetime(y, m, 1)
+        end   = datetime(y, m, last_day, 23, 59, 59)
+
+        row = db.query(
+            func.count(Sale.id).label("units"),
+            func.coalesce(func.sum(Sale.amount), 0).label("total_amount")
+        ).join(Doctor, Sale.doctor_id == Doctor.id)\
+         .filter(
+             Doctor.rep_id == rep_id,
+             Sale.sale_date >= start,
+             Sale.sale_date <= end
+         ).first()
+
+        result.append({
+            "month": m, "year": y,
+            "label": LABELS[m - 1],
+            "units": row.units if row else 0,
+            "total_amount": float(row.total_amount) if row else 0.0,
+        })
+    return result
+
+
 @router.get("/rep/{rep_id}/detail")
 def get_rep_detail(
     rep_id: int,

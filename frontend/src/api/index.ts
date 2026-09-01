@@ -128,6 +128,10 @@ export const dashboardApi = {
     api.get<{ month: number; year: number; label: string; completed: number; missed: number; total: number }[]>(
       `/dashboard/rep/${rep_id}/monthly-trend`, { params: { months } }
     ).then(r => r.data),
+  getRepSalesTrend: (rep_id: number, months = 6) =>
+    api.get<{ month: number; year: number; label: string; units: number; total_amount: number }[]>(
+      `/dashboard/rep/${rep_id}/sales-trend`, { params: { months } }
+    ).then(r => r.data),
   getSalesByDoctor: (month: number, year: number, top = 20) =>
     api.get<{ doctor_name: string; rut: string; rep_name: string; units_current: number; units_prev: number; amount_current: number; amount_prev: number }[]>(
       '/dashboard/sales-by-doctor', { params: { month, year, top } }
