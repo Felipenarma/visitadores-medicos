@@ -116,7 +116,7 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-amber-50 border-b border-amber-100">
-                      <th className="text-left px-4 py-2 text-gray-500 font-medium">Médico</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[240px]">Médico</th>
                       <th className="text-right px-4 py-2 text-gray-500 font-medium">Monto</th>
                       <th className="text-center px-4 py-2 text-gray-500 font-medium">Uds.</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[200px]">Asignar visitador</th>
@@ -126,7 +126,7 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
                     {item.doctors_detail.map((doc) => (
                       <tr key={doc.doctor_id} className="border-t border-gray-50 hover:bg-amber-50 transition-colors">
                         <td className="px-4 py-2.5">
-                          <span className="font-medium text-gray-800 truncate max-w-[130px] block">{doc.doctor_name}</span>
+                          <span className="font-medium text-gray-800 block whitespace-normal break-words">{doc.doctor_name}</span>
                           {doc.rut && <p className="text-gray-400 text-[10px]">{doc.rut}</p>}
                         </td>
                         <td className="px-4 py-2.5 text-right font-medium text-emerald-700">{formatCLP(doc.amount)}</td>
@@ -231,7 +231,7 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-4 py-2 text-gray-500 font-medium">Médico</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[220px]">Médico</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium hidden sm:table-cell">Especialidad</th>
                       <th className="text-right px-4 py-2 text-gray-500 font-medium">Monto</th>
                       <th className="text-center px-4 py-2 text-gray-500 font-medium">Unidades</th>
@@ -242,8 +242,8 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
                     {item.doctors_detail.map((doc) => (
                       <tr key={doc.doctor_id} className="border-t border-gray-50 hover:bg-blue-50 transition-colors">
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-800 truncate max-w-[130px]">{doc.doctor_name}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-800 whitespace-normal break-words">{doc.doctor_name}</span>
                             {doc.is_new && (
                               <span className="flex-shrink-0 text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NUEVO</span>
                             )}
