@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download, UserX, UserCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download, UserX, UserCheck, Search, X } from 'lucide-react';
 import { dashboardApi, repsApi, doctorsApi } from '../../api';
 import * as XLSX from 'xlsx';
 
@@ -60,6 +60,14 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
   const [showDoctors, setShowDoctors] = useState(false);
   const [assigning, setAssigning] = useState<number | null>(null);
   const [selectedRep, setSelectedRep] = useState<Record<number, string>>({});
+  const [docSearch, setDocSearch] = useState('');
+
+  const filteredDoctors = docSearch.trim()
+    ? item.doctors_detail.filter(doc => {
+        const q = docSearch.trim().toLowerCase();
+        return doc.doctor_name.toLowerCase().includes(q) || (doc.rut || '').toLowerCase().includes(q);
+      })
+    : item.doctors_detail;
 
   const handleAssign = async (doctorId: number) => {
     const repId = parseInt(selectedRep[doctorId] || '');
@@ -112,6 +120,33 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
 
           {showDoctors && (
             <div className="border-t border-amber-100">
+              {item.doctors_detail.length > 5 && (
+                <div className="px-4 py-2.5 bg-amber-50/50 border-b border-amber-100">
+                  <div className="relative max-w-xs">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-amber-400" />
+                    <input
+                      type="text"
+                      value={docSearch}
+                      onChange={e => setDocSearch(e.target.value)}
+                      placeholder="Buscar médico por nombre o RUT..."
+                      className="w-full text-xs border border-amber-200 rounded-lg pl-8 pr-7 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    />
+                    {docSearch && (
+                      <button
+                        onClick={() => setDocSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-400 hover:text-amber-600"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {docSearch && (
+                    <p className="text-[11px] text-amber-600 mt-1.5">
+                      {filteredDoctors.length} de {item.doctors_detail.length} médico(s)
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -123,7 +158,7 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
                     </tr>
                   </thead>
                   <tbody>
-                    {item.doctors_detail.map((doc) => (
+                    {filteredDoctors.map((doc) => (
                       <tr key={doc.doctor_id} className="border-t border-gray-50 hover:bg-amber-50 transition-colors">
                         <td className="px-4 py-2.5">
                           <span className="font-medium text-gray-800 block whitespace-normal break-words">{doc.doctor_name}</span>
@@ -152,6 +187,13 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
                         </td>
                       </tr>
                     ))}
+                    {filteredDoctors.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="text-center py-6 text-amber-400">
+                          No se encontraron médicos con "{docSearch}"
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
