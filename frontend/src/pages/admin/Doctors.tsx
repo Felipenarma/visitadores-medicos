@@ -45,7 +45,7 @@ export default function Doctors() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useState({
-    rep_id: '', business_line_id: '', search: searchParams.get('search') || '',
+    rep_id: searchParams.get('rep') === 'none' ? 'none' : '', business_line_id: '', search: searchParams.get('search') || '',
     has_sales: '', sales_month: '', sales_year: '',
   });
   const [exporting, setExporting] = useState(false);
@@ -139,10 +139,11 @@ export default function Doctors() {
     finally { setLoadingSales(false); }
   };
 
-  // Si viene con ?search= desde el buscador global, limpiar el param de la URL
+  // Si viene con ?search= o ?rep=none desde otra pantalla, limpiar el param de la URL
   useEffect(() => {
     const q = searchParams.get('search');
-    if (q) setSearchParams({}, { replace: true });
+    const rep = searchParams.get('rep');
+    if (q || rep) setSearchParams({}, { replace: true });
   }, []);
 
   useEffect(() => { load(); }, [filters]);
@@ -477,6 +478,14 @@ export default function Doctors() {
                         <td className="py-3 px-4">
                           <div className="font-medium text-gray-900 group-hover:text-blue-700 flex items-center gap-1.5">
                             {doc.name}
+                            {doc.created_from === 'auto_import' && (
+                              <span
+                                className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0"
+                                title="Ficha creada automáticamente desde una carga de ventas (prescriptor sin ficha previa en el CRM)"
+                              >
+                                Auto
+                              </span>
+                            )}
                             <Edit2 size={12} className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                           </div>
                         </td>

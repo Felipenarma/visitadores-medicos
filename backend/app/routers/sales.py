@@ -394,7 +394,9 @@ async def upload_consolidado(
     # Usamos RUT normalizado como clave para que "18655133-8" y "186551338" sean iguales
     existing_doctors_by_rut: dict = {}
     existing_doctors_by_name: dict = {}
+    doctors_by_id: dict = {}
     for doc in db.query(Doctor).all():
+        doctors_by_id[doc.id] = doc
         if doc.rut:
             nr = _norm_rut(doc.rut)
             if nr:
@@ -437,6 +439,7 @@ async def upload_consolidado(
 
     matched = 0
     new_doctors_count = 0
+    new_doctors_detail: list = []
     duplicates = 0
     sales_to_add = []
 
@@ -508,20 +511,27 @@ async def upload_consolidado(
             if rut_doc_norm and rut_doc_norm in existing_doctors_by_rut:
                 doctor_id = existing_doctors_by_rut[rut_doc_norm]
                 matched += 1
+                # Deduplicación: mismo RUT pero nombre más completo en el archivo → completar ficha
+                if doctor_name:
+                    existing_doc_obj = doctors_by_id.get(doctor_id)
+                    if existing_doc_obj and len(doctor_name.strip()) > len((existing_doc_obj.name or "").strip()):
+                        existing_doc_obj.name = doctor_name.strip()
             elif doctor_name and doctor_name.strip().lower() in existing_doctors_by_name:
                 doctor_id = existing_doctors_by_name[doctor_name.strip().lower()]
                 matched += 1
             elif doctor_name:
-                # Crear médico nuevo sin flush en el loop
-                new_doc = Doctor(name=doctor_name, rut=rut_doc, is_active=True)
+                # Prescriptor sin ficha en el CRM: crear ficha automáticamente, sin visitador ni línea asignada
+                new_doc = Doctor(name=doctor_name, rut=rut_doc, is_active=True, created_from="auto_import")
                 db.add(new_doc)
                 db.flush()
                 db.refresh(new_doc)
                 doctor_id = new_doc.id
+                doctors_by_id[doctor_id] = new_doc
                 if rut_doc_norm:
                     existing_doctors_by_rut[rut_doc_norm] = doctor_id
                 existing_doctors_by_name[doctor_name.strip().lower()] = doctor_id
                 new_doctors_count += 1
+                new_doctors_detail.append({"name": doctor_name.strip(), "rut": rut_doc or None})
                 matched += 1
 
             sales_to_add.append(Sale(
@@ -554,12 +564,22 @@ async def upload_consolidado(
     # Normalización automática en background (no bloquea la respuesta)
     background_tasks.add_task(_run_normalization, db)
 
+    new_doctors_alert = None
+    if new_doctors_count > 0:
+        new_doctors_alert = (
+            f"Se detectaron {new_doctors_count} prescriptor(es) nuevo(s) sin ficha en el CRM. "
+            f"Se {'creó' if new_doctors_count == 1 else 'crearon'} {new_doctors_count} ficha(s) automáticamente. "
+            f"Están sin visitador asignado y disponibles para asignación."
+        )
+
     return {
         "message": "Consolidado cargado exitosamente",
         "upload_id": upload.id,
         "rows_processed": len(df),
         "matched_doctors": matched,
         "new_doctors_created": new_doctors_count,
+        "new_doctors_alert": new_doctors_alert,
+        "new_doctors_detail": new_doctors_detail,
         "duplicates_skipped": duplicates,
         "normalized": "en proceso (background)",
         "errors": []
@@ -858,7 +878,7 @@ def _run_normalization(db: Session) -> dict:
         name_counts = Counter(s.doctor_name_raw.strip() for s in sales if s.doctor_name_raw)
         canon_name = name_counts.most_common(1)[0][0] if name_counts else "Médico sin nombre"
         raw_rut = next((s.rut_doctor for s in sales if s.rut_doctor), None)
-        new_doc = Doctor(name=canon_name, rut=raw_rut, is_active=True)
+        new_doc = Doctor(name=canon_name, rut=raw_rut, is_active=True, created_from="auto_import")
         db.add(new_doc)
         db.flush()
         rut_doc_map[nr] = new_doc.id
@@ -873,7 +893,7 @@ def _run_normalization(db: Session) -> dict:
                 s.doctor_id = name_doc_map[name_key]
             continue
         canon_name = sales[0].doctor_name_raw.strip()
-        new_doc = Doctor(name=canon_name, is_active=True)
+        new_doc = Doctor(name=canon_name, is_active=True, created_from="auto_import")
         db.add(new_doc)
         db.flush()
         name_doc_map[name_key] = new_doc.id

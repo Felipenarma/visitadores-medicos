@@ -61,6 +61,7 @@ class Doctor(Base):
     visit_frequency = Column(Integer, default=30)
     created_at = Column(DateTime, server_default=func.now())
     is_active = Column(Boolean, default=True)
+    created_from = Column(String(50), nullable=True)  # ej. "auto_import" = creado automáticamente desde carga de ventas
 
     business_line = relationship("BusinessLine", back_populates="doctors")
     rep = relationship("MedicalRep", back_populates="doctors")

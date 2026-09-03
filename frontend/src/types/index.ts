@@ -44,6 +44,7 @@ export interface Doctor {
   last_visit_date?: string;
   visits_count?: number;
   has_sales?: boolean;
+  created_from?: string;
 }
 
 export interface Visit {

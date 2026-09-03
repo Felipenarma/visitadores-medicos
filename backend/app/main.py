@@ -25,6 +25,7 @@ def run_migrations():
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS medical_center VARCHAR(200)",
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS city VARCHAR(100)",
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS commune VARCHAR(100)",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS created_from VARCHAR(50)",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_sales_external_id ON sales (external_id) WHERE external_id IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS ix_sales_rut_doctor ON sales (rut_doctor) WHERE rut_doctor IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS ix_doctors_rut ON doctors (rut) WHERE rut IS NOT NULL",

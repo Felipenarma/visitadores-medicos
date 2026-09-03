@@ -74,6 +74,7 @@ class DoctorBase(BaseModel):
     medical_center: Optional[str] = None
     city: Optional[str] = None
     commune: Optional[str] = None
+    created_from: Optional[str] = None
 
 
 class DoctorCreate(DoctorBase):

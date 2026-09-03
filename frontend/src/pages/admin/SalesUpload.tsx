@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, TrendingUp, CheckCircle, AlertCircle, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Upload, TrendingUp, CheckCircle, AlertCircle, FileText, UserPlus } from 'lucide-react';
 import { salesApi, consolidatedSalesApi } from '../../api';
 import type { SalesSummaryItem } from '../../types';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 export default function SalesUpload() {
+  const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -184,6 +186,37 @@ export default function SalesUpload() {
                 <p className="text-xs text-gray-500">Duplicados omitidos</p>
               </div>
             </div>
+
+            {result.new_doctors_alert && (
+              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <UserPlus size={18} className="text-amber-500 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-amber-800 text-sm font-medium">{result.new_doctors_alert}</p>
+                    {result.new_doctors_detail && result.new_doctors_detail.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {result.new_doctors_detail.slice(0, 15).map((d: { name: string; rut?: string }, i: number) => (
+                          <span key={i} className="text-xs bg-white border border-amber-200 text-amber-700 px-2 py-0.5 rounded-full">
+                            {d.name}{d.rut ? ` · ${d.rut}` : ''}
+                          </span>
+                        ))}
+                        {result.new_doctors_detail.length > 15 && (
+                          <span className="text-xs text-amber-500 px-1 py-0.5">
+                            +{result.new_doctors_detail.length - 15} más
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => navigate('/admin/doctors?rep=none')}
+                      className="mt-2 text-xs font-medium text-amber-700 hover:text-amber-900 underline"
+                    >
+                      Ver y asignar visitador →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
