@@ -167,6 +167,15 @@ export interface RepEffectiveness {
   visit_rate: number;
 }
 
+export interface RepCommissionsSummary {
+  total_amount: number;
+  sales_count: number;
+  doctors_with_sales: number;
+  new_doctors_count: number;
+  new_doctors: string[];
+  categories: Record<string, number>;
+}
+
 export interface RepDetail {
   rep: {
     id: number;
@@ -185,6 +194,7 @@ export interface RepDetail {
   week: RepDetailPeriod;
   month: RepDetailPeriod;
   doctor_ranking: RepDoctorRanking[];
+  commissions?: RepCommissionsSummary;
 }
 
 export interface AgentMessage {

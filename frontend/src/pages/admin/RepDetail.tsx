@@ -4,14 +4,15 @@ import {
   ArrowLeft, MapPin, Phone, Mail, Users,
   CheckCircle, XCircle, Clock, AlertCircle, Calendar, Download,
   ChevronLeft, ChevronRight, Award, Stethoscope, TrendingUp,
-  Edit2, X, Building2, Hash
+  Edit2, X, Building2, Hash, DollarSign, UserPlus
 } from 'lucide-react';
 import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, Doctor, MedicalRep, BusinessLine } from '../../types';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
 } from 'recharts';
+import * as XLSX from 'xlsx';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -189,14 +190,75 @@ function VisitRow({ visit: v }: { visit: RepDetailVisit }) {
   );
 }
 
-function DoctorRankingSection({ ranking, monthLabel }: { ranking: RepDoctorRanking[]; monthLabel: string }) {
+function CommissionsSection({ commissions, monthLabel }: { commissions?: RepCommissionsSummary; monthLabel: string }) {
+  if (!commissions) return null;
+
+  const catEntries = Object.entries(commissions.categories || {}).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+          <DollarSign size={16} className="text-emerald-500" />
+          Comisiones — {monthLabel}
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 bg-gray-50">
+        <div className="flex flex-col items-center justify-center py-4 px-2">
+          <span className="text-xl font-bold text-emerald-700">{fmtAmount(commissions.total_amount)}</span>
+          <span className="text-xs text-gray-500 mt-0.5 text-center">Monto total</span>
+        </div>
+        <div className="flex flex-col items-center justify-center py-4 px-2">
+          <span className="text-xl font-bold text-gray-800">{commissions.sales_count}</span>
+          <span className="text-xs text-gray-500 mt-0.5 text-center">Unidades vendidas</span>
+        </div>
+        <div className="flex flex-col items-center justify-center py-4 px-2">
+          <span className="text-xl font-bold text-blue-600">{commissions.doctors_with_sales}</span>
+          <span className="text-xs text-gray-500 mt-0.5 text-center">Médicos con ventas</span>
+        </div>
+        <div className="flex flex-col items-center justify-center py-4 px-2">
+          <span className={`text-xl font-bold ${commissions.new_doctors_count > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+            {commissions.new_doctors_count}
+          </span>
+          <span className="text-xs text-gray-500 mt-0.5 text-center flex items-center gap-1 justify-center">
+            <UserPlus size={11} /> Médicos nuevos
+          </span>
+        </div>
+      </div>
+
+      {catEntries.length > 0 && (
+        <div className="px-6 py-3 flex flex-wrap gap-1.5 border-t border-gray-100">
+          {catEntries.map(([cat, count]) => (
+            <span key={cat} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+              {cat}: {count} u
+            </span>
+          ))}
+        </div>
+      )}
+
+      {commissions.new_doctors.length > 0 && (
+        <div className="px-6 pb-4 pt-1">
+          <p className="text-xs text-gray-400 mb-1">Médicos nuevos del período:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {commissions.new_doctors.map(name => (
+              <span key={name} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DoctorRankingSection({ ranking, monthLabel, onExport }: { ranking: RepDoctorRanking[]; monthLabel: string; onExport: () => void }) {
   if (ranking.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
             <Award size={16} className="text-amber-500" />
-            Ranking de Médicos — {monthLabel}
+            Médicos que Prescribieron — {monthLabel}
           </h2>
         </div>
         <div className="text-center py-12 text-gray-400 text-sm">
@@ -210,12 +272,21 @@ function DoctorRankingSection({ ranking, monthLabel }: { ranking: RepDoctorRanki
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
           <Award size={16} className="text-amber-500" />
-          Ranking de Médicos — {monthLabel}
+          Médicos que Prescribieron — {monthLabel}
         </h2>
-        <span className="text-sm text-gray-400">{ranking.length} médicos con ventas</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{ranking.length} médicos con ventas</span>
+          <button
+            onClick={onExport}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Download size={13} />
+            Exportar Excel
+          </button>
+        </div>
       </div>
 
       {/* Summary bar */}
@@ -699,6 +770,26 @@ export default function RepDetail() {
     }
   };
 
+  const handleExportDoctorRanking = () => {
+    if (!data) return;
+    const ranking = data.doctor_ranking || [];
+    const rows = [
+      ['Médico', 'RUT', 'Especialidad', 'Unidades', 'Monto ($)', 'Categorías'],
+      ...ranking.map(d => [
+        d.doctor_name, d.rut || '', d.specialty || '', d.units, d.total_amount,
+        (d.categorias || []).join(', '),
+      ]),
+      [],
+      ['TOTAL', '', '', ranking.reduce((s, d) => s + d.units, 0), ranking.reduce((s, d) => s + d.total_amount, 0), ''],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 14 }, { wch: 28 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Médicos');
+    const repName = (data.rep?.name || `rep_${id}`).replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `Medicos_Prescribieron_${repName}_${MONTH_NAMES[selMonth - 1]}_${selYear}.xlsx`);
+  };
+
   const saveTarget = async () => {
     if (!id) return;
     const val = parseInt(targetInput);
@@ -781,6 +872,7 @@ export default function RepDetail() {
     query_month = selMonth,
     query_year = selYear,
     doctor_ranking = [],
+    commissions,
   } = data;
   const monthLabel = `${MONTH_NAMES[query_month - 1]} ${query_year}`;
 
@@ -956,8 +1048,11 @@ export default function RepDetail() {
         <EffectivenessCard e={effectiveness} monthLabel={monthLabel} />
       )}
 
-      {/* 2. Ranking de médicos por ventas */}
-      <DoctorRankingSection ranking={doctor_ranking} monthLabel={monthLabel} />
+      {/* Comisiones del mes consultado */}
+      <CommissionsSection commissions={commissions} monthLabel={monthLabel} />
+
+      {/* 2. Médicos que prescribieron (ranking de ventas) */}
+      <DoctorRankingSection ranking={doctor_ranking} monthLabel={monthLabel} onExport={handleExportDoctorRanking} />
 
       {/* 2. Seguimiento de visitas */}
       {is_current_month && (

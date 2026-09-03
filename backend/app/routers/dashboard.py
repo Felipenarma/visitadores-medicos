@@ -823,6 +823,43 @@ def get_rep_detail(
         "visit_rate": round((n_visited / total_assigned) * 100) if total_assigned > 0 else 0,
     }
 
+    # Comisiones del mes consultado (mismo criterio que /rep-commissions: incluye médicos
+    # inactivos para no perder ventas históricas ya generadas por el rep)
+    commission_doctor_ids = [d.id for d in db.query(Doctor).filter(Doctor.rep_id == rep_id).all()]
+    commission_sales = db.query(Sale).filter(
+        Sale.doctor_id.in_(commission_doctor_ids),
+        Sale.sale_date >= month_start,
+        Sale.sale_date <= month_end
+    ).all() if commission_doctor_ids else []
+
+    commission_doctors_with_sales_ids = set(s.doctor_id for s in commission_sales if s.doctor_id)
+    commission_total_amount = sum(safe_float(s.amount) for s in commission_sales)
+
+    commission_new_doctors = []
+    for doc_id in commission_doctors_with_sales_ids:
+        prior = db.query(Sale).filter(
+            Sale.doctor_id == doc_id,
+            Sale.sale_date < month_start
+        ).first()
+        if not prior:
+            doc = all_rep_doctors.get(doc_id) or db.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc:
+                commission_new_doctors.append(doc.name)
+
+    commission_categories: dict = {}
+    for s in commission_sales:
+        cat = s.categoria or "Sin categoría"
+        commission_categories[cat] = commission_categories.get(cat, 0) + 1
+
+    commissions = {
+        "total_amount": round(commission_total_amount, 2),
+        "sales_count": len(commission_sales),
+        "doctors_with_sales": len(commission_doctors_with_sales_ids),
+        "new_doctors_count": len(commission_new_doctors),
+        "new_doctors": commission_new_doctors,
+        "categories": commission_categories,
+    }
+
     doctor_count = db.query(func.count(Doctor.id)).filter(
         Doctor.rep_id == rep_id, Doctor.is_active == True
     ).scalar()
@@ -853,6 +890,7 @@ def get_rep_detail(
             **month_summary,
         },
         "doctor_ranking": doctor_ranking,
+        "commissions": commissions,
     }
 
 
