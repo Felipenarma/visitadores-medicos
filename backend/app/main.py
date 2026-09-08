@@ -34,6 +34,10 @@ def run_migrations():
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_rep_targets_rep_month_year ON rep_targets (rep_id, month, year)",
         "CREATE TABLE IF NOT EXISTS rep_business_lines (rep_id INTEGER REFERENCES medical_reps(id) ON DELETE CASCADE, business_line_id INTEGER REFERENCES business_lines(id) ON DELETE CASCADE, PRIMARY KEY (rep_id, business_line_id))",
         "CREATE TABLE IF NOT EXISTS mike_memory (id SERIAL PRIMARY KEY, content TEXT NOT NULL, category VARCHAR(50) DEFAULT 'general', created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE TABLE IF NOT EXISTS agent_memory (id SERIAL PRIMARY KEY, rep_id INTEGER REFERENCES medical_reps(id) ON DELETE CASCADE, content TEXT NOT NULL, category VARCHAR(50) DEFAULT 'general', created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())",
+        "CREATE INDEX IF NOT EXISTS ix_agent_memory_rep_id ON agent_memory (rep_id)",
+        "CREATE TABLE IF NOT EXISTS agent_conversation_messages (id SERIAL PRIMARY KEY, rep_id INTEGER REFERENCES medical_reps(id) ON DELETE CASCADE, role VARCHAR(20) NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())",
+        "CREATE INDEX IF NOT EXISTS ix_agent_conversation_messages_rep_id ON agent_conversation_messages (rep_id)",
     ]
     for stmt in migrations:
         try:

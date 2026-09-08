@@ -176,6 +176,18 @@ export default function AIAgent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Cargar la conversación guardada en el servidor para este visitador
+  // (persiste entre recargas de página y entre dispositivos).
+  useEffect(() => {
+    const effectiveRepId = selectedRepId || user?.rep_id;
+    if (!effectiveRepId) return;
+    agentApi.getHistory(effectiveRepId)
+      .then(res => {
+        setMessages(res.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
+      })
+      .catch(console.error);
+  }, [selectedRepId, user?.rep_id]);
+
   const handleSend = async () => {
     const repId = selectedRepId || user?.rep_id;
     if (!input.trim() || !repId || loading) return;
@@ -371,7 +383,10 @@ export default function AIAgent() {
       {messages.length > 0 && (
         <div className="mt-2 text-center">
           <button
-            onClick={() => setMessages([])}
+            onClick={() => {
+              setMessages([]);
+              if (repId) agentApi.clearHistory(repId).catch(console.error);
+            }}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
             Limpiar conversación

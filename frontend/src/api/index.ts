@@ -160,6 +160,10 @@ export const consolidatedSalesApi = {
 export const agentApi = {
   chat: (data: { message: string; rep_id: number; conversation_history: AgentMessage[] }) =>
     api.post<{ response: string; conversation_history: AgentMessage[] }>('/agent/chat', data).then(r => r.data),
+  getHistory: (repId: number) =>
+    api.get<{ rep_id: number; messages: { role: string; content: string; created_at: string | null }[] }>(`/agent/history/${repId}`).then(r => r.data),
+  clearHistory: (repId: number) =>
+    api.delete<{ deleted: number }>(`/agent/history/${repId}`).then(r => r.data),
 };
 
 // Knowledge Base

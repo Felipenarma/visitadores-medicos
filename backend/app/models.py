@@ -179,6 +179,36 @@ class MikeMemory(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class AgentMemory(Base):
+    """Memoria persistente del Agente IA de cada visitador (equivalente a MikeMemory,
+    pero acotada por rep_id: cada visitador tiene su propia memoria)."""
+    __tablename__ = "agent_memory"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rep_id = Column(Integer, ForeignKey("medical_reps.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    category = Column(String(50), default="general")  # general, medico, preferencia, pendiente, alerta
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    rep = relationship("MedicalRep")
+
+
+class AgentConversationMessage(Base):
+    """Historial persistente de la conversación entre un visitador y su Agente IA,
+    guardado en el servidor para que no se pierda al recargar la página o cambiar
+    de dispositivo."""
+    __tablename__ = "agent_conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rep_id = Column(Integer, ForeignKey("medical_reps.id"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # user | assistant
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    rep = relationship("MedicalRep")
+
+
 class ImageFile(Base):
     __tablename__ = "image_files"
 

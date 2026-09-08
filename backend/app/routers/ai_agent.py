@@ -6,7 +6,7 @@ import os
 import json
 import anthropic
 from ..database import get_db
-from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry, ImageFile
+from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry, ImageFile, AgentMemory, AgentConversationMessage
 from ..schemas import AgentChatRequest, AgentChatResponse, AgentMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -22,6 +22,8 @@ REGLA OBLIGATORIA: Ante CUALQUIER pregunta sobre productos, activos, materias pr
 COMPARTIR DOCUMENTOS: Cuando un resultado de search_knowledge incluya "download_url", comparte ese link con el visitador así: "[nombre del archivo](download_url)". Usa formato Markdown.
 
 COMPARTIR IMÁGENES Y QR: Cuando el visitador pida un QR, imagen de producto o material visual, usa search_images para buscarlo. Si el resultado incluye "url" o "share_link", muestra el link directamente así: "[nombre](url)". Si la imagen es un QR, indícale al visitador que puede escanearlo desde ese link.
+
+MEMORIA: Tienes memoria persistente sobre este visitador (se te inyecta más abajo, si existe). Usa save_to_memory cuando el visitador te cuente algo que valga la pena recordar en futuras conversaciones: preferencias de trabajo, acuerdos, contexto de médicos, pendientes o alertas. No preguntes permiso para guardar, solo hazlo cuando sea relevante. Usa get_memories si necesitas revisar algo que no esté ya en el contexto inyectado, y delete_memory si el visitador te dice que algo ya no aplica o está desactualizado.
 
 Siempre responde en español. Sé profesional, preciso y conciso."""
 
@@ -142,6 +144,43 @@ TOOLS = [
                     "description": "Categoría opcional para filtrar la búsqueda"
                 }
             }
+        }
+    },
+    {
+        "name": "save_to_memory",
+        "description": "Guarda un hecho, preferencia o pendiente importante en tu memoria persistente sobre este visitador. Úsala para recordar acuerdos, contexto de médicos, preferencias de trabajo o cualquier dato que sea útil recordar en futuras conversaciones con él.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "El hecho o dato a recordar (ej: 'Prefiere que le recuerde las visitas del Dr. Soto los lunes')"},
+                "category": {
+                    "type": "string",
+                    "enum": ["general", "medico", "preferencia", "pendiente", "alerta"],
+                    "description": "Categoría del recuerdo"
+                }
+            },
+            "required": ["content"]
+        }
+    },
+    {
+        "name": "get_memories",
+        "description": "Recupera lo que tienes guardado en tu memoria persistente sobre este visitador. Úsala cuando necesites recordar contexto de conversaciones anteriores.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "description": "Filtrar por categoría (opcional)"}
+            }
+        }
+    },
+    {
+        "name": "delete_memory",
+        "description": "Elimina un recuerdo obsoleto o incorrecto de tu memoria sobre este visitador.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "integer", "description": "ID del recuerdo a eliminar"}
+            },
+            "required": ["memory_id"]
         }
     }
 ]
@@ -398,6 +437,41 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
 
         return {"results": results, "total": len(results)}
 
+    elif tool_name == "save_to_memory":
+        content_txt = tool_input.get("content", "").strip()
+        category = tool_input.get("category", "general")
+        if not content_txt:
+            return {"error": "El contenido no puede estar vacío"}
+        mem = AgentMemory(rep_id=rep_id, content=content_txt, category=category)
+        db.add(mem)
+        db.commit()
+        db.refresh(mem)
+        return {"success": True, "memory_id": mem.id, "content": mem.content, "category": mem.category}
+
+    elif tool_name == "get_memories":
+        category = tool_input.get("category")
+        q = db.query(AgentMemory).filter(AgentMemory.rep_id == rep_id)
+        if category:
+            q = q.filter(AgentMemory.category == category)
+        mems = q.order_by(AgentMemory.created_at.desc()).all()
+        return {
+            "total": len(mems),
+            "memories": [
+                {"id": m.id, "content": m.content, "category": m.category,
+                 "fecha": m.created_at.strftime("%d/%m/%Y") if m.created_at else ""}
+                for m in mems
+            ]
+        }
+
+    elif tool_name == "delete_memory":
+        memory_id = tool_input.get("memory_id")
+        mem = db.query(AgentMemory).filter(AgentMemory.id == memory_id, AgentMemory.rep_id == rep_id).first()
+        if not mem:
+            return {"error": f"Recuerdo {memory_id} no encontrado"}
+        db.delete(mem)
+        db.commit()
+        return {"success": True}
+
     return {"error": f"Herramienta desconocida: {tool_name}"}
 
 
@@ -413,13 +487,38 @@ def chat(request: AgentChatRequest, db: Session = Depends(get_db)):
 
     client = anthropic.Anthropic(api_key=api_key)
 
+    history_source = request.conversation_history
+    if not history_source:
+        # Si el frontend no mandó historial (ej. primera carga tras recargar la
+        # página), se recupera de lo que quedó guardado en el servidor para
+        # este visitador, así la conversación no se pierde.
+        persisted = db.query(AgentConversationMessage).filter(
+            AgentConversationMessage.rep_id == request.rep_id
+        ).order_by(AgentConversationMessage.id.desc()).limit(40).all()
+        history_source = [
+            AgentMessage(role=m.role, content=m.content) for m in reversed(persisted)
+        ]
+
     messages = []
-    for msg in request.conversation_history:
+    for msg in history_source:
         messages.append({"role": msg.role, "content": msg.content})
 
     messages.append({"role": "user", "content": request.message})
 
-    system_with_context = f"{SYSTEM_PROMPT}\n\nContexto actual:\n- Visitador: {rep.name}\n- ID: {rep.id}\n- Fecha actual: {datetime.utcnow().strftime('%d/%m/%Y %H:%M')}"
+    # Memoria persistente sobre este visitador, inyectada en el system prompt
+    memories = db.query(AgentMemory).filter(
+        AgentMemory.rep_id == request.rep_id
+    ).order_by(AgentMemory.created_at.desc()).limit(30).all()
+    memory_block = ""
+    if memories:
+        lines = [f"[{m.id}|{m.category}] {m.content}" for m in reversed(memories)]
+        memory_block = "\n\n## Memoria persistente sobre este visitador (de conversaciones anteriores)\n" + "\n".join(lines)
+
+    system_with_context = (
+        f"{SYSTEM_PROMPT}\n\nContexto actual:\n- Visitador: {rep.name}\n- ID: {rep.id}\n"
+        f"- Fecha actual: {datetime.utcnow().strftime('%d/%m/%Y %H:%M')}"
+        + memory_block
+    )
 
     # Tool-calling loop
     final_response = ""
@@ -486,8 +585,14 @@ def chat(request: AgentChatRequest, db: Session = Depends(get_db)):
     if not final_response:
         final_response = "Lo siento, no pude procesar tu solicitud."
 
+    # Guardar la conversación en el servidor para que persista entre sesiones
+    # y dispositivos (no depende del navegador/localStorage).
+    db.add(AgentConversationMessage(rep_id=request.rep_id, role="user", content=request.message))
+    db.add(AgentConversationMessage(rep_id=request.rep_id, role="assistant", content=final_response))
+    db.commit()
+
     # Build updated conversation history
-    updated_history = list(request.conversation_history)
+    updated_history = list(history_source)
     updated_history.append(AgentMessage(role="user", content=request.message))
     updated_history.append(AgentMessage(role="assistant", content=final_response))
 
@@ -495,3 +600,49 @@ def chat(request: AgentChatRequest, db: Session = Depends(get_db)):
         response=final_response,
         conversation_history=updated_history
     )
+
+
+@router.get("/history/{rep_id}")
+def get_agent_history(rep_id: int, limit: int = 100, db: Session = Depends(get_db)):
+    """Recupera la conversación guardada entre un visitador y su Agente IA."""
+    msgs = db.query(AgentConversationMessage).filter(
+        AgentConversationMessage.rep_id == rep_id
+    ).order_by(AgentConversationMessage.id.desc()).limit(limit).all()
+    return {
+        "rep_id": rep_id,
+        "messages": [
+            {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat() if m.created_at else None}
+            for m in reversed(msgs)
+        ]
+    }
+
+
+@router.delete("/history/{rep_id}")
+def clear_agent_history(rep_id: int, db: Session = Depends(get_db)):
+    """Borra la conversación guardada de un visitador con su Agente IA (no borra la memoria persistente)."""
+    count = db.query(AgentConversationMessage).filter(
+        AgentConversationMessage.rep_id == rep_id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": count}
+
+
+@router.get("/memory/{rep_id}")
+def get_agent_memory(rep_id: int, db: Session = Depends(get_db)):
+    """Lista lo que el Agente IA tiene guardado en su memoria persistente sobre un visitador."""
+    mems = db.query(AgentMemory).filter(AgentMemory.rep_id == rep_id).order_by(AgentMemory.created_at.desc()).all()
+    return [
+        {"id": m.id, "content": m.content, "category": m.category,
+         "created_at": m.created_at.isoformat() if m.created_at else None}
+        for m in mems
+    ]
+
+
+@router.delete("/memory/{memory_id}")
+def delete_agent_memory(memory_id: int, db: Session = Depends(get_db)):
+    mem = db.query(AgentMemory).filter(AgentMemory.id == memory_id).first()
+    if not mem:
+        raise HTTPException(status_code=404, detail="Recuerdo no encontrado")
+    db.delete(mem)
+    db.commit()
+    return {"ok": True}
