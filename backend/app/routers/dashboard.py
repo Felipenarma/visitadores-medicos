@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine
 from ..schemas import DashboardStats, RepStats
+from ..constants import MAX_VISITS_PER_DAY, count_weekdays
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -188,6 +189,7 @@ def get_daily_tracking(date: str = None, db: Session = Depends(get_db)):
         ).scalar() or 0
 
         if total > 0:
+            meta_diaria = MAX_VISITS_PER_DAY if count_weekdays(day_start, day_end) > 0 else 0
             result.append({
                 "rep_id": rep.id,
                 "rep_name": rep.name,
@@ -195,12 +197,15 @@ def get_daily_tracking(date: str = None, db: Session = Depends(get_db)):
                 "completed": completed,
                 "pending": pending,
                 "missed": missed,
-                "completion_rate": round((completed / total) * 100) if total > 0 else 0
+                "completion_rate": round((completed / total) * 100) if total > 0 else 0,
+                "meta_diaria": meta_diaria,
+                "cumplimiento_meta": round((completed / meta_diaria) * 100) if meta_diaria > 0 else None
             })
 
     result.sort(key=lambda x: x["completion_rate"], reverse=True)
     return {
         "date": day_start.strftime("%Y-%m-%d"),
+        "meta_diaria_por_visitador": MAX_VISITS_PER_DAY,
         "reps": result
     }
 

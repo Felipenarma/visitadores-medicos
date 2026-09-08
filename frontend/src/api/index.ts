@@ -114,7 +114,8 @@ export const dashboardApi = {
     }).then(r => r.data),
   getDailyTracking: (date?: string) => api.get<{
     date: string;
-    reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
+    meta_diaria_por_visitador?: number;
+    reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number; meta_diaria?: number; cumplimiento_meta?: number | null }[];
   }>('/dashboard/daily-tracking', { params: date ? { date } : {} }).then(r => r.data),
   getDoctorSalesHistory: (doctor_id: number, months = 6) =>
     api.get(`/dashboard/doctor/${doctor_id}/sales-history`, { params: { months } }).then(r => r.data),

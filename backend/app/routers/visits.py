@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import Visit, Doctor, MedicalRep
 from ..schemas import VisitCreate, VisitUpdate, VisitOut, GenerateVisitsRequest
+from ..constants import MAX_VISITS_PER_DAY
 
 router = APIRouter(prefix="/api/visits", tags=["visits"])
 
@@ -106,6 +107,9 @@ def delete_visit(visit_id: int, db: Session = Depends(get_db)):
 
 @router.post("/generate")
 def generate_visits(data: GenerateVisitsRequest, db: Session = Depends(get_db)):
+    """Genera visitas futuras por médico según su frecuencia, repartiendo la carga
+    de cada visitador en un máximo de MAX_VISITS_PER_DAY visitas por día hábil
+    (lunes a viernes) para que el calendario quede parejo en vez de agruparse."""
     months_ahead = data.months_ahead or 6
     end_date = datetime.utcnow() + timedelta(days=30 * months_ahead)
     start_date = datetime.utcnow()
@@ -118,47 +122,86 @@ def generate_visits(data: GenerateVisitsRequest, db: Session = Depends(get_db)):
     total_created = 0
     skipped = 0
 
+    # Conteo de visitas por (rep_id, día) ya existentes en el rango, para no exceder
+    # el tope diario al sumar las visitas nuevas a las que ya estaban agendadas.
+    day_counts: dict = {}
+    existing_in_range = db.query(Visit).filter(
+        Visit.scheduled_date >= start_date,
+        Visit.scheduled_date <= end_date,
+        Visit.rep_id != None
+    ).all()
+    for v in existing_in_range:
+        key = (v.rep_id, v.scheduled_date.date())
+        day_counts[key] = day_counts.get(key, 0) + 1
+
+    def next_available_slot(rep_id: int, from_date: datetime) -> datetime:
+        """Próximo día hábil (lun-vie) desde from_date en que el visitador
+        tenga cupo (menos de MAX_VISITS_PER_DAY visitas agendadas ese día)."""
+        d = from_date
+        max_iterations = 3650  # margen de seguridad (~10 años) para evitar loops infinitos
+        for _ in range(max_iterations):
+            if d.weekday() < 5:
+                key = (rep_id, d.date())
+                if day_counts.get(key, 0) < MAX_VISITS_PER_DAY:
+                    return d
+            d += timedelta(days=1)
+        return d
+
+    # Se ordenan los médicos por urgencia (fecha ideal más próxima primero) para que,
+    # si un día se llena, los que llevan más tiempo esperando tengan prioridad.
+    pending = []
     for doctor in doctors:
         if not doctor.visit_frequency or doctor.visit_frequency <= 0:
             continue
-
-        # Find last scheduled or completed visit
         last_visit = db.query(Visit).filter(
             Visit.doctor_id == doctor.id,
             Visit.scheduled_date >= start_date
         ).order_by(Visit.scheduled_date.desc()).first()
 
-        if last_visit:
-            # Start from after the last scheduled visit
-            next_date = last_visit.scheduled_date + timedelta(days=doctor.visit_frequency)
-        else:
-            next_date = start_date
+        ideal_date = (last_visit.scheduled_date + timedelta(days=doctor.visit_frequency)) if last_visit else start_date
+        pending.append((ideal_date, doctor))
 
-        while next_date <= end_date:
-            # Check if visit already exists on this date (within 1 day)
+    pending.sort(key=lambda p: p[0])
+
+    for ideal_date, doctor in pending:
+        cursor = ideal_date
+
+        while cursor <= end_date:
+            # Si ya existe una visita para este médico cerca de esa fecha, no duplicar
             existing = db.query(Visit).filter(
                 Visit.doctor_id == doctor.id,
-                Visit.scheduled_date >= next_date - timedelta(hours=12),
-                Visit.scheduled_date <= next_date + timedelta(hours=12)
+                Visit.scheduled_date >= cursor - timedelta(hours=12),
+                Visit.scheduled_date <= cursor + timedelta(hours=12)
             ).first()
 
-            if not existing:
-                visit = Visit(
-                    doctor_id=doctor.id,
-                    rep_id=doctor.rep_id,
-                    scheduled_date=next_date,
-                    status="scheduled"
-                )
-                db.add(visit)
-                total_created += 1
-            else:
+            if existing:
                 skipped += 1
+                cursor = existing.scheduled_date + timedelta(days=doctor.visit_frequency)
+                continue
 
-            next_date += timedelta(days=doctor.visit_frequency)
+            slot_date = next_available_slot(doctor.rep_id, cursor)
+            if slot_date > end_date:
+                break
+
+            visit = Visit(
+                doctor_id=doctor.id,
+                rep_id=doctor.rep_id,
+                scheduled_date=slot_date,
+                status="scheduled"
+            )
+            db.add(visit)
+            day_counts[(doctor.rep_id, slot_date.date())] = day_counts.get((doctor.rep_id, slot_date.date()), 0) + 1
+            total_created += 1
+
+            cursor = slot_date + timedelta(days=doctor.visit_frequency)
 
     db.commit()
     return {
-        "message": f"Generación completada: {total_created} visitas creadas, {skipped} ya existentes",
+        "message": (
+            f"Generación completada: {total_created} visitas creadas "
+            f"(máx. {MAX_VISITS_PER_DAY}/día hábil por visitador), {skipped} ya existentes"
+        ),
         "created": total_created,
-        "skipped": skipped
+        "skipped": skipped,
+        "max_visits_per_day": MAX_VISITS_PER_DAY
     }

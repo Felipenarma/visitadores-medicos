@@ -49,7 +49,8 @@ export default function AdminDashboard() {
   const [trackingDate, setTrackingDate] = useState(new Date());
   const [dailyTracking, setDailyTracking] = useState<{
     date: string;
-    reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number }[];
+    meta_diaria_por_visitador?: number;
+    reps: { rep_id: number; rep_name: string; total: number; completed: number; pending: number; missed: number; completion_rate: number; meta_diaria?: number; cumplimiento_meta?: number | null }[];
   } | null>(null);
 
   const load = async () => {
@@ -670,6 +671,16 @@ export default function AdminDashboard() {
                     <div>
                       <p className="font-medium text-gray-900 text-sm">{rep.rep_name}</p>
                       <p className="text-xs text-gray-500">{rep.completed} de {rep.total} visitas completadas</p>
+                      {!!rep.meta_diaria && (
+                        <p className="text-[11px] text-gray-400">
+                          Meta diaria: {rep.meta_diaria} visitas
+                          {rep.cumplimiento_meta != null && (
+                            <span className={rep.cumplimiento_meta >= 100 ? 'text-green-600 font-medium' : ''}>
+                              {' '}· {rep.cumplimiento_meta}% cumplido
+                            </span>
+                          )}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <span className={`text-lg font-bold ${

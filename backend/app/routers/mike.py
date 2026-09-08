@@ -12,6 +12,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import anthropic
+from ..constants import MAX_VISITS_PER_DAY, count_weekdays
 import openpyxl
 from ..database import get_db
 from ..models import Visit, Doctor, MedicalRep, Sale, BusinessLine, MikeMemory
@@ -871,6 +872,9 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             end = start + timedelta(days=1)
             label = d.strftime("%d/%m/%Y")
 
+        dias_habiles = count_weekdays(start, end)
+        meta_periodo = MAX_VISITS_PER_DAY * dias_habiles
+
         reps = db.query(MedicalRep).filter(MedicalRep.is_active == True).all()
         result = []
         for rep in reps:
@@ -893,11 +897,18 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
                 "completadas": completed,
                 "perdidas": missed,
                 "completion_rate": round(completed / total * 100, 1) if total else 0,
-                "tasa": round(completed / total * 100, 1) if total else 0
+                "tasa": round(completed / total * 100, 1) if total else 0,
+                "meta_periodo": meta_periodo,
+                "cumplimiento_meta_pct": round(completed / meta_periodo * 100, 1) if meta_periodo else None
             })
 
         result.sort(key=lambda x: x["tasa"])
-        return {"periodo": label, "tracking": result}
+        return {
+            "periodo": label,
+            "meta_visitas_por_dia": MAX_VISITS_PER_DAY,
+            "dias_habiles_periodo": dias_habiles,
+            "tracking": result
+        }
 
     # ── search_doctors ────────────────────────────────────────────────────────
     elif tool_name == "search_doctors":
