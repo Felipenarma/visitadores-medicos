@@ -5,7 +5,7 @@ from sqlalchemy import func
 from typing import List
 from datetime import datetime
 from ..database import get_db
-from ..models import MedicalRep, Doctor, Visit, RepTarget, BusinessLine, UserSession
+from ..models import MedicalRep, Doctor, Visit, RepTarget, BusinessLine, UserSession, AgentConversationMessage
 from ..schemas import MedicalRepCreate, MedicalRepUpdate, MedicalRepOut
 
 router = APIRouter(prefix="/api/reps", tags=["reps"])
@@ -115,6 +115,7 @@ def delete_rep(rep_id: int, db: Session = Depends(get_db)):
         db.query(Visit).filter(Visit.rep_id == rep_id).delete(synchronize_session=False)
         db.query(RepTarget).filter(RepTarget.rep_id == rep_id).delete(synchronize_session=False)
         db.query(UserSession).filter(UserSession.rep_id == rep_id).delete(synchronize_session=False)
+        db.query(AgentConversationMessage).filter(AgentConversationMessage.rep_id == rep_id).delete(synchronize_session=False)
         db.delete(rep)
         db.commit()
     except Exception as e:
