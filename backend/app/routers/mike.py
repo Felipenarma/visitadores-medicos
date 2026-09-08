@@ -2060,7 +2060,7 @@ def _run_mike_chat(request: MikeChatRequest, db: Session, api_key: str) -> MikeC
     while iteration < max_iterations:
         iteration += 1
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             system=system,
             tools=MIKE_TOOLS,
