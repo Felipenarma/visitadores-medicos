@@ -1,3 +1,4 @@
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -109,13 +110,18 @@ def delete_rep(rep_id: int, db: Session = Depends(get_db)):
     rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
     if not rep:
         raise HTTPException(status_code=404, detail="Visitador no encontrado")
-    doctors_updated = db.query(Doctor).filter(Doctor.rep_id == rep_id).update({Doctor.rep_id: None})
-    visits_deleted = db.query(Visit).filter(Visit.rep_id == rep_id).delete()
-    db.query(RepTarget).filter(RepTarget.rep_id == rep_id).delete()
-    db.query(UserSession).filter(UserSession.rep_id == rep_id).delete()
-    db.execute(rep_business_lines.delete().where(rep_business_lines.c.rep_id == rep_id))
-    db.delete(rep)
-    db.commit()
+    try:
+        db.query(Doctor).filter(Doctor.rep_id == rep_id).update({"rep_id": None}, synchronize_session=False)
+        db.query(Visit).filter(Visit.rep_id == rep_id).delete(synchronize_session=False)
+        db.query(RepTarget).filter(RepTarget.rep_id == rep_id).delete(synchronize_session=False)
+        db.query(UserSession).filter(UserSession.rep_id == rep_id).delete(synchronize_session=False)
+        db.execute(rep_business_lines.delete().where(rep_business_lines.c.rep_id == rep_id))
+        db.flush()
+        db.delete(rep)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar: {str(e)}\n{traceback.format_exc()}")
     return {
         "message": f"Visitador eliminado. {doctors_updated} médico(s) desasignados, {visits_deleted} visita(s) eliminadas."
     }
