@@ -73,6 +73,17 @@ function RenderMessage({ content, isUser }: { content: string; isUser: boolean }
   );
 }
 
+async function getGeoPosition(): Promise<{ latitude: number; longitude: number } | null> {
+  if (!navigator.geolocation) return null;
+  return new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 5000, maximumAge: 60000 }
+    );
+  });
+}
+
 export default function AIAgent() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
@@ -198,10 +209,12 @@ export default function AIAgent() {
     setLoading(true);
 
     try {
+      const geo = await getGeoPosition();
       const res = await agentApi.chat({
         message: userMsg.content,
         rep_id: repId,
         conversation_history: messages,
+        ...(geo ? { latitude: geo.latitude, longitude: geo.longitude } : {}),
       });
       const assistantMsg: AgentMessage = { role: 'assistant', content: res.response };
       setMessages(prev => [...prev, assistantMsg]);

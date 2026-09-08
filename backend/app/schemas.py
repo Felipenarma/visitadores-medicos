@@ -112,7 +112,8 @@ class VisitBase(BaseModel):
 
 
 class VisitCreate(VisitBase):
-    pass
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class VisitUpdate(BaseModel):
@@ -120,6 +121,8 @@ class VisitUpdate(BaseModel):
     actual_date: Optional[datetime] = None
     notes: Optional[str] = None
     scheduled_date: Optional[datetime] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class VisitOut(VisitBase):
@@ -129,6 +132,8 @@ class VisitOut(VisitBase):
     doctor_name: Optional[str] = None
     rep_name: Optional[str] = None
     doctor_specialty: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -206,6 +211,8 @@ class AgentChatRequest(BaseModel):
     message: str
     rep_id: int
     conversation_history: Optional[List[AgentMessage]] = []
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class AgentChatResponse(BaseModel):

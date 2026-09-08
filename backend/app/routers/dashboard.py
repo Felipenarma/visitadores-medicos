@@ -11,7 +11,7 @@ def safe_float(v):
         return 0.0
 from datetime import datetime, timedelta
 from ..database import get_db
-from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine
+from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine, AgentConversationMessage
 from ..schemas import DashboardStats, RepStats
 from ..constants import MAX_VISITS_PER_DAY, count_weekdays
 
@@ -1148,3 +1148,64 @@ def get_rep_commissions(
             })
 
     return result
+
+
+@router.get("/locations")
+def get_locations(
+    rep_id: int = Query(default=None),
+    days: int = Query(default=30),
+    db: Session = Depends(get_db)
+):
+    """Devuelve eventos con ubicación (visitas + mensajes de agente) para el mapa admin."""
+    since = datetime.utcnow() - timedelta(days=days)
+    events = []
+
+    # Visitas con coordenadas
+    vq = db.query(Visit).filter(
+        Visit.latitude.isnot(None),
+        Visit.longitude.isnot(None),
+        Visit.created_at >= since
+    )
+    if rep_id:
+        vq = vq.filter(Visit.rep_id == rep_id)
+    for v in vq.order_by(Visit.created_at.desc()).limit(500).all():
+        rep = db.query(MedicalRep).filter(MedicalRep.id == v.rep_id).first()
+        doctor = db.query(Doctor).filter(Doctor.id == v.doctor_id).first()
+        events.append({
+            "type": "visit",
+            "id": v.id,
+            "rep_id": v.rep_id,
+            "rep_name": rep.name if rep else "Desconocido",
+            "doctor_name": doctor.name if doctor else "Desconocido",
+            "status": v.status,
+            "lat": v.latitude,
+            "lng": v.longitude,
+            "timestamp": v.created_at.isoformat() if v.created_at else None,
+            "label": f"Visita: {doctor.name if doctor else 'N/A'} ({v.status})"
+        })
+
+    # Mensajes de agente con coordenadas (solo mensajes de usuario)
+    mq = db.query(AgentConversationMessage).filter(
+        AgentConversationMessage.latitude.isnot(None),
+        AgentConversationMessage.longitude.isnot(None),
+        AgentConversationMessage.role == "user",
+        AgentConversationMessage.created_at >= since
+    )
+    if rep_id:
+        mq = mq.filter(AgentConversationMessage.rep_id == rep_id)
+    for m in mq.order_by(AgentConversationMessage.created_at.desc()).limit(500).all():
+        rep = db.query(MedicalRep).filter(MedicalRep.id == m.rep_id).first()
+        events.append({
+            "type": "agent",
+            "id": m.id,
+            "rep_id": m.rep_id,
+            "rep_name": rep.name if rep else "Desconocido",
+            "doctor_name": None,
+            "status": None,
+            "lat": m.latitude,
+            "lng": m.longitude,
+            "timestamp": m.created_at.isoformat() if m.created_at else None,
+            "label": f"Agente IA: {(m.content[:60] + '...') if len(m.content) > 60 else m.content}"
+        })
+
+    return {"events": events, "total": len(events)}

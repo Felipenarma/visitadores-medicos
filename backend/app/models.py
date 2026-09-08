@@ -79,6 +79,8 @@ class Visit(Base):
     actual_date = Column(DateTime, nullable=True)
     status = Column(String(20), default="scheduled")  # scheduled, completed, missed, cancelled
     notes = Column(Text, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     doctor = relationship("Doctor", back_populates="visits")
@@ -204,6 +206,8 @@ class AgentConversationMessage(Base):
     rep_id = Column(Integer, ForeignKey("medical_reps.id"), nullable=False, index=True)
     role = Column(String(20), nullable=False)  # user | assistant
     content = Column(Text, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     rep = relationship("MedicalRep")

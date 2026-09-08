@@ -14,6 +14,18 @@ import { Plus, Search, Phone, Mail, MapPin, Building2, UserCheck, Edit2, Chevron
 import { businessLinesApi } from '../../api';
 import type { BusinessLine } from '../../types';
 
+/** Obtiene la posición actual del dispositivo. Devuelve null si el usuario deniega o el navegador no soporta. */
+async function getGeoPosition(): Promise<{ latitude: number; longitude: number } | null> {
+  if (!navigator.geolocation) return null;
+  return new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 5000, maximumAge: 60000 }
+    );
+  });
+}
+
 const STATUS_COLORS: Record<string, string> = {
   scheduled: '#3B82F6',
   completed: '#10B981',
@@ -129,11 +141,13 @@ export default function RepCalendar() {
       const newDate = form.scheduled_date && form.scheduled_time
         ? `${form.scheduled_date}T${form.scheduled_time}:00`
         : undefined;
+      const geo = await getGeoPosition();
       await visitsApi.update(selectedVisit.id, {
         status: form.status as Visit['status'],
         notes: form.notes,
         scheduled_date: newDate,
         actual_date: form.status === 'completed' ? new Date().toISOString() : undefined,
+        ...(geo ? { latitude: geo.latitude, longitude: geo.longitude } : {}),
       });
       setEditModalOpen(false);
       load();
@@ -145,12 +159,14 @@ export default function RepCalendar() {
     if (!user?.rep_id || !createForm.doctor_id) return;
     setCreating(true);
     try {
+      const geo = await getGeoPosition();
       await visitsApi.create({
         doctor_id: createForm.doctor_id,
         rep_id: user.rep_id,
         scheduled_date: `${createForm.scheduled_date}T${createForm.scheduled_time}:00`,
         status: 'scheduled',
         notes: createForm.notes || undefined,
+        ...(geo ? { latitude: geo.latitude, longitude: geo.longitude } : {}),
       });
       setCreateModalOpen(false);
       load();

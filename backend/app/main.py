@@ -38,6 +38,10 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS ix_agent_memory_rep_id ON agent_memory (rep_id)",
         "CREATE TABLE IF NOT EXISTS agent_conversation_messages (id SERIAL PRIMARY KEY, rep_id INTEGER REFERENCES medical_reps(id) ON DELETE CASCADE, role VARCHAR(20) NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())",
         "CREATE INDEX IF NOT EXISTS ix_agent_conversation_messages_rep_id ON agent_conversation_messages (rep_id)",
+        "ALTER TABLE visits ADD COLUMN IF NOT EXISTS latitude FLOAT",
+        "ALTER TABLE visits ADD COLUMN IF NOT EXISTS longitude FLOAT",
+        "ALTER TABLE agent_conversation_messages ADD COLUMN IF NOT EXISTS latitude FLOAT",
+        "ALTER TABLE agent_conversation_messages ADD COLUMN IF NOT EXISTS longitude FLOAT",
     ]
     for stmt in migrations:
         try:

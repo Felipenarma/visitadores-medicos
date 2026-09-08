@@ -733,7 +733,10 @@ def chat(request: AgentChatRequest, db: Session = Depends(get_db)):
 
     # Guardar la conversación en el servidor para que persista entre sesiones
     # y dispositivos (no depende del navegador/localStorage).
-    db.add(AgentConversationMessage(rep_id=request.rep_id, role="user", content=request.message))
+    db.add(AgentConversationMessage(
+        rep_id=request.rep_id, role="user", content=request.message,
+        latitude=request.latitude, longitude=request.longitude
+    ))
     db.add(AgentConversationMessage(rep_id=request.rep_id, role="assistant", content=final_response))
     db.commit()
 
