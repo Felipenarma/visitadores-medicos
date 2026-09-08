@@ -111,8 +111,8 @@ def delete_rep(rep_id: int, db: Session = Depends(get_db)):
     if not rep:
         raise HTTPException(status_code=404, detail="Visitador no encontrado")
     try:
-        db.query(Doctor).filter(Doctor.rep_id == rep_id).update({"rep_id": None}, synchronize_session=False)
-        db.query(Visit).filter(Visit.rep_id == rep_id).delete(synchronize_session=False)
+        doctors_updated = db.query(Doctor).filter(Doctor.rep_id == rep_id).update({"rep_id": None}, synchronize_session=False)
+        visits_deleted = db.query(Visit).filter(Visit.rep_id == rep_id).delete(synchronize_session=False)
         db.query(RepTarget).filter(RepTarget.rep_id == rep_id).delete(synchronize_session=False)
         db.query(UserSession).filter(UserSession.rep_id == rep_id).delete(synchronize_session=False)
         db.query(AgentConversationMessage).filter(AgentConversationMessage.rep_id == rep_id).delete(synchronize_session=False)

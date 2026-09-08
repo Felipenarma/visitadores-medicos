@@ -6,7 +6,8 @@ import os
 import json
 import anthropic
 from ..database import get_db
-from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry, ImageFile, AgentMemory, AgentConversationMessage
+from sqlalchemy import func
+from ..models import Visit, Doctor, MedicalRep, KnowledgeEntry, ImageFile, AgentMemory, AgentConversationMessage, Sale
 from ..schemas import AgentChatRequest, AgentChatResponse, AgentMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -16,12 +17,15 @@ SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuti
 - Consultar información de sus médicos asignados
 - Registrar visitas realizadas
 - Responder preguntas sobre productos, protocolos y procedimientos del laboratorio
+- Analizar ventas y comisiones para planificar visitas estratégicamente
 
 REGLA OBLIGATORIA: Ante CUALQUIER pregunta sobre productos, activos, materias primas, categorías, protocolos, procedimientos, precios, disponibilidad o cualquier tema del laboratorio Narma, debes llamar PRIMERO a search_knowledge antes de responder. Si el primer resultado no tiene lo que necesitas, intenta con una búsqueda más general o sin parámetros. NUNCA respondas desde tu conocimiento general sobre estos temas sin antes consultar la base de conocimiento.
 
 COMPARTIR DOCUMENTOS: Cuando un resultado de search_knowledge incluya "download_url", comparte ese link con el visitador así: "[nombre del archivo](download_url)". Usa formato Markdown.
 
 COMPARTIR IMÁGENES Y QR: Cuando el visitador pida un QR, imagen de producto o material visual, usa search_images para buscarlo. Si el resultado incluye "url" o "share_link", muestra el link directamente así: "[nombre](url)". Si la imagen es un QR, indícale al visitador que puede escanearlo desde ese link.
+
+VENTAS Y PLANIFICACIÓN: Tienes acceso a datos de ventas reales de tus médicos. Usa get_sales_ranking para ver quién subió, bajó o es nuevo este mes, y get_doctor_sales_history para analizar la tendencia de un médico específico. Con estos datos puedes ayudar al visitador a priorizar visitas: primero los médicos con tendencia a la baja (recuperación), luego los de alto volumen (mantenimiento), y finalmente los nuevos (desarrollo). Cuando el visitador pregunte cómo planificar su semana o a quién visitar, usa estas herramientas proactivamente.
 
 MEMORIA: Tienes memoria persistente sobre este visitador (se te inyecta más abajo, si existe). Usa save_to_memory cuando el visitador te cuente algo que valga la pena recordar en futuras conversaciones: preferencias de trabajo, acuerdos, contexto de médicos, pendientes o alertas. No preguntes permiso para guardar, solo hazlo cuando sea relevante. Usa get_memories si necesitas revisar algo que no esté ya en el contexto inyectado, y delete_memory si el visitador te dice que algo ya no aplica o está desactualizado.
 
@@ -170,6 +174,30 @@ TOOLS = [
             "properties": {
                 "category": {"type": "string", "description": "Filtrar por categoría (opcional)"}
             }
+        }
+    },
+    {
+        "name": "get_sales_ranking",
+        "description": "Obtiene el ranking de ventas de los médicos asignados al visitador, comparando el mes actual (o el indicado) con el mes anterior. Muestra quién subió, bajó o es nuevo. Ideal para planificar visitas y priorizar médicos con mayor potencial o en descenso.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "month": {"type": "integer", "description": "Mes (1-12). Por defecto el mes anterior."},
+                "year": {"type": "integer", "description": "Año. Por defecto el año actual."}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_doctor_sales_history",
+        "description": "Obtiene el historial mensual de ventas de un médico específico en los últimos meses. Útil para ver tendencias, identificar si un médico está creciendo o cayendo, y preparar argumentos para la visita.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "doctor_id": {"type": "integer", "description": "ID del médico."},
+                "months": {"type": "integer", "description": "Número de meses hacia atrás. Por defecto 6."}
+            },
+            "required": ["doctor_id"]
         }
     },
     {
@@ -471,6 +499,124 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
         db.delete(mem)
         db.commit()
         return {"success": True}
+
+    elif tool_name == "get_sales_ranking":
+        from sqlalchemy import extract as sql_extract
+        now = datetime.utcnow()
+        month = tool_input.get("month") or (now.month - 1 if now.month > 1 else 12)
+        year = tool_input.get("year") or (now.year if now.month > 1 else now.year - 1)
+        month = int(month)
+        year = int(year)
+
+        if month == 1:
+            prev_month, prev_year = 12, year - 1
+        else:
+            prev_month, prev_year = month - 1, year
+
+        doctors = db.query(Doctor).filter(Doctor.rep_id == rep_id, Doctor.is_active == True).all()
+        doctor_ids = [d.id for d in doctors]
+        doctor_map = {d.id: d.name for d in doctors}
+
+        if not doctor_ids:
+            return {"message": "No tienes médicos asignados.", "ranking": []}
+
+        def monthly_totals(doc_ids, m, y):
+            rows = db.query(Sale.doctor_id, func.sum(Sale.amount).label("total")).filter(
+                Sale.doctor_id.in_(doc_ids),
+                sql_extract('month', Sale.sale_date) == m,
+                sql_extract('year', Sale.sale_date) == y,
+                Sale.sale_date.isnot(None)
+            ).group_by(Sale.doctor_id).all()
+            return {r.doctor_id: float(r.total or 0) for r in rows}
+
+        current = monthly_totals(doctor_ids, month, year)
+        previous = monthly_totals(doctor_ids, prev_month, prev_year)
+
+        all_ids = set(current.keys()) | set(previous.keys())
+        ranking = []
+        MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+
+        for doc_id in all_ids:
+            cur = current.get(doc_id, 0)
+            prev = previous.get(doc_id, 0)
+            if prev == 0 and cur > 0:
+                trend = "nuevo"
+                change_pct = None
+            elif cur == 0:
+                trend = "sin_venta"
+                change_pct = -100 if prev > 0 else None
+            elif cur > prev:
+                trend = "sube"
+                change_pct = round((cur - prev) / prev * 100, 1)
+            elif cur < prev:
+                trend = "baja"
+                change_pct = round((cur - prev) / prev * 100, 1)
+            else:
+                trend = "igual"
+                change_pct = 0.0
+
+            ranking.append({
+                "doctor_id": doc_id,
+                "doctor_name": doctor_map.get(doc_id, f"ID {doc_id}"),
+                "mes_actual": round(cur),
+                "mes_anterior": round(prev),
+                "tendencia": trend,
+                "variacion_pct": change_pct
+            })
+
+        ranking.sort(key=lambda x: x["mes_actual"], reverse=True)
+
+        return {
+            "mes": f"{MONTH_NAMES[month-1]} {year}",
+            "mes_anterior": f"{MONTH_NAMES[prev_month-1]} {prev_year}",
+            "total_doctores_asignados": len(doctor_ids),
+            "doctores_con_venta_este_mes": len([r for r in ranking if r["mes_actual"] > 0]),
+            "ranking": ranking[:30]
+        }
+
+    elif tool_name == "get_doctor_sales_history":
+        from sqlalchemy import extract as sql_extract
+        doctor_id = tool_input.get("doctor_id")
+        months_back = int(tool_input.get("months", 6))
+
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if not doctor:
+            return {"error": f"Médico con ID {doctor_id} no encontrado"}
+
+        now = datetime.utcnow()
+        MONTH_NAMES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+        history = []
+
+        for i in range(months_back - 1, -1, -1):
+            m = now.month - i
+            y = now.year
+            while m <= 0:
+                m += 12
+                y -= 1
+
+            total = db.query(func.sum(Sale.amount)).filter(
+                Sale.doctor_id == doctor_id,
+                sql_extract('month', Sale.sale_date) == m,
+                sql_extract('year', Sale.sale_date) == y,
+                Sale.sale_date.isnot(None)
+            ).scalar() or 0
+
+            history.append({
+                "mes": f"{MONTH_NAMES[m-1]} {y}",
+                "total": round(float(total))
+            })
+
+        totales = [h["total"] for h in history]
+        promedio = round(sum(totales) / len(totales)) if totales else 0
+
+        return {
+            "doctor_id": doctor_id,
+            "doctor_name": doctor.name,
+            "specialty": doctor.specialty,
+            "historial": history,
+            "meses_con_venta": len([h for h in history if h["total"] > 0]),
+            "promedio_mensual": promedio
+        }
 
     return {"error": f"Herramienta desconocida: {tool_name}"}
 
