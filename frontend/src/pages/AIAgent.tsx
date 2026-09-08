@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Download, ExternalLink } from 'lucide-react';
+import { Send, Bot, User, Loader2, Download, ExternalLink, Mic, Square } from 'lucide-react';
 import { agentApi, repsApi } from '../api';
 import { useAuth } from '../context/AuthContext';
 import type { AgentMessage, MedicalRep } from '../types';
@@ -83,6 +83,80 @@ export default function AIAgent() {
   const [allReps, setAllReps] = useState<MedicalRep[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Dictado por voz (Web Speech API) ─────────────────────────────────────
+  // Gratis, sin backend: funciona en Chrome/Android y Safari 14.5+/iPhone.
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const keepRecordingRef = useRef(false);
+  const baseTextRef = useRef('');
+  const SpeechRecognitionAPI =
+    typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const speechSupported = !!SpeechRecognitionAPI;
+
+  useEffect(() => {
+    return () => {
+      keepRecordingRef.current = false;
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  const startRecording = () => {
+    if (!speechSupported || isRecording) return;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'es-CL';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    baseTextRef.current = input.trim() ? input.trim() + ' ' : '';
+    keepRecordingRef.current = true;
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      if (finalTranscript) {
+        baseTextRef.current = baseTextRef.current + finalTranscript + ' ';
+      }
+      setInput(baseTextRef.current + interimTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      // 'no-speech' y algunos 'network' son transitorios: se reintenta en onend.
+      if (event.error !== 'no-speech' && event.error !== 'network') {
+        keepRecordingRef.current = false;
+        setIsRecording(false);
+      }
+    };
+
+    recognition.onend = () => {
+      if (keepRecordingRef.current) {
+        // Chrome/Safari cortan el reconocimiento tras ~60s de silencio;
+        // se reinicia automáticamente para que el dictado no se corte solo.
+        try { recognition.start(); } catch { /* ya estaba corriendo */ }
+      } else {
+        setIsRecording(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+    recognition.start();
+  };
+
+  const stopRecording = () => {
+    keepRecordingRef.current = false;
+    recognitionRef.current?.stop();
+    setIsRecording(false);
+    inputRef.current?.focus();
+  };
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -260,10 +334,31 @@ export default function AIAgent() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={!repId || loading}
-          placeholder={repId ? 'Escribe tu mensaje... (Enter para enviar, Shift+Enter para nueva línea)' : 'Selecciona un visitador para continuar'}
+          placeholder={
+            !repId
+              ? 'Selecciona un visitador para continuar'
+              : isRecording
+                ? 'Escuchando... habla ahora'
+                : 'Escribe tu mensaje... (Enter para enviar, Shift+Enter para nueva línea)'
+          }
           rows={2}
-          className="flex-1 input resize-none"
+          className={`flex-1 input resize-none ${isRecording ? 'ring-2 ring-red-400' : ''}`}
         />
+        {speechSupported && (
+          <button
+            type="button"
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={!repId || loading}
+            title={isRecording ? 'Detener dictado' : 'Dictar por voz'}
+            className={`px-4 flex items-center justify-center self-end rounded-xl border transition-colors ${
+              isRecording
+                ? 'bg-red-500 border-red-500 text-white animate-pulse'
+                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {isRecording ? <Square size={18} /> : <Mic size={20} />}
+          </button>
+        )}
         <button
           onClick={handleSend}
           disabled={!input.trim() || !repId || loading}
