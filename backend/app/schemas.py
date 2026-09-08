@@ -139,6 +139,15 @@ class GenerateVisitsRequest(BaseModel):
     months_ahead: Optional[int] = 6
 
 
+class ScheduleBySalesRequest(BaseModel):
+    sales_month: int
+    sales_year: int
+    rep_id: Optional[int] = None
+    start_date: Optional[str] = None  # YYYY-MM-DD, default: hoy
+    window_days: Optional[int] = 60
+    max_per_day: Optional[int] = None  # default: MAX_VISITS_PER_DAY (7)
+
+
 # Sales schemas
 class SaleOut(BaseModel):
     id: int

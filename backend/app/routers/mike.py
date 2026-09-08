@@ -13,6 +13,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import anthropic
 from ..constants import MAX_VISITS_PER_DAY, count_weekdays
+from ..scheduling import schedule_visits_for_doctors
 import openpyxl
 from ..database import get_db
 from ..models import Visit, Doctor, MedicalRep, Sale, BusinessLine, MikeMemory
@@ -268,6 +269,30 @@ MIKE_TOOLS = [
                 "reason": {"type": "string", "description": "Motivo de cancelación (opcional)"}
             },
             "required": ["visit_id"]
+        }
+    },
+    {
+        "name": "bulk_schedule_visits",
+        "description": (
+            "Agenda automáticamente UNA visita para varios médicos a la vez en una sola llamada "
+            "(por ejemplo, todos los médicos con venta en un mes específico, o una lista puntual de "
+            "médicos). Reparte la carga de cada visitador en un máximo de visitas por día hábil "
+            "(lunes a viernes, default 7) para no saturar ningún día. Usa esta herramienta en vez de "
+            "llamar schedule_visit repetidas veces cuando haya que agendar más de unos pocos médicos: "
+            "schedule_visit es para UNA visita puntual, bulk_schedule_visits es para lotes grandes. "
+            "No duplica visitas: omite médicos que ya tengan una visita futura agendada, y reporta "
+            "aparte a los médicos sin visitador asignado (no se les puede agendar visita)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sales_month": {"type": "integer", "description": "Junto con sales_year, selecciona a todos los médicos con al menos una venta en ese mes"},
+                "sales_year": {"type": "integer", "description": "Año para el filtro de sales_month"},
+                "doctor_ids": {"type": "array", "items": {"type": "integer"}, "description": "Lista específica de IDs de médicos a agendar (alternativa a sales_month/sales_year)"},
+                "rep_id": {"type": "integer", "description": "Limitar a los médicos de este visitador (opcional)"},
+                "start_date": {"type": "string", "description": "Fecha desde la cual empezar a agendar, formato YYYY-MM-DD (default: hoy)"},
+                "max_per_day": {"type": "integer", "description": "Máximo de visitas por día hábil por visitador (default: 7)"}
+            }
         }
     },
     {
@@ -1382,6 +1407,45 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "medico": doctor.name if doctor else visit.doctor_id,
             "fecha": visit.scheduled_date.strftime("%Y-%m-%d") if visit.scheduled_date else "?"
         }
+
+    # ── bulk_schedule_visits ──────────────────────────────────────────────────
+    elif tool_name == "bulk_schedule_visits":
+        sales_month = tool_input.get("sales_month")
+        sales_year = tool_input.get("sales_year")
+        doctor_ids_input = tool_input.get("doctor_ids")
+        filter_rep_id = tool_input.get("rep_id")
+        start_date_str = tool_input.get("start_date")
+        max_per_day = tool_input.get("max_per_day") or MAX_VISITS_PER_DAY
+
+        if doctor_ids_input:
+            query = db.query(Doctor).filter(Doctor.id.in_(doctor_ids_input), Doctor.is_active == True)
+        elif sales_month and sales_year:
+            doc_ids = [r[0] for r in db.query(Sale.doctor_id).filter(
+                extract('month', Sale.sale_date) == sales_month,
+                extract('year', Sale.sale_date) == sales_year,
+                Sale.doctor_id.isnot(None)
+            ).distinct().all()]
+            query = db.query(Doctor).filter(Doctor.id.in_(doc_ids), Doctor.is_active == True)
+        else:
+            return {"error": "Debes indicar sales_month + sales_year, o una lista doctor_ids"}
+
+        if filter_rep_id:
+            query = query.filter(Doctor.rep_id == filter_rep_id)
+        doctors = query.all()
+
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else now
+        except ValueError:
+            start_date = now
+
+        result = schedule_visits_for_doctors(
+            db, doctors, start_date=start_date, window_days=60, max_per_day=max_per_day,
+            notes="Agendado por Mike"
+        )
+        result["total_medicos_considerados"] = len(doctors)
+        if sales_month and sales_year:
+            result["periodo_ventas"] = f"{sales_month:02d}/{sales_year}"
+        return result
 
     # ── bulk_assign_doctors ───────────────────────────────────────────────────
     elif tool_name == "bulk_assign_doctors":

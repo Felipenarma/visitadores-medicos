@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from typing import List, Optional
 from datetime import datetime, timedelta
 from ..database import get_db
-from ..models import Visit, Doctor, MedicalRep
-from ..schemas import VisitCreate, VisitUpdate, VisitOut, GenerateVisitsRequest
+from ..models import Visit, Doctor, MedicalRep, Sale
+from ..schemas import VisitCreate, VisitUpdate, VisitOut, GenerateVisitsRequest, ScheduleBySalesRequest
 from ..constants import MAX_VISITS_PER_DAY
+from ..scheduling import schedule_visits_for_doctors
 
 router = APIRouter(prefix="/api/visits", tags=["visits"])
 
@@ -205,3 +206,45 @@ def generate_visits(data: GenerateVisitsRequest, db: Session = Depends(get_db)):
         "skipped": skipped,
         "max_visits_per_day": MAX_VISITS_PER_DAY
     }
+
+
+@router.post("/schedule-by-sales")
+def schedule_by_sales(data: ScheduleBySalesRequest, db: Session = Depends(get_db)):
+    """Agenda una visita para cada médico activo con al menos una venta en el
+    mes/año indicado (útil para 'ponerse al día' con médicos detectados en una
+    carga de ventas). Reparte la carga de cada visitador en máximo
+    `max_per_day` (default 7) visitas por día hábil, sin duplicar visitas ya
+    agendadas. Los médicos sin visitador asignado se reportan aparte, ya que
+    una visita requiere un visitador."""
+    doc_ids = [r[0] for r in db.query(Sale.doctor_id).filter(
+        extract('month', Sale.sale_date) == data.sales_month,
+        extract('year', Sale.sale_date) == data.sales_year,
+        Sale.doctor_id.isnot(None)
+    ).distinct().all()]
+
+    query = db.query(Doctor).filter(Doctor.id.in_(doc_ids), Doctor.is_active == True)
+    if data.rep_id:
+        query = query.filter(Doctor.rep_id == data.rep_id)
+    doctors = query.all()
+
+    start_date = datetime.strptime(data.start_date, "%Y-%m-%d") if data.start_date else datetime.utcnow()
+    max_per_day = data.max_per_day or MAX_VISITS_PER_DAY
+
+    result = schedule_visits_for_doctors(
+        db,
+        doctors,
+        start_date=start_date,
+        window_days=data.window_days or 60,
+        max_per_day=max_per_day,
+        notes=f"Agendado automáticamente: médicos con venta {data.sales_month:02d}/{data.sales_year}"
+    )
+    result["periodo_ventas"] = f"{data.sales_month:02d}/{data.sales_year}"
+    result["total_medicos_con_venta"] = len(doctors)
+    result["message"] = (
+        f"{result['total_creados']} visitas agendadas de {len(doctors)} médicos con venta en "
+        f"{data.sales_month:02d}/{data.sales_year} (máx. {max_per_day}/día hábil). "
+        f"{result['total_ya_agendados']} ya tenían visita futura, "
+        f"{result['total_sin_visitador']} sin visitador asignado."
+    )
+    return result
+
