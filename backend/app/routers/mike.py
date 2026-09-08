@@ -754,7 +754,7 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "total_monto": round(total_monto, 2),
             "total_registros": total_registros,
             "agrupado_por": group_by,
-            "detalle": breakdown[:50]
+            "detalle": breakdown
         }
 
     # ── get_rep_commissions ───────────────────────────────────────────────────
@@ -801,6 +801,37 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
                 extract('year', Sale.sale_date) == year
             ).scalar()
 
+            # Detalle por médico del período (TODOS los médicos con venta, sin truncar)
+            doctor_sales = db.query(Sale).join(
+                Doctor, Doctor.id == Sale.doctor_id
+            ).filter(
+                Doctor.rep_id == rep.id,
+                extract('month', Sale.sale_date) == month,
+                extract('year', Sale.sale_date) == year
+            ).all()
+
+            doctor_detail_map = {}
+            for s in doctor_sales:
+                if not s.doctor_id:
+                    continue
+                key = s.doctor_id
+                if key not in doctor_detail_map:
+                    doc = db.query(Doctor).filter(Doctor.id == key).first()
+                    doctor_detail_map[key] = {
+                        "doctor_id": key,
+                        "nombre": doc.name if doc else "Sin nombre",
+                        "rut": (doc.rut if doc else None) or "",
+                        "unidades": 0,
+                        "monto": 0.0,
+                    }
+                doctor_detail_map[key]["unidades"] += 1
+                doctor_detail_map[key]["monto"] += float(s.amount or 0)
+
+            detalle_por_medico = sorted(
+                [{**v, "monto": round(v["monto"], 2)} for v in doctor_detail_map.values()],
+                key=lambda x: x["monto"], reverse=True
+            )
+
             result.append({
                 "rep_id": rep.id,
                 "nombre": rep.name,
@@ -812,7 +843,8 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
                 "ventas_por_categoria": [
                     {"categoria": r.categoria or "Sin categoría", "monto": round(float(r.total or 0), 2), "registros": r.count}
                     for r in sorted(sales_cats, key=lambda x: float(x.total or 0), reverse=True)
-                ]
+                ],
+                "detalle_por_medico": detalle_por_medico
             })
 
         return {"periodo": f"{month:02d}/{year}", "comisiones": result}
