@@ -73,16 +73,7 @@ function RenderMessage({ content, isUser }: { content: string; isUser: boolean }
   );
 }
 
-async function getGeoPosition(): Promise<{ latitude: number; longitude: number } | null> {
-  if (!navigator.geolocation) return null;
-  return new Promise(resolve => {
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-      () => resolve(null),
-      { timeout: 5000, maximumAge: 60000 }
-    );
-  });
-}
+import { getGeoPosition } from '../utils/geo';
 
 export default function AIAgent() {
   const { user } = useAuth();

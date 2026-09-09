@@ -2,6 +2,7 @@ import React, { ReactNode, useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { MapPin } from 'lucide-react';
+import { prefetchGeoPosition } from '../utils/geo';
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,6 +13,10 @@ function GeoPermissionBanner() {
 
   useEffect(() => {
     if (!navigator.geolocation) { setStatus('unavailable'); return; }
+
+    // Solicitar ubicación inmediatamente al cargar para que el browser pida permiso ya
+    prefetchGeoPosition();
+
     if (!navigator.permissions) return;
     navigator.permissions.query({ name: 'geolocation' }).then(result => {
       if (result.state === 'denied') setStatus('denied');

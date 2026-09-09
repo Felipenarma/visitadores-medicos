@@ -14,17 +14,7 @@ import { Plus, Search, Phone, Mail, MapPin, Building2, UserCheck, Edit2, Chevron
 import { businessLinesApi } from '../../api';
 import type { BusinessLine } from '../../types';
 
-/** Obtiene la posición actual del dispositivo. Devuelve null si el usuario deniega o el navegador no soporta. */
-async function getGeoPosition(): Promise<{ latitude: number; longitude: number } | null> {
-  if (!navigator.geolocation) return null;
-  return new Promise(resolve => {
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-      () => resolve(null),
-      { timeout: 5000, maximumAge: 60000 }
-    );
-  });
-}
+import { getGeoPosition } from '../../utils/geo';
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: '#3B82F6',
