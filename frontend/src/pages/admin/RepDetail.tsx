@@ -838,8 +838,8 @@ export default function RepDetail() {
     if (!id) return;
     setLoadingTrend(true);
     Promise.all([
-      dashboardApi.getRepMonthlyTrend(Number(id), 6),
-      (dashboardApi as any).getRepSalesTrend(Number(id), 6),
+      dashboardApi.getRepMonthlyTrend(Number(id), 12),
+      (dashboardApi as any).getRepSalesTrend(Number(id), 12),
     ])
       .then(([visits, sales]) => { setMonthlyTrend(visits); setSalesTrend(sales); })
       .catch(() => {})
