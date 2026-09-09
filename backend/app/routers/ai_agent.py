@@ -62,7 +62,7 @@ TOOLS = [
     },
     {
         "name": "schedule_visit",
-        "description": "Programa una nueva visita a un médico.",
+        "description": "Programa una nueva visita a un médico en una fecha y hora específica. SIEMPRE incluye la hora en scheduled_time (formato HH:MM, ej: '09:00'). Si el usuario no indica hora, usa '09:00' como valor por defecto.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -72,7 +72,11 @@ TOOLS = [
                 },
                 "scheduled_date": {
                     "type": "string",
-                    "description": "Fecha y hora de la visita en formato ISO 8601 (YYYY-MM-DDTHH:MM:SS)"
+                    "description": "Fecha de la visita en formato YYYY-MM-DD (ej: '2026-09-15')"
+                },
+                "scheduled_time": {
+                    "type": "string",
+                    "description": "Hora de la visita en formato HH:MM (ej: '09:00', '14:30'). Por defecto '09:00'."
                 },
                 "notes": {
                     "type": "string",
@@ -80,6 +84,37 @@ TOOLS = [
                 }
             },
             "required": ["doctor_id", "scheduled_date"]
+        }
+    },
+    {
+        "name": "bulk_schedule_visits",
+        "description": "Agenda múltiples visitas en un mismo día distribuyendo automáticamente las horas en un rango horario. Úsala cuando el usuario quiera planificar varios médicos para un día: calcula intervalos iguales entre start_time y end_time.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "doctor_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Lista de IDs de médicos a visitar ese día"
+                },
+                "scheduled_date": {
+                    "type": "string",
+                    "description": "Fecha del día de visitas en formato YYYY-MM-DD"
+                },
+                "start_time": {
+                    "type": "string",
+                    "description": "Hora de inicio del bloque de visitas en formato HH:MM. Por defecto '09:00'."
+                },
+                "end_time": {
+                    "type": "string",
+                    "description": "Hora de término del bloque de visitas en formato HH:MM. Por defecto '17:30'."
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Notas comunes para todas las visitas (opcional)"
+                }
+            },
+            "required": ["doctor_ids", "scheduled_date"]
         }
     },
     {
@@ -274,7 +309,8 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
 
     elif tool_name == "schedule_visit":
         doctor_id = tool_input.get("doctor_id")
-        scheduled_date_str = tool_input.get("scheduled_date")
+        scheduled_date_str = tool_input.get("scheduled_date", "")
+        scheduled_time_str = tool_input.get("scheduled_time", "09:00") or "09:00"
         notes = tool_input.get("notes", "")
 
         doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
@@ -282,9 +318,15 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
             return {"error": f"Médico con ID {doctor_id} no encontrado"}
 
         try:
-            scheduled_date = datetime.fromisoformat(scheduled_date_str)
+            # Soporta tanto "YYYY-MM-DD" como "YYYY-MM-DDTHH:MM:SS"
+            if "T" in scheduled_date_str:
+                scheduled_date = datetime.fromisoformat(scheduled_date_str)
+            else:
+                date_part = scheduled_date_str.strip()
+                time_part = scheduled_time_str.strip()[:5]  # HH:MM
+                scheduled_date = datetime.fromisoformat(f"{date_part}T{time_part}:00")
         except ValueError:
-            return {"error": f"Formato de fecha inválido: {scheduled_date_str}"}
+            return {"error": f"Formato de fecha/hora inválido: {scheduled_date_str} {scheduled_time_str}"}
 
         visit = Visit(
             doctor_id=doctor_id,
@@ -299,8 +341,62 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
         return {
             "success": True,
             "visit_id": visit.id,
-            "message": f"Visita programada con {doctor.name} para {scheduled_date.strftime('%d/%m/%Y %H:%M')}"
+            "message": f"Visita programada con {doctor.name} para el {scheduled_date.strftime('%d/%m/%Y a las %H:%M')}"
         }
+
+    elif tool_name == "bulk_schedule_visits":
+        doctor_ids = tool_input.get("doctor_ids", [])
+        scheduled_date_str = tool_input.get("scheduled_date", "")
+        start_time_str = tool_input.get("start_time", "09:00") or "09:00"
+        end_time_str = tool_input.get("end_time", "17:30") or "17:30"
+        notes = tool_input.get("notes", "")
+
+        if not doctor_ids:
+            return {"error": "Se requiere al menos un médico en doctor_ids"}
+
+        try:
+            from datetime import time as dtime
+            sh, sm = map(int, start_time_str[:5].split(":"))
+            eh, em = map(int, end_time_str[:5].split(":"))
+            start_minutes = sh * 60 + sm
+            end_minutes = eh * 60 + em
+            if end_minutes <= start_minutes:
+                return {"error": "end_time debe ser posterior a start_time"}
+
+            n = len(doctor_ids)
+            # Con 1 médico → start_time. Con N médicos → distribuir en [start, end]
+            interval = (end_minutes - start_minutes) / max(n - 1, 1) if n > 1 else 0
+
+            created = []
+            errors = []
+            for i, doctor_id in enumerate(doctor_ids):
+                doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+                if not doctor:
+                    errors.append(f"Médico ID {doctor_id} no encontrado")
+                    continue
+                slot_minutes = int(start_minutes + i * interval)
+                slot_h, slot_m = divmod(slot_minutes, 60)
+                scheduled_date = datetime.fromisoformat(f"{scheduled_date_str}T{slot_h:02d}:{slot_m:02d}:00")
+                visit = Visit(
+                    doctor_id=doctor_id,
+                    rep_id=rep_id,
+                    scheduled_date=scheduled_date,
+                    status="scheduled",
+                    notes=notes
+                )
+                db.add(visit)
+                created.append({"doctor": doctor.name, "hora": f"{slot_h:02d}:{slot_m:02d}"})
+
+            db.commit()
+            return {
+                "success": True,
+                "visitas_creadas": len(created),
+                "detalle": created,
+                "errores": errors,
+                "message": f"{len(created)} visitas agendadas el {scheduled_date_str} entre {start_time_str} y {end_time_str}"
+            }
+        except ValueError as e:
+            return {"error": f"Error de formato: {str(e)}"}
 
     elif tool_name == "complete_visit":
         visit_id = tool_input.get("visit_id")
