@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`;
 import { dashboardApi } from '../../api';
@@ -50,6 +51,7 @@ export default function MyCommissions() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [showDoctors, setShowDoctors] = useState(false);
+  const [trend, setTrend] = useState<{ label: string; units: number }[]>([]);
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
@@ -63,6 +65,13 @@ export default function MyCommissions() {
     if (month === 12) { setMonth(1); setYear(y => y + 1); }
     else setMonth(m => m + 1);
   };
+
+  useEffect(() => {
+    if (!user?.rep_id) return;
+    dashboardApi.getRepSalesTrend(user.rep_id, 12)
+      .then(data => setTrend(data.map(d => ({ label: d.label, units: d.units }))))
+      .catch(() => {});
+  }, [user?.rep_id]);
 
   useEffect(() => {
     if (!user?.rep_id) return;
@@ -167,6 +176,28 @@ export default function MyCommissions() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Tendencia 12 meses */}
+          {trend.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h2 className="font-semibold text-gray-700 mb-4 text-sm flex items-center gap-2">
+                <TrendingUp size={15} className="text-blue-500" />
+                Unidades vendidas — últimos 12 meses
+              </h2>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={trend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={32} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                    formatter={(v: number) => [`${v} u`, 'Unidades']}
+                  />
+                  <Bar dataKey="units" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
 
