@@ -58,9 +58,28 @@ export default function RepCalendar() {
   const [doctorForm, setDoctorForm] = useState<Partial<Doctor>>({});
   const [savingDoctor, setSavingDoctor] = useState(false);
   const [businessLines, setBusinessLines] = useState<BusinessLine[]>([]);
+  const [geoStatus, setGeoStatus] = useState<'checking' | 'granted' | 'denied' | 'unavailable'>('checking');
 
   useEffect(() => {
     businessLinesApi.getAll().then(setBusinessLines).catch(() => {});
+  }, []);
+
+  // Verificar estado del permiso de geolocalización al cargar
+  useEffect(() => {
+    if (!navigator.geolocation) { setGeoStatus('unavailable'); return; }
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then(result => {
+        setGeoStatus(result.state === 'granted' ? 'granted' : result.state === 'denied' ? 'denied' : 'checking');
+        result.onchange = () => setGeoStatus(result.state === 'granted' ? 'granted' : result.state === 'denied' ? 'denied' : 'checking');
+      }).catch(() => setGeoStatus('checking'));
+    } else {
+      // Fallback: intentar obtener posición para saber si está permitido
+      navigator.geolocation.getCurrentPosition(
+        () => setGeoStatus('granted'),
+        (e) => setGeoStatus(e.code === 1 ? 'denied' : 'checking'),
+        { timeout: 3000, maximumAge: 60000 }
+      );
+    }
   }, []);
 
   const load = async () => {
@@ -142,6 +161,8 @@ export default function RepCalendar() {
         ? `${form.scheduled_date}T${form.scheduled_time}:00`
         : undefined;
       const geo = await getGeoPosition();
+      if (geo) setGeoStatus('granted');
+      else if (geoStatus !== 'unavailable') setGeoStatus('denied');
       await visitsApi.update(selectedVisit.id, {
         status: form.status as Visit['status'],
         notes: form.notes,
@@ -160,6 +181,8 @@ export default function RepCalendar() {
     setCreating(true);
     try {
       const geo = await getGeoPosition();
+      if (geo) setGeoStatus('granted');
+      else if (geoStatus !== 'unavailable') setGeoStatus('denied');
       await visitsApi.create({
         doctor_id: createForm.doctor_id,
         rep_id: user.rep_id,
@@ -209,6 +232,26 @@ export default function RepCalendar() {
           Nueva Cita
         </button>
       </div>
+
+      {/* Aviso de geolocalización */}
+      {geoStatus === 'denied' && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm">
+          <MapPin size={16} className="text-amber-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-amber-800">Ubicación bloqueada</p>
+            <p className="text-amber-700 mt-0.5">
+              Tu dispositivo no permite registrar tu ubicación. Las visitas no aparecerán en el mapa de actividad.
+              Para activarlo: en tu navegador ve a <strong>Configuración → Privacidad → Ubicación</strong> y permite el acceso a esta app.
+            </p>
+          </div>
+        </div>
+      )}
+      {geoStatus === 'unavailable' && (
+        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-500">
+          <MapPin size={15} className="text-gray-400" />
+          Este dispositivo no tiene GPS disponible — las visitas no registrarán ubicación.
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-sm">
