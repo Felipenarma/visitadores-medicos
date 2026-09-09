@@ -314,8 +314,8 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
 
     elif tool_name == "schedule_visit":
         doctor_id = tool_input.get("doctor_id")
-        scheduled_date_str = tool_input.get("scheduled_date", "")
-        scheduled_time_str = tool_input.get("scheduled_time", "09:00") or "09:00"
+        scheduled_date_str = (tool_input.get("scheduled_date") or "").strip()
+        scheduled_time_str = (tool_input.get("scheduled_time") or "09:00").strip()[:5]
         notes = tool_input.get("notes", "")
 
         doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
@@ -323,13 +323,9 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
             return {"error": f"Médico con ID {doctor_id} no encontrado"}
 
         try:
-            # Soporta tanto "YYYY-MM-DD" como "YYYY-MM-DDTHH:MM:SS"
-            if "T" in scheduled_date_str:
-                scheduled_date = datetime.fromisoformat(scheduled_date_str)
-            else:
-                date_part = scheduled_date_str.strip()
-                time_part = scheduled_time_str.strip()[:5]  # HH:MM
-                scheduled_date = datetime.fromisoformat(f"{date_part}T{time_part}:00")
+            # Normalizar: extraer solo YYYY-MM-DD si viene con hora adjunta
+            date_only = scheduled_date_str[:10]  # siempre toma los primeros 10 chars
+            scheduled_date = datetime.fromisoformat(f"{date_only}T{scheduled_time_str}:00")
         except ValueError:
             return {"error": f"Formato de fecha/hora inválido: {scheduled_date_str} {scheduled_time_str}"}
 
@@ -360,7 +356,7 @@ def execute_tool(tool_name: str, tool_input: dict, rep_id: int, db: Session) -> 
             return {"error": "Se requiere al menos un médico en doctor_ids"}
 
         try:
-            from datetime import time as dtime
+            scheduled_date_str = scheduled_date_str[:10]  # solo YYYY-MM-DD
             sh, sm = map(int, start_time_str[:5].split(":"))
             eh, em = map(int, end_time_str[:5].split(":"))
             start_minutes = sh * 60 + sm
