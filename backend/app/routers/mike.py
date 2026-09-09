@@ -438,6 +438,11 @@ MIKE_TOOLS = [
 ]
 
 
+def _parse_date(s: str) -> datetime:
+    """Parsea una fecha robustamente: acepta YYYY-MM-DD, YYYY-MM-DDTHH:MM, YYYY-MM-DD HH:MM, etc."""
+    return datetime.strptime(str(s).strip()[:10], "%Y-%m-%d")
+
+
 def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
     now = datetime.utcnow()
     current_month = now.month
@@ -888,7 +893,7 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
         else:
             if date_str:
                 try:
-                    d = datetime.strptime(date_str, "%Y-%m-%d")
+                    d = _parse_date(date_str)
                 except ValueError:
                     d = now
             else:
@@ -1306,8 +1311,8 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
 
         q = db.query(Visit).filter(
             Visit.rep_id == rep_id,
-            Visit.scheduled_date >= datetime.strptime(date_from, "%Y-%m-%d"),
-            Visit.scheduled_date < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            Visit.scheduled_date >= _parse_date(date_from),
+            Visit.scheduled_date < _parse_date(date_to) + timedelta(days=1)
         )
         if status:
             q = q.filter(Visit.status == status)
@@ -1350,7 +1355,7 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
         visit = Visit(
             rep_id=rep_id,
             doctor_id=doctor_id,
-            scheduled_date=datetime.strptime(date_str, "%Y-%m-%d"),
+            scheduled_date=_parse_date(date_str),
             status="scheduled",
             notes=notes
         )
@@ -1375,7 +1380,7 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
         if not visit: return {"error": f"Visita {visit_id} no encontrada"}
 
         old_date = visit.scheduled_date.strftime("%Y-%m-%d") if visit.scheduled_date else "?"
-        visit.scheduled_date = datetime.strptime(new_date, "%Y-%m-%d")
+        visit.scheduled_date = _parse_date(new_date)
         if notes: visit.notes = notes
         db.commit()
 
@@ -1434,7 +1439,7 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
         doctors = query.all()
 
         try:
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else now
+            start_date = _parse_date(start_date_str) if start_date_str else now
         except ValueError:
             start_date = now
 
