@@ -234,13 +234,14 @@ MIKE_TOOLS = [
     },
     {
         "name": "schedule_visit",
-        "description": "Programa una nueva visita para un visitador con un médico específico.",
+        "description": "Programa una nueva visita para un visitador con un médico específico en fecha y hora.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "rep_id": {"type": "integer", "description": "ID del visitador"},
                 "doctor_id": {"type": "integer", "description": "ID del médico a visitar"},
                 "scheduled_date": {"type": "string", "description": "Fecha de la visita en formato YYYY-MM-DD"},
+                "scheduled_time": {"type": "string", "description": "Hora de la visita en formato HH:MM (ej: '09:00'). Por defecto '09:00'."},
                 "notes": {"type": "string", "description": "Notas opcionales para la visita"}
             },
             "required": ["rep_id", "doctor_id", "scheduled_date"]
@@ -248,12 +249,13 @@ MIKE_TOOLS = [
     },
     {
         "name": "reschedule_visit",
-        "description": "Reagenda una visita existente a otra fecha.",
+        "description": "Reagenda una visita existente a otra fecha y hora.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "visit_id": {"type": "integer", "description": "ID de la visita"},
                 "new_date": {"type": "string", "description": "Nueva fecha en formato YYYY-MM-DD"},
+                "new_time": {"type": "string", "description": "Nueva hora en formato HH:MM (ej: '09:00'). Si no se indica, conserva la hora original."},
                 "notes": {"type": "string", "description": "Notas opcionales"}
             },
             "required": ["visit_id", "new_date"]
@@ -1345,6 +1347,7 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
         rep_id    = tool_input.get("rep_id")
         doctor_id = tool_input.get("doctor_id")
         date_str  = tool_input.get("scheduled_date")
+        time_str  = (tool_input.get("scheduled_time") or "09:00").strip()[:5]
         notes     = tool_input.get("notes")
 
         rep    = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
@@ -1352,10 +1355,13 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
         if not rep:    return {"error": f"Visitador {rep_id} no encontrado"}
         if not doctor: return {"error": f"Médico {doctor_id} no encontrado"}
 
+        h, m = map(int, time_str.split(":"))
+        scheduled_dt = _parse_date(date_str).replace(hour=h, minute=m)
+
         visit = Visit(
             rep_id=rep_id,
             doctor_id=doctor_id,
-            scheduled_date=_parse_date(date_str),
+            scheduled_date=scheduled_dt,
             status="scheduled",
             notes=notes
         )
@@ -1367,20 +1373,29 @@ def execute_mike_tool(tool_name: str, tool_input: dict, db: Session) -> Any:
             "visit_id": visit.id,
             "visitador": rep.name,
             "medico": doctor.name,
-            "fecha": date_str
+            "fecha": scheduled_dt.strftime("%d/%m/%Y %H:%M")
         }
 
     # ── reschedule_visit ──────────────────────────────────────────────────────
     elif tool_name == "reschedule_visit":
         visit_id = tool_input.get("visit_id")
         new_date  = tool_input.get("new_date")
+        new_time  = (tool_input.get("new_time") or "").strip()[:5]
         notes     = tool_input.get("notes")
 
         visit = db.query(Visit).filter(Visit.id == visit_id).first()
         if not visit: return {"error": f"Visita {visit_id} no encontrada"}
 
-        old_date = visit.scheduled_date.strftime("%Y-%m-%d") if visit.scheduled_date else "?"
-        visit.scheduled_date = _parse_date(new_date)
+        old_date = visit.scheduled_date.strftime("%Y-%m-%d %H:%M") if visit.scheduled_date else "?"
+        base = _parse_date(new_date)
+        if new_time:
+            h, m = map(int, new_time.split(":"))
+            visit.scheduled_date = base.replace(hour=h, minute=m)
+        else:
+            # Conservar la hora original si no se especifica una nueva
+            orig_h = visit.scheduled_date.hour if visit.scheduled_date else 0
+            orig_m = visit.scheduled_date.minute if visit.scheduled_date else 0
+            visit.scheduled_date = base.replace(hour=orig_h, minute=orig_m)
         if notes: visit.notes = notes
         db.commit()
 
