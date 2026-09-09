@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
+
+const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`;
 import { dashboardApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -113,13 +115,21 @@ export default function MyCommissions() {
       ) : (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded-xl p-5 text-white shadow-sm" style={{ backgroundColor: '#0F1E2D' }}>
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp size={16} className="opacity-70" />
                 <p className="text-sm opacity-70">Unidades totales</p>
               </div>
               <p className="text-3xl font-bold">{data.sales_count.toLocaleString('es-CL')}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign size={16} className="text-emerald-500" />
+                <p className="text-sm text-gray-500">Venta Neta (sin IVA)</p>
+              </div>
+              <p className="text-2xl font-bold text-emerald-600">{fmt(data.total_amount / 1.19)}</p>
+              <p className="text-xs text-gray-400 mt-0.5">Bruta: {fmt(data.total_amount)}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
@@ -182,6 +192,7 @@ export default function MyCommissions() {
                         <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Médico</th>
                         <th className="text-left px-4 py-2.5 text-gray-500 font-medium hidden sm:table-cell">Especialidad</th>
                         <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Unidades</th>
+                        <th className="text-right px-4 py-2.5 text-gray-500 font-medium hidden md:table-cell">Venta Neta</th>
                         <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Categorías</th>
                       </tr>
                     </thead>
@@ -201,6 +212,10 @@ export default function MyCommissions() {
                             {doc.specialty || <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-4 py-2.5 text-center font-bold text-gray-800">{doc.units}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-emerald-600 hidden md:table-cell">
+                            {fmt(doc.amount / 1.19)}
+                            <p className="text-[10px] text-gray-400 font-normal">Bruta: {fmt(doc.amount)}</p>
+                          </td>
                           <td className="px-4 py-2.5">
                             <div className="flex flex-wrap gap-1">
                               {Object.entries(doc.categories).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
