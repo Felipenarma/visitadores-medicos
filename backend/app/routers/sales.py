@@ -268,16 +268,10 @@ async def upload_consolidado(
     from calendar import monthrange as _monthrange
     _, _ref_last_day = _monthrange(_ref_year, _ref_month)
     _ref_max_date = datetime(_ref_year, _ref_month, _ref_last_day, 23, 59, 59)
+    # cap_dates="true" es opt-in explícito (el frontend no lo usa hoy): solo si se pide
+    # explícitamente se limitan las fechas al mes de referencia. Por defecto, las fechas
+    # del archivo se respetan tal cual vienen, incluidas las del mes en curso.
     _cap_dates = (cap_dates == "true")
-    # Tope global: nunca guardar fechas del mes en curso (siempre incompleto)
-    _now_dt = datetime.utcnow()
-    if _now_dt.month == 1:
-        _global_cap_year, _global_cap_month = _now_dt.year - 1, 12
-    else:
-        _global_cap_year, _global_cap_month = _now_dt.year, _now_dt.month - 1
-    from calendar import monthrange as _mr2
-    _, _global_cap_last = _mr2(_global_cap_year, _global_cap_month)
-    _global_max_date = datetime(_global_cap_year, _global_cap_month, _global_cap_last, 23, 59, 59)
 
     # Normalizar nombres de columnas: minúsculas, sin espacios, sin tildes básicas
     def norm_col(c):
@@ -473,11 +467,11 @@ async def upload_consolidado(
                     _date_str = str(date_raw).strip()
                     _is_iso = len(_date_str) >= 10 and _date_str[4:5] == '-' and _date_str[7:8] == '-'
                     sale_date = pd.to_datetime(date_raw, dayfirst=not _is_iso).to_pydatetime()
-                    # Limitar al último día del mes de referencia (evita desfase OT/RM entre meses)
+                    # Solo se limita al mes de referencia si se pidió explícitamente
+                    # (cap_dates="true"); por defecto se respeta la fecha del archivo tal cual,
+                    # incluyendo fechas del mes en curso.
                     if _cap_dates and sale_date > _ref_max_date:
                         sale_date = _ref_max_date
-                    elif sale_date > _global_max_date:
-                        sale_date = _global_max_date
                 except Exception:
                     sale_date = None
 
