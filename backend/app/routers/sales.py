@@ -435,6 +435,7 @@ async def upload_consolidado(
     new_doctors_count = 0
     new_doctors_detail: list = []
     duplicates = 0
+    updated = 0
     sales_to_add = []
 
     for _, row in df.iterrows():
@@ -490,11 +491,29 @@ async def upload_consolidado(
                 ext_id = f"{rut_pac or ''}|{rut_doc or ''}|{date_str}|{(product or '')[:50]}"[:200]
 
             if ext_id in existing_ext_ids:
-                # Aunque sea duplicado, actualizar doctor_name_raw si el nuevo nombre es más largo
-                if doctor_name:
-                    existing_sale = db.query(Sale).filter(Sale.external_id == ext_id).first()
-                    if existing_sale and len(doctor_name) > len(existing_sale.doctor_name_raw or ""):
+                # Ya existe una venta con este mismo N° de orden/cotización/OT (misma transacción).
+                # No se duplica, pero si el archivo trae datos distintos a los guardados
+                # (fecha, monto, categoría o un nombre más completo) se actualiza la fila
+                # existente — así una recarga del mismo archivo (ej. para corregir un error
+                # de fechas, o un archivo acumulativo que crece día a día) corrige lo ya
+                # cargado en vez de quedarse con el dato viejo.
+                existing_sale = db.query(Sale).filter(Sale.external_id == ext_id).first()
+                if existing_sale:
+                    changed = False
+                    if doctor_name and len(doctor_name) > len(existing_sale.doctor_name_raw or ""):
                         existing_sale.doctor_name_raw = doctor_name
+                        changed = True
+                    if sale_date and existing_sale.sale_date != sale_date:
+                        existing_sale.sale_date = sale_date
+                        changed = True
+                    if amount and existing_sale.amount != amount:
+                        existing_sale.amount = amount
+                        changed = True
+                    if categoria and existing_sale.categoria != categoria:
+                        existing_sale.categoria = categoria
+                        changed = True
+                    if changed:
+                        updated += 1
                 duplicates += 1
                 continue
             existing_ext_ids.add(ext_id)
@@ -575,6 +594,7 @@ async def upload_consolidado(
         "new_doctors_alert": new_doctors_alert,
         "new_doctors_detail": new_doctors_detail,
         "duplicates_skipped": duplicates,
+        "duplicates_updated": updated,
         "normalized": "en proceso (background)",
         "errors": []
     }
