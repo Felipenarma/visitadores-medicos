@@ -5,6 +5,7 @@ import { dashboardApi, visitsApi, repsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { RepStats, Visit, RepDetail } from '../../types';
 import { format } from 'date-fns';
+import { getGeoPosition } from '../../utils/geo';
 import { es } from 'date-fns/locale';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -71,7 +72,11 @@ export default function RepDashboard() {
   const handleComplete = async (visit: Visit) => {
     setCompleting(visit.id);
     try {
-      await visitsApi.update(visit.id, { status: 'completed' });
+      const geo = await getGeoPosition();
+      await visitsApi.update(visit.id, {
+        status: 'completed',
+        ...(geo ? { latitude: geo.latitude, longitude: geo.longitude } : {}),
+      });
       setJustCompleted(prev => new Set([...prev, visit.id]));
       setTodayVisits(prev => prev.map(v => v.id === visit.id ? { ...v, status: 'completed' } : v));
       if (user?.rep_id) dashboardApi.getRepStats(user.rep_id).then(setStats).catch(() => {});
