@@ -42,6 +42,8 @@ def run_migrations():
         "ALTER TABLE visits ADD COLUMN IF NOT EXISTS longitude FLOAT",
         "ALTER TABLE agent_conversation_messages ADD COLUMN IF NOT EXISTS latitude FLOAT",
         "ALTER TABLE agent_conversation_messages ADD COLUMN IF NOT EXISTS longitude FLOAT",
+        "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS latitude FLOAT",
+        "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS longitude FLOAT",
     ]
     for stmt in migrations:
         try:

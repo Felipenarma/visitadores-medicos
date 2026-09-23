@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import type { User } from '../types';
 import { sessionsApi } from '../api';
+import { getGeoPosition } from '../utils/geo';
 
 interface AuthContextType {
   user: User | null;
@@ -37,15 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sessionId = localStorage.getItem(SESSION_KEY);
     if (!sessionId) return;
 
+    const sendHeartbeat = async (sid: string) => {
+      const geo = await getGeoPosition().catch(() => null);
+      sessionsApi.heartbeat(parseInt(sid), geo?.latitude, geo?.longitude).catch(() => {});
+    };
+
     heartbeatRef.current = setInterval(() => {
-      sessionsApi.heartbeat(parseInt(sessionId)).catch(() => {});
+      sendHeartbeat(sessionId);
     }, HEARTBEAT_INTERVAL);
 
-    // También enviar heartbeat al volver a la pestaña
+    // También enviar heartbeat (con ubicación) al volver a la pestaña
     const handleVisibility = () => {
       if (!document.hidden) {
         const sid = localStorage.getItem(SESSION_KEY);
-        if (sid) sessionsApi.heartbeat(parseInt(sid)).catch(() => {});
+        if (sid) sendHeartbeat(sid);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -61,11 +67,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('vm_user', JSON.stringify(userData));
     // Iniciar sesión de tracking solo para reps
     if (userData.rep_id) {
-      sessionsApi.start(userData.rep_id)
-        .then(res => {
-          if (res.session_id) localStorage.setItem(SESSION_KEY, String(res.session_id));
-        })
-        .catch(() => {});
+      getGeoPosition().catch(() => null).then(geo => {
+        sessionsApi.start(userData.rep_id!, geo?.latitude, geo?.longitude)
+          .then(res => {
+            if (res.session_id) localStorage.setItem(SESSION_KEY, String(res.session_id));
+          })
+          .catch(() => {});
+      });
     }
   };
 

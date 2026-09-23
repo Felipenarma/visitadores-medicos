@@ -167,6 +167,8 @@ class UserSession(Base):
     last_activity = Column(DateTime, server_default=func.now(), nullable=False)
     logout_at = Column(DateTime, nullable=True)
     duration_minutes = Column(Integer, default=0)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
     rep = relationship("MedicalRep")
 

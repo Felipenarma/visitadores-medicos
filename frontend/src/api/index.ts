@@ -112,6 +112,10 @@ export const dashboardApi = {
     api.get<RepDetail>(`/dashboard/rep/${rep_id}/detail`, {
       params: { ...(month && { month }), ...(year && { year }) }
     }).then(r => r.data),
+  getLiveLocations: (staleMinutes = 15) => api.get<{
+    reps: { rep_id: number; rep_name: string; lat: number; lng: number; last_activity: string | null; minutes_since: number | null; online: boolean }[];
+    total: number;
+  }>('/dashboard/live-locations', { params: { stale_minutes: staleMinutes } }).then(r => r.data),
   getDailyTracking: (date?: string) => api.get<{
     date: string;
     meta_diaria_por_visitador?: number;
@@ -231,8 +235,10 @@ export const salesExtraApi = {
 
 // Sessions
 export const sessionsApi = {
-  start: (rep_id: number) => api.post('/sessions/start', { rep_id }).then(r => r.data),
-  heartbeat: (session_id: number) => api.post('/sessions/heartbeat', { session_id }).then(r => r.data),
+  start: (rep_id: number, latitude?: number, longitude?: number) =>
+    api.post('/sessions/start', { rep_id, latitude, longitude }).then(r => r.data),
+  heartbeat: (session_id: number, latitude?: number, longitude?: number) =>
+    api.post('/sessions/heartbeat', { session_id, latitude, longitude }).then(r => r.data),
   end: (session_id: number) => api.post('/sessions/end', { session_id }).then(r => r.data),
   getRepStats: (rep_id: number, days = 7) => api.get(`/sessions/rep/${rep_id}/stats`, { params: { days } }).then(r => r.data),
   getSummary: (days = 7) => api.get('/sessions/summary', { params: { days } }).then(r => r.data),

@@ -24,7 +24,10 @@ def start_session(data: dict, db: Session = Depends(get_db)):
     if not rep_id:
         return {"error": "rep_id requerido"}
     now = datetime.utcnow()
-    session = UserSession(rep_id=rep_id, login_at=now, last_activity=now)
+    session = UserSession(
+        rep_id=rep_id, login_at=now, last_activity=now,
+        latitude=data.get("latitude"), longitude=data.get("longitude"),
+    )
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -33,7 +36,7 @@ def start_session(data: dict, db: Session = Depends(get_db)):
 
 @router.post("/heartbeat")
 def heartbeat(data: dict, db: Session = Depends(get_db)):
-    """Actualizar actividad de una sesión activa."""
+    """Actualizar actividad (y ubicación, si viene) de una sesión activa."""
     session_id = data.get("session_id")
     if not session_id:
         return {"ok": False}
@@ -43,6 +46,9 @@ def heartbeat(data: dict, db: Session = Depends(get_db)):
     now = datetime.utcnow()
     session.last_activity = now
     session.duration_minutes = _compute_duration(session)
+    if data.get("latitude") is not None and data.get("longitude") is not None:
+        session.latitude = data.get("latitude")
+        session.longitude = data.get("longitude")
     db.commit()
     return {"ok": True, "duration_minutes": session.duration_minutes}
 

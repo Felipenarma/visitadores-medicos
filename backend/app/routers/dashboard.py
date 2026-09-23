@@ -11,7 +11,7 @@ def safe_float(v):
         return 0.0
 from datetime import datetime, timedelta
 from ..database import get_db
-from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine, AgentConversationMessage
+from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine, AgentConversationMessage, UserSession
 from ..schemas import DashboardStats, RepStats
 from ..constants import MAX_VISITS_PER_DAY, count_weekdays
 
@@ -1148,6 +1148,50 @@ def get_rep_commissions(
             })
 
     return result
+
+
+@router.get("/live-locations")
+def get_live_locations(
+    stale_minutes: int = Query(default=15),
+    db: Session = Depends(get_db)
+):
+    """Última posición conocida de cada visitador con sesión activa (heartbeat cada ~5 min).
+
+    'online' = tuvo actividad dentro de los últimos `stale_minutes` minutos.
+    Se toma la sesión abierta (logout_at IS NULL) más reciente por rep_id.
+    """
+    now = datetime.utcnow()
+    open_sessions = (
+        db.query(UserSession)
+        .filter(UserSession.logout_at.is_(None))
+        .order_by(UserSession.rep_id, UserSession.last_activity.desc())
+        .all()
+    )
+    latest_by_rep: dict = {}
+    for s in open_sessions:
+        if s.rep_id not in latest_by_rep:
+            latest_by_rep[s.rep_id] = s
+
+    reps = {r.id: r for r in db.query(MedicalRep).filter(MedicalRep.is_active == True).all()}
+    result = []
+    for rep_id, session in latest_by_rep.items():
+        rep = reps.get(rep_id)
+        if not rep:
+            continue
+        if session.latitude is None or session.longitude is None:
+            continue
+        minutes_since = max(0, int((now - session.last_activity).total_seconds() / 60)) if session.last_activity else None
+        result.append({
+            "rep_id": rep_id,
+            "rep_name": rep.name,
+            "lat": session.latitude,
+            "lng": session.longitude,
+            "last_activity": session.last_activity.isoformat() if session.last_activity else None,
+            "minutes_since": minutes_since,
+            "online": minutes_since is not None and minutes_since <= stale_minutes,
+        })
+    result.sort(key=lambda x: x["minutes_since"] if x["minutes_since"] is not None else 999999)
+    return {"reps": result, "total": len(result)}
 
 
 @router.get("/locations")
