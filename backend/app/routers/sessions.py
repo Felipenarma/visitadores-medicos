@@ -4,7 +4,7 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import Optional
 from ..database import get_db
-from ..models import UserSession, MedicalRep
+from ..models import UserSession, MedicalRep, LocationPing
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -31,6 +31,13 @@ def start_session(data: dict, db: Session = Depends(get_db)):
     db.add(session)
     db.commit()
     db.refresh(session)
+    if data.get("latitude") is not None and data.get("longitude") is not None:
+        db.add(LocationPing(
+            rep_id=rep_id, session_id=session.id,
+            latitude=data.get("latitude"), longitude=data.get("longitude"),
+            recorded_at=now,
+        ))
+        db.commit()
     return {"session_id": session.id}
 
 
@@ -49,6 +56,11 @@ def heartbeat(data: dict, db: Session = Depends(get_db)):
     if data.get("latitude") is not None and data.get("longitude") is not None:
         session.latitude = data.get("latitude")
         session.longitude = data.get("longitude")
+        db.add(LocationPing(
+            rep_id=session.rep_id, session_id=session.id,
+            latitude=data.get("latitude"), longitude=data.get("longitude"),
+            recorded_at=now,
+        ))
     db.commit()
     return {"ok": True, "duration_minutes": session.duration_minutes}
 

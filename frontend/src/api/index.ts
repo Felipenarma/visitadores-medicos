@@ -116,6 +116,13 @@ export const dashboardApi = {
     reps: { rep_id: number; rep_name: string; lat: number; lng: number; last_activity: string | null; minutes_since: number | null; online: boolean }[];
     total: number;
   }>('/dashboard/live-locations', { params: { stale_minutes: staleMinutes } }).then(r => r.data),
+  getLocationHistory: (repId: number, date: string) => api.get<{
+    rep_id: number;
+    rep_name: string | null;
+    date: string;
+    total_points: number;
+    points: { lat: number; lng: number; recorded_at: string | null }[];
+  }>('/dashboard/location-history', { params: { rep_id: repId, date } }).then(r => r.data),
   getDailyTracking: (date?: string) => api.get<{
     date: string;
     meta_diaria_por_visitador?: number;

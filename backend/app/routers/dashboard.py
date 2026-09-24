@@ -11,7 +11,7 @@ def safe_float(v):
         return 0.0
 from datetime import datetime, timedelta
 from ..database import get_db
-from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine, AgentConversationMessage, UserSession
+from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine, AgentConversationMessage, UserSession, LocationPing
 from ..schemas import DashboardStats, RepStats
 from ..constants import MAX_VISITS_PER_DAY, count_weekdays
 
@@ -1192,6 +1192,53 @@ def get_live_locations(
         })
     result.sort(key=lambda x: x["minutes_since"] if x["minutes_since"] is not None else 999999)
     return {"reps": result, "total": len(result)}
+
+
+@router.get("/location-history")
+def get_location_history(
+    rep_id: int = Query(...),
+    date: str = Query(..., description="Fecha en formato YYYY-MM-DD (hora local Chile, se asume UTC-3/-4)"),
+    db: Session = Depends(get_db)
+):
+    """Recorrido de un visitador en un día específico: todos los pings de ubicación
+    (login, heartbeats cada ~5 min) ordenados cronológicamente."""
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        return {"error": "Formato de fecha inválido, use YYYY-MM-DD"}
+
+    start = datetime.combine(day, datetime.min.time())
+    end = start + timedelta(days=1)
+
+    pings = (
+        db.query(LocationPing)
+        .filter(
+            LocationPing.rep_id == rep_id,
+            LocationPing.recorded_at >= start,
+            LocationPing.recorded_at < end,
+        )
+        .order_by(LocationPing.recorded_at.asc())
+        .all()
+    )
+
+    rep = db.query(MedicalRep).filter(MedicalRep.id == rep_id).first()
+
+    points = [
+        {
+            "lat": p.latitude,
+            "lng": p.longitude,
+            "recorded_at": p.recorded_at.isoformat() if p.recorded_at else None,
+        }
+        for p in pings
+    ]
+
+    return {
+        "rep_id": rep_id,
+        "rep_name": rep.name if rep else None,
+        "date": date,
+        "total_points": len(points),
+        "points": points,
+    }
 
 
 @router.get("/locations")

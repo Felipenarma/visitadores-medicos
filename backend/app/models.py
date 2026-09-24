@@ -173,6 +173,19 @@ class UserSession(Base):
     rep = relationship("MedicalRep")
 
 
+class LocationPing(Base):
+    __tablename__ = "location_pings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rep_id = Column(Integer, ForeignKey("medical_reps.id"), nullable=False, index=True)
+    session_id = Column(Integer, ForeignKey("user_sessions.id"), nullable=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    recorded_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+    rep = relationship("MedicalRep")
+
+
 class MikeMemory(Base):
     __tablename__ = "mike_memory"
 
