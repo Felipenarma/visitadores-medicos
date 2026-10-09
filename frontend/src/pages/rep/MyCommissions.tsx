@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, TrendingDown, UserPlus, Users, ChevronDown, ChevronUp, DollarSign, AlertTriangle, Minus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`;
@@ -54,6 +54,8 @@ export default function MyCommissions() {
   const [showDoctors, setShowDoctors] = useState(false);
   const [trend, setTrend] = useState<{ label: string; units: number }[]>([]);
   const [comparison, setComparison] = useState<Awaited<ReturnType<typeof dashboardApi.getCommissionsComparison>> | null>(null);
+  const [doctorComparison, setDoctorComparison] = useState<Awaited<ReturnType<typeof dashboardApi.getRepDoctorComparison>> | null>(null);
+  const [showDoctorComparison, setShowDoctorComparison] = useState(true);
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
@@ -92,6 +94,13 @@ export default function MyCommissions() {
     dashboardApi.getCommissionsComparison(month, year)
       .then(res => setComparison(res))
       .catch(() => setComparison(null));
+  }, [month, year, user?.rep_id]);
+
+  useEffect(() => {
+    if (!user?.rep_id) return;
+    dashboardApi.getRepDoctorComparison(user.rep_id, month, year)
+      .then(res => setDoctorComparison(res))
+      .catch(() => setDoctorComparison(null));
   }, [month, year, user?.rep_id]);
 
   const myComparison = comparison?.reps.find(r => r.rep_id === user?.rep_id) ?? null;
@@ -178,6 +187,73 @@ export default function MyCommissions() {
               previousPeriod={comparison!.previous_period}
               isCurrentMonth={comparison!.is_current_month}
             />
+          )}
+
+          {/* Médicos vs. mismo tramo del mes anterior */}
+          {doctorComparison && doctorComparison.doctors.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setShowDoctorComparison(!showDoctorComparison)}
+                className="w-full flex items-center justify-between px-5 py-4 text-sm text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <AlertTriangle size={15} className="text-amber-500" />
+                  Médicos vs. mes anterior — quiénes están bajos
+                </span>
+                {showDoctorComparison ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </button>
+
+              {showDoctorComparison && (
+                <div className="border-t border-gray-100 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Médico</th>
+                        <th className="text-left px-4 py-2.5 text-gray-500 font-medium hidden sm:table-cell">Especialidad</th>
+                        <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Este tramo</th>
+                        <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Mismo tramo mes ant.</th>
+                        <th className="text-right px-4 py-2.5 text-gray-500 font-medium">Variación</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {doctorComparison.doctors.map(doc => {
+                        const pct = doc.pct_change_units;
+                        const up = pct !== null && pct > 0;
+                        const flat = pct === 0;
+                        const color = doc.stopped_buying || (pct !== null && pct < 0) ? 'text-red-500' : up ? 'text-emerald-600' : 'text-gray-400';
+                        const Icon = doc.stopped_buying ? AlertTriangle : flat ? Minus : up ? TrendingUp : pct !== null ? TrendingDown : Minus;
+                        return (
+                          <tr key={doc.doctor_id} className={`border-t border-gray-50 hover:bg-blue-50 transition-colors ${doc.stopped_buying ? 'bg-red-50/40' : ''}`}>
+                            <td className="px-4 py-2.5 font-medium text-gray-800">{doc.doctor_name}</td>
+                            <td className="px-4 py-2.5 text-gray-500 hidden sm:table-cell">
+                              {doc.specialty || <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-center font-bold text-gray-800">{doc.current_units}</td>
+                            <td className="px-4 py-2.5 text-center text-gray-500">{doc.previous_units}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              {doc.stopped_buying ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-red-500">
+                                  <AlertTriangle size={12} /> Dejó de comprar
+                                </span>
+                              ) : pct === null ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400">
+                                  <Minus size={12} /> nuevo
+                                </span>
+                              ) : (
+                                <span className={`inline-flex items-center gap-1 text-xs font-bold ${color}`}>
+                                  <Icon size={12} />
+                                  {up && !flat ? '+' : ''}{pct}%
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Categorías */}

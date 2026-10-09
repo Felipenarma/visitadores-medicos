@@ -156,6 +156,24 @@ export const dashboardApi = {
       pct_change_units: number | null;
     }[];
   }>('/dashboard/commissions-comparison', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } }).then(r => r.data),
+  getRepDoctorComparison: (repId: number, month?: number, year?: number) => api.get<{
+    rep_id: number;
+    is_current_month: boolean;
+    as_of_day: number;
+    current_period: { start: string; end: string };
+    previous_period: { start: string; end: string };
+    doctors: {
+      doctor_id: number;
+      doctor_name: string;
+      specialty: string | null;
+      current_units: number;
+      current_amount: number;
+      previous_units: number;
+      previous_amount: number;
+      pct_change_units: number | null;
+      stopped_buying: boolean;
+    }[];
+  }>(`/dashboard/rep/${repId}/doctor-comparison`, { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } }).then(r => r.data),
   getRepMonthlyTrend: (rep_id: number, months = 6) =>
     api.get<{ month: number; year: number; label: string; completed: number; missed: number; total: number }[]>(
       `/dashboard/rep/${rep_id}/monthly-trend`, { params: { months } }

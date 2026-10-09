@@ -1,5 +1,6 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface PeriodStats {
   total_amount: number;
@@ -26,6 +27,10 @@ export interface CommissionsComparisonProps {
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 const fmtCLP = (v: number) => '$' + Math.round(v / 1.19).toLocaleString('es-CL');
+const fmtCLPShort = (v: number) => {
+  const n = v / 1.19;
+  return n >= 1000000 ? '$' + (n / 1000000).toFixed(1) + 'M' : '$' + Math.round(n / 1000) + 'K';
+};
 
 function formatRange(p: Period): string {
   const [, m, d] = p.start.split('-').map(Number);
@@ -54,6 +59,33 @@ function DeltaBadge({ pct }: { pct: number | null }) {
   );
 }
 
+function MiniComparisonChart({ label, currentValue, previousValue, formatter }: { label: string; currentValue: number; previousValue: number; formatter: (v: number) => string }) {
+  const data = [
+    { name: 'Este tramo', value: currentValue },
+    { name: 'Mes anterior', value: previousValue },
+  ];
+  return (
+    <div>
+      <p className="text-[11px] text-gray-400 mb-1 text-center">{label}</p>
+      <ResponsiveContainer width="100%" height={110}>
+        <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+          <YAxis hide domain={[0, (max: number) => max * 1.15]} />
+          <Tooltip
+            contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 11 }}
+            formatter={(v: number) => [formatter(v), '']}
+            labelFormatter={() => ''}
+          />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
+            <Cell fill="#3B82F6" />
+            <Cell fill="#CBD5E1" />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function CommissionsComparison({
   current, previous, pctChangeAmount, pctChangeUnits, currentPeriod, previousPeriod, isCurrentMonth, title,
 }: CommissionsComparisonProps) {
@@ -74,7 +106,13 @@ export default function CommissionsComparison({
             <span className="text-xl font-bold text-gray-900">{fmtCLP(current.total_amount)}</span>
             <DeltaBadge pct={pctChangeAmount} />
           </div>
-          <p className="text-xs text-gray-400 mt-1">Mismo tramo mes anterior: {fmtCLP(previous.total_amount)}</p>
+          <p className="text-xs text-gray-400 mt-1 mb-2">Mismo tramo mes anterior: {fmtCLP(previous.total_amount)}</p>
+          <MiniComparisonChart
+            label="Venta neta"
+            currentValue={current.total_amount / 1.19}
+            previousValue={previous.total_amount / 1.19}
+            formatter={(v) => '$' + Math.round(v).toLocaleString('es-CL')}
+          />
         </div>
         <div className="rounded-lg border border-gray-100 p-4">
           <p className="text-xs text-gray-500 mb-1">Unidades vendidas</p>
@@ -82,7 +120,13 @@ export default function CommissionsComparison({
             <span className="text-xl font-bold text-gray-900">{current.sales_count}</span>
             <DeltaBadge pct={pctChangeUnits} />
           </div>
-          <p className="text-xs text-gray-400 mt-1">Mismo tramo mes anterior: {previous.sales_count} u.</p>
+          <p className="text-xs text-gray-400 mt-1 mb-2">Mismo tramo mes anterior: {previous.sales_count} u.</p>
+          <MiniComparisonChart
+            label="Unidades"
+            currentValue={current.sales_count}
+            previousValue={previous.sales_count}
+            formatter={(v) => `${Math.round(v)} u.`}
+          />
         </div>
       </div>
     </div>

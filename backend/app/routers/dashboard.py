@@ -1239,6 +1239,104 @@ def get_commissions_comparison(
     }
 
 
+@router.get("/rep/{rep_id}/doctor-comparison")
+def get_rep_doctor_comparison(
+    rep_id: int,
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Compara, médico por médico, las unidades/monto vendidos por un visitador
+    en el tramo transcurrido del mes vs el MISMO tramo de días del mes anterior.
+    Ordenado para destacar primero a los médicos que más bajaron (o dejaron de
+    comprar), para que el visitador identifique rápido dónde reforzar visitas.
+    """
+    from calendar import monthrange
+
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+
+    _, days_in_month = monthrange(year, month)
+    is_current = (year == now.year and month == now.month)
+    as_of_day = now.day if is_current else days_in_month
+
+    current_start = datetime(year, month, 1)
+    current_end = datetime(year, month, as_of_day, 23, 59, 59)
+
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    _, prev_days_in_month = monthrange(prev_year, prev_month)
+    prev_as_of_day = min(as_of_day, prev_days_in_month)
+
+    prev_start = datetime(prev_year, prev_month, 1)
+    prev_end = datetime(prev_year, prev_month, prev_as_of_day, 23, 59, 59)
+
+    doctors = db.query(Doctor).filter(Doctor.rep_id == rep_id).all()
+    doctor_ids = [d.id for d in doctors]
+    doctors_by_id = {d.id: d for d in doctors}
+
+    def _by_doctor(start, end):
+        if not doctor_ids:
+            return {}
+        sales = db.query(Sale).filter(
+            Sale.doctor_id.in_(doctor_ids),
+            Sale.sale_date >= start,
+            Sale.sale_date <= end,
+        ).all()
+        agg: dict = {}
+        for s in sales:
+            if not s.doctor_id:
+                continue
+            if s.doctor_id not in agg:
+                agg[s.doctor_id] = {"units": 0, "amount": 0.0}
+            agg[s.doctor_id]["units"] += 1
+            agg[s.doctor_id]["amount"] += safe_float(s.amount)
+        return agg
+
+    current_by_doc = _by_doctor(current_start, current_end)
+    prev_by_doc = _by_doctor(prev_start, prev_end)
+
+    all_ids = set(current_by_doc.keys()) | set(prev_by_doc.keys())
+
+    def _pct_change(curr, prev):
+        if prev == 0:
+            return None if curr == 0 else 100.0
+        return round(((curr - prev) / prev) * 100, 1)
+
+    rows = []
+    for doc_id in all_ids:
+        doc = doctors_by_id.get(doc_id)
+        curr = current_by_doc.get(doc_id, {"units": 0, "amount": 0.0})
+        prev = prev_by_doc.get(doc_id, {"units": 0, "amount": 0.0})
+        rows.append({
+            "doctor_id": doc_id,
+            "doctor_name": doc.name if doc else "Sin nombre",
+            "specialty": doc.specialty if doc else None,
+            "current_units": curr["units"],
+            "current_amount": round(curr["amount"], 2),
+            "previous_units": prev["units"],
+            "previous_amount": round(prev["amount"], 2),
+            "pct_change_units": _pct_change(curr["units"], prev["units"]),
+            "stopped_buying": prev["units"] > 0 and curr["units"] == 0,
+        })
+
+    # Médicos que más bajaron primero (stopped_buying primero, luego por % change ascendente)
+    rows.sort(key=lambda r: (
+        0 if r["stopped_buying"] else 1,
+        r["pct_change_units"] if r["pct_change_units"] is not None else 999,
+    ))
+
+    return {
+        "rep_id": rep_id,
+        "is_current_month": is_current,
+        "as_of_day": as_of_day,
+        "current_period": {"start": current_start.strftime("%Y-%m-%d"), "end": current_end.strftime("%Y-%m-%d")},
+        "previous_period": {"start": prev_start.strftime("%Y-%m-%d"), "end": prev_end.strftime("%Y-%m-%d")},
+        "doctors": rows,
+    }
+
+
 @router.get("/live-locations")
 def get_live_locations(
     stale_minutes: int = Query(default=15),
