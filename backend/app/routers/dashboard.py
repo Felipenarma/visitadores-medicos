@@ -1150,6 +1150,95 @@ def get_rep_commissions(
     return result
 
 
+@router.get("/commissions-comparison")
+def get_commissions_comparison(
+    month: int = Query(default=None),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Compara las ventas del período transcurrido del mes con los MISMOS DÍAS
+    del mes anterior, por visitador. Pensado para seguimiento semanal: a medida
+    que avanza el mes, se compara día 1 a hoy vs día 1 al mismo día del mes pasado.
+
+    Si el mes/año consultado ya terminó (no es el mes actual), se compara el
+    mes completo contra el mes anterior completo (acotado a sus propios días).
+    """
+    from calendar import monthrange
+
+    now = datetime.utcnow()
+    month = month or now.month
+    year = year or now.year
+
+    _, days_in_month = monthrange(year, month)
+    is_current = (year == now.year and month == now.month)
+    as_of_day = now.day if is_current else days_in_month
+
+    current_start = datetime(year, month, 1)
+    current_end = datetime(year, month, as_of_day, 23, 59, 59)
+
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    _, prev_days_in_month = monthrange(prev_year, prev_month)
+    prev_as_of_day = min(as_of_day, prev_days_in_month)
+
+    prev_start = datetime(prev_year, prev_month, 1)
+    prev_end = datetime(prev_year, prev_month, prev_as_of_day, 23, 59, 59)
+
+    def _period_stats(doctor_ids, start, end):
+        if not doctor_ids:
+            return {"total_amount": 0.0, "sales_count": 0, "doctors_with_sales": 0}
+        sales = db.query(Sale).filter(
+            Sale.doctor_id.in_(doctor_ids),
+            Sale.sale_date >= start,
+            Sale.sale_date <= end,
+        ).all()
+        return {
+            "total_amount": round(sum(safe_float(s.amount) for s in sales), 2),
+            "sales_count": len(sales),
+            "doctors_with_sales": len(set(s.doctor_id for s in sales if s.doctor_id)),
+        }
+
+    def _pct_change(curr, prev):
+        if prev == 0:
+            return None if curr == 0 else 100.0
+        return round(((curr - prev) / prev) * 100, 1)
+
+    reps = db.query(MedicalRep).filter(MedicalRep.is_active == True).all()
+    result = []
+    for rep in reps:
+        doctor_ids = [d.id for d in db.query(Doctor).filter(Doctor.rep_id == rep.id).all()]
+        current = _period_stats(doctor_ids, current_start, current_end)
+        previous = _period_stats(doctor_ids, prev_start, prev_end)
+        result.append({
+            "rep_id": rep.id,
+            "rep_name": rep.name,
+            "current": current,
+            "previous": previous,
+            "pct_change_amount": _pct_change(current["total_amount"], previous["total_amount"]),
+            "pct_change_units": _pct_change(current["sales_count"], previous["sales_count"]),
+        })
+
+    result.sort(key=lambda x: x["current"]["total_amount"], reverse=True)
+
+    all_doctor_ids = [d.id for d in db.query(Doctor).all()]
+    global_current = _period_stats(all_doctor_ids, current_start, current_end)
+    global_previous = _period_stats(all_doctor_ids, prev_start, prev_end)
+
+    return {
+        "is_current_month": is_current,
+        "as_of_day": as_of_day,
+        "current_period": {"start": current_start.strftime("%Y-%m-%d"), "end": current_end.strftime("%Y-%m-%d")},
+        "previous_period": {"start": prev_start.strftime("%Y-%m-%d"), "end": prev_end.strftime("%Y-%m-%d")},
+        "global": {
+            "current": global_current,
+            "previous": global_previous,
+            "pct_change_amount": _pct_change(global_current["total_amount"], global_previous["total_amount"]),
+            "pct_change_units": _pct_change(global_current["sales_count"], global_previous["sales_count"]),
+        },
+        "reps": result,
+    }
+
+
 @router.get("/live-locations")
 def get_live_locations(
     stale_minutes: int = Query(default=15),

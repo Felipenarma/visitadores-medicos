@@ -136,6 +136,26 @@ export const dashboardApi = {
     api.get('/dashboard/new-doctors', { params: { month, year } }).then(r => r.data),
   getRepCommissions: (month: number, year: number) =>
     api.get('/dashboard/rep-commissions', { params: { month, year } }).then(r => r.data),
+  getCommissionsComparison: (month?: number, year?: number) => api.get<{
+    is_current_month: boolean;
+    as_of_day: number;
+    current_period: { start: string; end: string };
+    previous_period: { start: string; end: string };
+    global: {
+      current: { total_amount: number; sales_count: number; doctors_with_sales: number };
+      previous: { total_amount: number; sales_count: number; doctors_with_sales: number };
+      pct_change_amount: number | null;
+      pct_change_units: number | null;
+    };
+    reps: {
+      rep_id: number;
+      rep_name: string;
+      current: { total_amount: number; sales_count: number; doctors_with_sales: number };
+      previous: { total_amount: number; sales_count: number; doctors_with_sales: number };
+      pct_change_amount: number | null;
+      pct_change_units: number | null;
+    }[];
+  }>('/dashboard/commissions-comparison', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } }).then(r => r.data),
   getRepMonthlyTrend: (rep_id: number, months = 6) =>
     api.get<{ month: number; year: number; label: string; completed: number; missed: number; total: number }[]>(
       `/dashboard/rep/${rep_id}/monthly-trend`, { params: { months } }

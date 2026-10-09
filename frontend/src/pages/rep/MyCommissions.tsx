@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`;
 import { dashboardApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import CommissionsComparison from '../../components/CommissionsComparison';
 
 interface CategoryBreakdown { [key: string]: number; }
 
@@ -52,6 +53,7 @@ export default function MyCommissions() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [showDoctors, setShowDoctors] = useState(false);
   const [trend, setTrend] = useState<{ label: string; units: number }[]>([]);
+  const [comparison, setComparison] = useState<Awaited<ReturnType<typeof dashboardApi.getCommissionsComparison>> | null>(null);
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
@@ -84,6 +86,15 @@ export default function MyCommissions() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [month, year, user?.rep_id]);
+
+  useEffect(() => {
+    if (!user?.rep_id) return;
+    dashboardApi.getCommissionsComparison(month, year)
+      .then(res => setComparison(res))
+      .catch(() => setComparison(null));
+  }, [month, year, user?.rep_id]);
+
+  const myComparison = comparison?.reps.find(r => r.rep_id === user?.rep_id) ?? null;
 
   const catEntries = data ? Object.entries(data.categories).sort((a, b) => b[1] - a[1]) : [];
 
@@ -155,6 +166,19 @@ export default function MyCommissions() {
               <p className="text-3xl font-bold text-green-600">{data.new_doctors_count}</p>
             </div>
           </div>
+
+          {/* Comparación vs mismo tramo del mes anterior */}
+          {myComparison && (
+            <CommissionsComparison
+              current={myComparison.current}
+              previous={myComparison.previous}
+              pctChangeAmount={myComparison.pct_change_amount}
+              pctChangeUnits={myComparison.pct_change_units}
+              currentPeriod={comparison!.current_period}
+              previousPeriod={comparison!.previous_period}
+              isCurrentMonth={comparison!.is_current_month}
+            />
+          )}
 
           {/* Categorías */}
           {catEntries.length > 0 && (

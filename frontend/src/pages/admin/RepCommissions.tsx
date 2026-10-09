@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, ChevronDown, ChevronUp, Download, UserX, UserCheck, Search, X } from 'lucide-react';
 import { dashboardApi, repsApi, doctorsApi } from '../../api';
 import * as XLSX from 'xlsx';
+import CommissionsComparison from '../../components/CommissionsComparison';
 
 interface CategoryBreakdown {
   [key: string]: number;
@@ -325,6 +326,7 @@ export default function RepCommissions() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [reps, setReps] = useState<{ id: number; name: string }[]>([]);
+  const [comparison, setComparison] = useState<Awaited<ReturnType<typeof dashboardApi.getCommissionsComparison>> | null>(null);
 
   const _now = new Date();
   const isCurrentMonth = month === _now.getMonth() + 1 && year === _now.getFullYear();
@@ -351,6 +353,13 @@ export default function RepCommissions() {
   useEffect(() => {
     repsApi.getAll().then(r => setReps(r.filter((rep: any) => rep.is_active).map((rep: any) => ({ id: rep.id, name: rep.name }))));
   }, []);
+  useEffect(() => {
+    dashboardApi.getCommissionsComparison(month, year)
+      .then(res => setComparison(res))
+      .catch(() => setComparison(null));
+  }, [month, year]);
+
+  const comparisonByRep = new Map((comparison?.reps || []).map(r => [r.rep_id, r]));
 
   const repData = data.filter(r => r.rep_id !== null);
   const unassignedData = data.find(r => r.rep_id === null) || null;
@@ -467,6 +476,20 @@ export default function RepCommissions() {
         </div>
       )}
 
+      {/* Comparación vs mismo tramo del mes anterior */}
+      {!loading && comparison && (
+        <CommissionsComparison
+          current={comparison.global.current}
+          previous={comparison.global.previous}
+          pctChangeAmount={comparison.global.pct_change_amount}
+          pctChangeUnits={comparison.global.pct_change_units}
+          currentPeriod={comparison.current_period}
+          previousPeriod={comparison.previous_period}
+          isCurrentMonth={comparison.is_current_month}
+          title="Seguimiento global vs. mes anterior"
+        />
+      )}
+
       {/* Rep cards */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -494,6 +517,7 @@ export default function RepCommissions() {
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Unidades</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos activos</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos nuevos</th>
+                    <th className="text-center px-4 py-2.5 text-gray-500 font-medium hidden md:table-cell">Vs. mes anterior</th>
                     <th className="text-right px-4 py-2.5 text-gray-500 font-medium hidden sm:table-cell">% del Total</th>
                   </tr>
                 </thead>
@@ -514,6 +538,20 @@ export default function RepCommissions() {
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-center hidden md:table-cell">
+                        {(() => {
+                          const cmp = item.rep_id !== null ? comparisonByRep.get(item.rep_id) : undefined;
+                          if (!cmp || cmp.pct_change_amount === null) return <span className="text-gray-300 text-xs">—</span>;
+                          const up = cmp.pct_change_amount > 0;
+                          const flat = cmp.pct_change_amount === 0;
+                          const color = flat ? 'text-gray-400' : up ? 'text-emerald-600' : 'text-red-500';
+                          return (
+                            <span className={`text-xs font-bold ${color}`}>
+                              {up && !flat ? '+' : ''}{cmp.pct_change_amount}%
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-right text-gray-500 hidden sm:table-cell">
                         {totalUnits > 0 ? ((item.sales_count / totalUnits) * 100).toFixed(1) : 0}%
                       </td>
@@ -527,6 +565,7 @@ export default function RepCommissions() {
                       <td className="px-4 py-3 text-center font-bold text-amber-700">{unassignedData.sales_count}</td>
                       <td className="px-4 py-3 text-center text-amber-600">{unassignedData.doctors_with_sales}</td>
                       <td className="px-4 py-3 text-center"><span className="text-gray-300">—</span></td>
+                      <td className="px-4 py-3 hidden md:table-cell"></td>
                       <td className="px-4 py-3 text-right text-amber-500 hidden sm:table-cell">
                         {totalUnits > 0 ? ((unassignedData.sales_count / totalUnits) * 100).toFixed(1) : 0}%
                       </td>
@@ -540,6 +579,7 @@ export default function RepCommissions() {
                     <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{totalUnits}</td>
                     <td className="px-4 py-3 text-center font-bold text-gray-700">—</td>
                     <td className="px-4 py-3 text-center font-bold text-green-700">{totalNewDoctors}</td>
+                    <td className="px-4 py-3 hidden md:table-cell"></td>
                     <td className="px-4 py-3 text-right font-bold text-gray-700 hidden sm:table-cell">100%</td>
                   </tr>
                 </tfoot>
