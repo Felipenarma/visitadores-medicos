@@ -7,7 +7,7 @@ import re
 import io
 from datetime import datetime
 from ..database import get_db
-from ..models import Sale, SalesUpload, Doctor, Visit
+from ..models import Sale, SalesUpload, Doctor, Visit, MedicalRep
 from ..schemas import SaleOut, SalesSummaryItem
 
 router = APIRouter(prefix="/api/sales", tags=["sales"])
@@ -1018,3 +1018,69 @@ def set_doctor_categoria(data: dict, db: Session = Depends(get_db)):
 
     db.commit()
     return {"ok": True, "updated": updated}
+
+@router.get("/search-by-product")
+def search_by_product(q: str, db: Session = Depends(get_db)):
+    """Busca ventas cuyo producto o categoría contenga el texto dado (ej. un
+    principio activo) y devuelve los médicos que lo compraron/prescribieron,
+    con su visitador, cantidad de ventas y fecha de la última.
+    """
+    like = f"%{q.strip()}%"
+    sales = (
+        db.query(Sale)
+        .filter(
+            (Sale.product.ilike(like)) | (Sale.categoria.ilike(like))
+        )
+        .order_by(Sale.sale_date.desc())
+        .all()
+    )
+
+    doctor_ids = {s.doctor_id for s in sales if s.doctor_id}
+    doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(doctor_ids)).all()} if doctor_ids else {}
+    rep_ids = {d.rep_id for d in doctors.values() if d.rep_id}
+    reps = {r.id: r for r in db.query(MedicalRep).filter(MedicalRep.id.in_(rep_ids)).all()} if rep_ids else {}
+
+    by_doctor: dict = {}
+    unmatched = []
+    for s in sales:
+        if not s.doctor_id:
+            unmatched.append({
+                "doctor_name_raw": s.doctor_name_raw,
+                "product": s.product,
+                "categoria": s.categoria,
+                "sale_date": s.sale_date.isoformat() if s.sale_date else None,
+            })
+            continue
+        key = s.doctor_id
+        if key not in by_doctor:
+            doc = doctors.get(key)
+            rep = reps.get(doc.rep_id) if doc and doc.rep_id else None
+            by_doctor[key] = {
+                "doctor_id": key,
+                "doctor_name": doc.name if doc else (s.doctor_name_raw or "Sin nombre"),
+                "rut": doc.rut if doc else None,
+                "specialty": doc.specialty if doc else None,
+                "rep_name": rep.name if rep else "Sin visitador",
+                "sales_count": 0,
+                "products_matched": set(),
+                "last_sale_date": None,
+            }
+        by_doctor[key]["sales_count"] += 1
+        if s.product:
+            by_doctor[key]["products_matched"].add(s.product)
+        d = s.sale_date.isoformat() if s.sale_date else None
+        if d and (by_doctor[key]["last_sale_date"] is None or d > by_doctor[key]["last_sale_date"]):
+            by_doctor[key]["last_sale_date"] = d
+
+    doctors_list = [
+        {**v, "products_matched": sorted(v["products_matched"])}
+        for v in by_doctor.values()
+    ]
+    doctors_list.sort(key=lambda x: x["sales_count"], reverse=True)
+
+    return {
+        "query": q,
+        "total_sales_matched": len(sales),
+        "doctors": doctors_list,
+        "unmatched_no_doctor": unmatched[:20],
+    }
