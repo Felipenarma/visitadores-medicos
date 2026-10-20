@@ -3,8 +3,10 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Briefcase, Upload, TrendingUp,
   Calendar, Bot, Activity, LogOut, Stethoscope, BookOpen, Menu, X, QrCode,
-  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search, MapPin, Radar
+  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search, MapPin, Radar, Download
 } from 'lucide-react';
+import { useInstallPrompt } from '../utils/pwaInstall';
+import InstallAppModal from './InstallAppModal';
 import { useAuth } from '../context/AuthContext';
 import { visitsApi, doctorsApi, repsApi } from '../api';
 
@@ -57,6 +59,17 @@ export default function Sidebar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { canPromptNatively, standalone, promptInstall } = useInstallPrompt();
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
+
+  const handleInstallClick = async () => {
+    if (canPromptNatively) {
+      const r = await promptInstall();
+      if (r !== 'unavailable') return;
+    }
+    setOpen(false);
+    setInstallHelpOpen(true);
+  };
 
   useEffect(() => {
     if (!user?.rep_id) return;
@@ -210,8 +223,17 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="p-3 lg:p-4 border-t border-gray-200">
+      {/* Descargar app + Logout */}
+      <div className="p-3 lg:p-4 border-t border-gray-200 space-y-1">
+        {!standalone && (
+          <button
+            onClick={handleInstallClick}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 w-full transition-colors"
+          >
+            <Download size={20} />
+            Descargar app
+          </button>
+        )}
         <button
           onClick={logout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 w-full transition-colors"
@@ -239,6 +261,15 @@ export default function Sidebar() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {!standalone && (
+            <button
+              onClick={handleInstallClick}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold"
+              aria-label="Descargar app"
+            >
+              <Download size={14} /> App
+            </button>
+          )}
           <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
             <span className="text-blue-600 font-semibold text-xs">
               {user?.name.charAt(0).toUpperCase()}
@@ -256,6 +287,8 @@ export default function Sidebar() {
           </aside>
         </div>
       )}
+
+      {installHelpOpen && <InstallAppModal onClose={() => setInstallHelpOpen(false)} />}
 
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 bg-white border-r border-gray-200 flex-col h-screen sticky top-0">

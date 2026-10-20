@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { MapPin, Download, X } from 'lucide-react';
 import { prefetchGeoPosition } from '../utils/geo';
+import { useInstallPrompt } from '../utils/pwaInstall';
 
 interface LayoutProps {
   children: ReactNode;
@@ -37,53 +38,33 @@ function GeoPermissionBanner() {
   return null;
 }
 
-function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches
-    || (window.navigator as any).standalone === true;
-}
-
 function InstallAppBanner() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem('vm_install_dismissed') === '1');
-
-  useEffect(() => {
-    if (isStandalone()) return;
-    setIsIOS(/iphone|ipad|ipod/i.test(window.navigator.userAgent));
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+  const { canPromptNatively, standalone, promptInstall } = useInstallPrompt();
+  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem('vm_install_dismissed') === '1');
+  const isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 
   const dismiss = () => {
     setDismissed(true);
-    localStorage.setItem('vm_install_dismissed', '1');
+    try { sessionStorage.setItem('vm_install_dismissed', '1'); } catch {}
   };
 
-  if (dismissed || isStandalone()) return null;
-  if (!deferredPrompt && !isIOS) return null;
+  if (dismissed || standalone) return null;
+  if (!canPromptNatively && !isIOS) return null;
 
   const install = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-    dismiss();
+    const r = await promptInstall();
+    if (r !== 'unavailable') dismiss();
   };
 
   return (
-    <div className="flex items-center gap-3 bg-blue-50 border-b border-blue-200 px-4 lg:px-6 py-2.5 text-sm">
+    <div className="flex items-center gap-3 bg-blue-50 border-b border-blue-200 px-4 lg:px-6 py-2.5 text-sm mt-14 lg:mt-0">
       <Download size={15} className="text-blue-600 flex-shrink-0" />
       <p className="text-blue-800 flex-1">
-        {isIOS
+        {isIOS && !canPromptNatively
           ? <><strong>Instala esta app:</strong> toca <strong>Compartir</strong> y luego <strong>"Agregar a inicio"</strong>.</>
           : <><strong>Instala esta app</strong> en tu celular para acceder más rápido, como cualquier otra app.</>}
       </p>
-      {!isIOS && (
+      {canPromptNatively && (
         <button onClick={install} className="btn-primary py-1 px-3 text-xs flex-shrink-0">
           Instalar
         </button>
