@@ -679,6 +679,32 @@ def get_sales_summary(db: Session = Depends(get_db)):
     return result
 
 
+DOCTOR_MERGE_FIELDS = [
+    "phone", "email", "address", "medical_center", "specialty", "notes",
+    "city", "commune", "business_line_id", "rep_id", "prescribes_products",
+]
+
+
+def _merge_doctor_fields(canonical_doc: Doctor, doc: Doctor) -> bool:
+    """Antes de desactivar `doc` por ser duplicado de `canonical_doc`, copia al
+    canónico cualquier dato (teléfono, email, dirección, rep asignado, etc.)
+    que el canónico no tenga pero el duplicado sí. Sin esto, la información que
+    un visitador acaba de ingresar se pierde en silencio cuando la normalización
+    fusiona su médico recién creado con un registro existente (p.ej. un stub
+    creado automáticamente desde una carga de ventas)."""
+    changed = False
+    for field in DOCTOR_MERGE_FIELDS:
+        canonical_value = getattr(canonical_doc, field)
+        doc_value = getattr(doc, field)
+        if (canonical_value is None or canonical_value == "") and doc_value not in (None, ""):
+            setattr(canonical_doc, field, doc_value)
+            changed = True
+    if (canonical_doc.rut is None or canonical_doc.rut == "") and doc.rut:
+        canonical_doc.rut = doc.rut
+        changed = True
+    return changed
+
+
 def _run_normalization(db: Session) -> dict:
     """
     Función reutilizable de normalización de médicos duplicados.
@@ -768,6 +794,7 @@ def _run_normalization(db: Session) -> dict:
         for doc in docs:
             if doc.id == canonical_doc.id:
                 continue
+            _merge_doctor_fields(canonical_doc, doc)
             db.query(Visit).filter(Visit.doctor_id == doc.id).update(
                 {"doctor_id": canonical_doc.id}, synchronize_session=False
             )
@@ -807,6 +834,7 @@ def _run_normalization(db: Session) -> dict:
         for doc in docs:
             if doc.id == canonical_doc.id:
                 continue
+            _merge_doctor_fields(canonical_doc, doc)
             # Reasignar ventas y visitas al canónico
             db.query(Sale).filter(Sale.doctor_id == doc.id).update(
                 {"doctor_id": canonical_doc.id}, synchronize_session=False
