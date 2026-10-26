@@ -4,10 +4,10 @@ import {
   ArrowLeft, MapPin, Phone, Mail, Users,
   CheckCircle, XCircle, Clock, AlertCircle, Calendar, Download,
   ChevronLeft, ChevronRight, Award, Stethoscope, TrendingUp,
-  Edit2, X, Building2, Hash, DollarSign, UserPlus
+  Edit2, X, Building2, Hash, DollarSign, UserPlus, ClipboardCheck, Filter
 } from 'lucide-react';
 import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine } from '../../types';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine, RepDataCompleteness, DoctorInfoField } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
@@ -661,21 +661,193 @@ function DoctorEditModal({ doctor, reps, businessLines, onClose, onSaved }: {
   );
 }
 
-function DoctorListSection({ doctors, repName, onExport, exporting, onDoctorClick }: {
+// ─── completitud de datos de médicos ────────────────────────────────────────
+// Mismo criterio que backend/app/completeness.py
+
+const INFO_PLACEHOLDERS = new Set(['', '-', '--', '.', '0', 'na', 'n/a', 's/i', 'si', 'sin', 'sin dato', 'sin datos',
+  'sin info', 'no', 'no tiene', 'pendiente', 'x', 'null', 'none', 'nan']);
+
+const FIELD_LABELS: Record<DoctorInfoField, string> = {
+  phone: 'Teléfono',
+  email: 'Correo',
+  medical_center: 'Centro médico',
+};
+
+function hasInfo(v?: string | null) {
+  return v != null && !INFO_PLACEHOLDERS.has(String(v).trim().toLowerCase());
+}
+
+function doctorMissingFields(d: Doctor): DoctorInfoField[] {
+  const miss: DoctorInfoField[] = [];
+  if (!hasInfo(d.phone)) miss.push('phone');
+  if (!hasInfo(d.email) || !String(d.email).includes('@')) miss.push('email');
+  if (!hasInfo(d.medical_center)) miss.push('medical_center');
+  return miss;
+}
+
+function fmtShortDate(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+}
+
+function ChangeBadge({ value, label }: { value: number | null; label: string }) {
+  if (value === null) {
+    return <span className="text-xs text-gray-400">{label}: sin datos aún</span>;
+  }
+  const up = value > 0, flat = value === 0;
+  const cls = flat ? 'bg-gray-100 text-gray-500' : up ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600';
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>
+      {label}: {up ? '+' : ''}{value.toLocaleString('es-CL')} pts
+    </span>
+  );
+}
+
+function FieldBar({ label, count, total, pct }: { label: string; count: number; total: number; pct: number }) {
+  const color = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1">
+        <span className="text-gray-600">{label}</span>
+        <span className="text-gray-500"><span className="font-semibold text-gray-800">{pct}%</span> · {count}/{total}</span>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function DataCompletenessSection({ data, loading, onShowIncomplete, onExportIncomplete }: {
+  data: RepDataCompleteness | null;
+  loading: boolean;
+  onShowIncomplete: () => void;
+  onExportIncomplete: () => void;
+}) {
+  if (loading && !data) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex justify-center py-10">
+        <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const pct = data.pct_complete;
+  const ringColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+  const r = 34, circ = 2 * Math.PI * r, dash = (pct / 100) * circ;
+  const chartData = data.history.map(h => ({ ...h, label: fmtShortDate(h.date) }));
+  const pending = data.total - data.complete;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+            <ClipboardCheck size={16} className="text-indigo-500" />
+            Información completa de médicos
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">Completo = teléfono + correo + centro médico</p>
+        </div>
+        <div className="flex gap-2">
+          {pending > 0 && (
+            <>
+              <button
+                onClick={onShowIncomplete}
+                className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Filter size={13} /> Ver {pending} pendientes
+              </button>
+              <button
+                onClick={onExportIncomplete}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Download size={13} /> Excel pendientes
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+        <div className="flex items-center gap-4">
+          <svg width={88} height={88} viewBox="0 0 88 88" className="shrink-0">
+            <circle cx={44} cy={44} r={r} fill="none" stroke="#e5e7eb" strokeWidth={9} />
+            <circle cx={44} cy={44} r={r} fill="none" stroke={ringColor} strokeWidth={9}
+              strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 44 44)" />
+            <text x={44} y={49} textAnchor="middle" fontSize={17} fontWeight="700" fill={ringColor}>
+              {Math.round(pct)}%
+            </text>
+          </svg>
+          <div className="space-y-1.5">
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold">{data.complete}</span> de <span className="font-semibold">{data.total}</span> médicos completos
+            </p>
+            <div className="flex flex-col gap-1 items-start">
+              <ChangeBadge value={data.change_7d} label="7 días" />
+              <ChangeBadge value={data.change_30d} label="30 días" />
+            </div>
+          </div>
+        </div>
+        <div className="md:col-span-2 space-y-3">
+          <FieldBar label="Teléfono" count={data.with_phone} total={data.total} pct={data.pct_phone} />
+          <FieldBar label="Correo" count={data.with_email} total={data.total} pct={data.pct_email} />
+          <FieldBar label="Centro médico" count={data.with_center} total={data.total} pct={data.pct_center} />
+        </div>
+      </div>
+
+      <div className="px-4 pb-4">
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={20} />
+            <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" />
+            <Tooltip formatter={(v: number, name: string) => [`${v}%`, name]} />
+            <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+            <Line type="monotone" dataKey="pct_complete" name="Completos" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="pct_phone" name="Teléfono" stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+            <Line type="monotone" dataKey="pct_email" name="Correo" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+            <Line type="monotone" dataKey="pct_center" name="Centro médico" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+        <p className="text-xs text-gray-400 px-2 mt-1">
+          Seguimiento diario desde el {fmtShortDate(data.tracking_since)}
+          {data.history.length <= 1 && ' — la curva se irá formando día a día.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DoctorListSection({ doctors, repName, onExport, exporting, onDoctorClick, onlyIncomplete, onToggleIncomplete }: {
   doctors: Doctor[];
   repName: string;
   onExport: () => void;
   exporting: boolean;
   onDoctorClick: (doc: Doctor) => void;
+  onlyIncomplete: boolean;
+  onToggleIncomplete: () => void;
 }) {
+  const incompleteCount = doctors.filter(d => doctorMissingFields(d).length > 0).length;
+  const shown = onlyIncomplete ? doctors.filter(d => doctorMissingFields(d).length > 0) : doctors;
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div id="doctor-list" className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
           <Stethoscope size={16} className="text-blue-500" />
           Médicos registrados
           <span className="text-xs font-normal bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{doctors.length}</span>
         </h2>
+        <div className="flex items-center gap-2">
+        <button
+          onClick={onToggleIncomplete}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors ${
+            onlyIncomplete ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'
+          }`}
+        >
+          <Filter size={13} />
+          {onlyIncomplete ? `Solo incompletos (${incompleteCount})` : `Incompletos (${incompleteCount})`}
+        </button>
         <button
           onClick={onExport}
           disabled={exporting}
@@ -684,12 +856,15 @@ function DoctorListSection({ doctors, repName, onExport, exporting, onDoctorClic
           <Download size={13} />
           {exporting ? 'Exportando...' : 'Exportar Excel'}
         </button>
+        </div>
       </div>
-      {doctors.length === 0 ? (
-        <div className="text-center py-10 text-gray-400 text-sm">Sin médicos asignados</div>
+      {shown.length === 0 ? (
+        <div className="text-center py-10 text-gray-400 text-sm">
+          {onlyIncomplete ? 'Todos los médicos tienen información completa' : 'Sin médicos asignados'}
+        </div>
       ) : (
         <div className="divide-y divide-gray-50">
-          {doctors.map(doc => (
+          {shown.map(doc => (
             <div
               key={doc.id}
               onClick={() => onDoctorClick(doc)}
@@ -705,6 +880,18 @@ function DoctorListSection({ doctors, repName, onExport, exporting, onDoctorClic
                 </p>
               </div>
               {doc.rut && <span className="text-xs text-gray-400 shrink-0">{doc.rut}</span>}
+              {(() => {
+                const miss = doctorMissingFields(doc);
+                return miss.length === 0 ? (
+                  <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full shrink-0">Completo</span>
+                ) : (
+                  <span className="hidden sm:flex gap-1 shrink-0">
+                    {miss.map(f => (
+                      <span key={f} className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">Sin {FIELD_LABELS[f].toLowerCase()}</span>
+                    ))}
+                  </span>
+                );
+              })()}
               {doc.has_sales && (
                 <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full shrink-0">Con ventas</span>
               )}
@@ -745,6 +932,46 @@ export default function RepDetail() {
   const [monthlyTrend, setMonthlyTrend] = useState<{ label: string; completed: number; missed: number; total: number }[]>([]);
   const [salesTrend, setSalesTrend] = useState<{ label: string; units: number; total_amount: number }[]>([]);
   const [loadingTrend, setLoadingTrend] = useState(false);
+
+  // Completitud de datos de médicos
+  const [completeness, setCompleteness] = useState<RepDataCompleteness | null>(null);
+  const [loadingCompleteness, setLoadingCompleteness] = useState(false);
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
+
+  const loadCompleteness = () => {
+    if (!id) return;
+    setLoadingCompleteness(true);
+    dashboardApi.getRepDataCompleteness(Number(id), 180)
+      .then(setCompleteness)
+      .catch(() => {})
+      .finally(() => setLoadingCompleteness(false));
+  };
+
+  const handleShowIncomplete = () => {
+    setOnlyIncomplete(true);
+    setTimeout(() => document.getElementById('doctor-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const handleExportIncomplete = () => {
+    const rows = doctors
+      .map(d => ({ d, miss: doctorMissingFields(d) }))
+      .filter(x => x.miss.length > 0)
+      .sort((a, b) => b.miss.length - a.miss.length || a.d.name.localeCompare(b.d.name));
+    const aoa = [
+      ['Médico', 'RUT', 'Especialidad', 'Teléfono', 'Correo', 'Centro médico', 'Falta completar'],
+      ...rows.map(({ d, miss }) => [
+        d.name, d.rut || '', d.specialty || '',
+        hasInfo(d.phone) ? d.phone : '', hasInfo(d.email) ? d.email : '', hasInfo(d.medical_center) ? d.medical_center : '',
+        miss.map(f => FIELD_LABELS[f]).join(', '),
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 28 }, { wch: 28 }, { wch: 34 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pendientes');
+    const repName = (data?.rep?.name || `rep_${id}`).replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `Medicos_por_completar_${repName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const handlePeriodChange = (m: number, y: number) => {
     setSelMonth(m);
@@ -832,6 +1059,8 @@ export default function RepDetail() {
       .catch(() => setError('No se pudo cargar la información del visitador'))
       .finally(() => setLoading(false));
   }, [id, selMonth, selYear]);
+
+  useEffect(() => { loadCompleteness(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load trend data once on mount (not per period)
   useEffect(() => {
@@ -982,6 +1211,14 @@ export default function RepDetail() {
         );
       })()}
 
+      {/* Completitud de información de médicos */}
+      <DataCompletenessSection
+        data={completeness}
+        loading={loadingCompleteness}
+        onShowIncomplete={handleShowIncomplete}
+        onExportIncomplete={handleExportIncomplete}
+      />
+
       {/* Tendencia mensual — unidades vendidas (gráfico principal) */}
       {(salesTrend.length > 0 || loadingTrend) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -1075,6 +1312,8 @@ export default function RepDetail() {
         onExport={handleExportDoctors}
         exporting={exporting}
         onDoctorClick={setSelectedDoctor}
+        onlyIncomplete={onlyIncomplete}
+        onToggleIncomplete={() => setOnlyIncomplete(v => !v)}
       />
 
       {/* Doctor edit modal */}
@@ -1087,6 +1326,7 @@ export default function RepDetail() {
           onSaved={(updated) => {
             setDoctors(prev => prev.map(d => d.id === updated.id ? updated : d));
             setSelectedDoctor(null);
+            loadCompleteness();
           }}
         />
       )}

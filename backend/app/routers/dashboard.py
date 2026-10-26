@@ -1571,3 +1571,90 @@ def get_locations(
         })
 
     return {"events": events, "total": len(events)}
+
+
+# ─── Completitud de datos de médicos (teléfono, correo, centro médico) ──────────
+
+@router.get("/rep/{rep_id}/data-completeness")
+def get_rep_data_completeness(
+    rep_id: int,
+    days: int = Query(default=90, ge=7, le=730),
+    db: Session = Depends(get_db)
+):
+    """% de médicos del visitador con información completa + evolución diaria.
+    Cada consulta actualiza la foto del día, así que el último punto siempre está al día."""
+    from ..completeness import (
+        compute_rep_completeness, upsert_snapshot, missing_fields, today_chile, pct,
+    )
+    from ..models import DoctorCompletenessSnapshot
+
+    stats = compute_rep_completeness(db, rep_id)
+    docs = stats.pop("_docs")
+    upsert_snapshot(db, rep_id, stats)
+
+    today = today_chile()
+    since = today - timedelta(days=days)
+    rows = db.query(DoctorCompletenessSnapshot).filter(
+        DoctorCompletenessSnapshot.rep_id == rep_id,
+        DoctorCompletenessSnapshot.snapshot_date >= since,
+    ).order_by(DoctorCompletenessSnapshot.snapshot_date).all()
+
+    history = [{
+        "date": r.snapshot_date.isoformat(),
+        "total": r.total,
+        "complete": r.complete,
+        "pct_complete": pct(r.complete, r.total),
+        "pct_phone": pct(r.with_phone, r.total),
+        "pct_email": pct(r.with_email, r.total),
+        "pct_center": pct(r.with_center, r.total),
+    } for r in rows]
+
+    def _pct_at(days_ago: int):
+        target = today - timedelta(days=days_ago)
+        prev = [h for h in history if h["date"] <= target.isoformat()]
+        return prev[-1]["pct_complete"] if prev else None
+
+    current_pct = pct(stats["complete"], stats["total"])
+    ref_7 = _pct_at(7)
+    ref_30 = _pct_at(30)
+
+    incomplete = []
+    for d in docs:
+        miss = missing_fields(d)
+        if miss:
+            incomplete.append({"id": d.id, "name": d.name, "missing": miss})
+    incomplete.sort(key=lambda x: (-len(x["missing"]), x["name"]))
+
+    return {
+        "rep_id": rep_id,
+        "as_of": today.isoformat(),
+        "total": stats["total"],
+        "complete": stats["complete"],
+        "pct_complete": current_pct,
+        "with_phone": stats["with_phone"],
+        "with_email": stats["with_email"],
+        "with_center": stats["with_center"],
+        "pct_phone": pct(stats["with_phone"], stats["total"]),
+        "pct_email": pct(stats["with_email"], stats["total"]),
+        "pct_center": pct(stats["with_center"], stats["total"]),
+        "change_7d": round(current_pct - ref_7, 1) if ref_7 is not None else None,
+        "change_30d": round(current_pct - ref_30, 1) if ref_30 is not None else None,
+        "tracking_since": history[0]["date"] if history else today.isoformat(),
+        "history": history,
+        "incomplete": incomplete,
+    }
+
+
+@router.get("/data-completeness")
+def get_all_reps_data_completeness(db: Session = Depends(get_db)):
+    """Resumen de completitud para todos los visitadores activos (para comparar entre ellos)."""
+    from ..completeness import compute_rep_completeness, upsert_snapshot, pct
+    out = []
+    for rep in db.query(MedicalRep).filter(MedicalRep.is_active == True).all():  # noqa: E712
+        s = compute_rep_completeness(db, rep.id)
+        s.pop("_docs")
+        upsert_snapshot(db, rep.id, s)
+        out.append({"rep_id": rep.id, "rep_name": rep.name, "total": s["total"],
+                    "complete": s["complete"], "pct_complete": pct(s["complete"], s["total"])})
+    out.sort(key=lambda r: -r["pct_complete"])
+    return out

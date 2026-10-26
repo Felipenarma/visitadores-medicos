@@ -1,0 +1,89 @@
+"""Indicador de completitud de datos de médicos por visitador.
+
+Un médico tiene "información completa" cuando tiene teléfono, correo y centro médico.
+Se guarda una foto diaria por visitador (DoctorCompletenessSnapshot) para mostrar evolución.
+"""
+from datetime import datetime, date
+import pytz
+from sqlalchemy.orm import Session
+
+from .models import Doctor, MedicalRep, DoctorCompletenessSnapshot
+
+CHILE_TZ = pytz.timezone("America/Santiago")
+
+# Valores de relleno que no cuentan como dato real
+_PLACEHOLDERS = {"", "-", "--", ".", "0", "na", "n/a", "s/i", "si", "sin", "sin dato", "sin datos",
+                 "sin info", "no", "no tiene", "pendiente", "x", "null", "none", "nan"}
+
+FIELDS = ("phone", "email", "medical_center")
+
+
+def has_value(v) -> bool:
+    if v is None:
+        return False
+    s = str(v).strip().lower()
+    return s not in _PLACEHOLDERS
+
+
+def has_email(v) -> bool:
+    return has_value(v) and "@" in str(v)
+
+
+def missing_fields(doc: Doctor) -> list:
+    missing = []
+    if not has_value(doc.phone):
+        missing.append("phone")
+    if not has_email(doc.email):
+        missing.append("email")
+    if not has_value(doc.medical_center):
+        missing.append("medical_center")
+    return missing
+
+
+def today_chile() -> date:
+    return datetime.now(CHILE_TZ).date()
+
+
+def compute_rep_completeness(db: Session, rep_id: int) -> dict:
+    docs = db.query(Doctor).filter(Doctor.rep_id == rep_id, Doctor.is_active == True).all()  # noqa: E712
+    total = len(docs)
+    with_phone = sum(1 for d in docs if has_value(d.phone))
+    with_email = sum(1 for d in docs if has_email(d.email))
+    with_center = sum(1 for d in docs if has_value(d.medical_center))
+    complete = sum(1 for d in docs if not missing_fields(d))
+    return {
+        "total": total,
+        "with_phone": with_phone,
+        "with_email": with_email,
+        "with_center": with_center,
+        "complete": complete,
+        "_docs": docs,
+    }
+
+
+def upsert_snapshot(db: Session, rep_id: int, stats: dict, day: date = None) -> None:
+    day = day or today_chile()
+    row = db.query(DoctorCompletenessSnapshot).filter(
+        DoctorCompletenessSnapshot.rep_id == rep_id,
+        DoctorCompletenessSnapshot.snapshot_date == day,
+    ).first()
+    if row is None:
+        row = DoctorCompletenessSnapshot(rep_id=rep_id, snapshot_date=day)
+        db.add(row)
+    for k in ("total", "with_phone", "with_email", "with_center", "complete"):
+        setattr(row, k, stats[k])
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()  # carrera con otro proceso que insertó la misma fila: se ignora
+
+
+def record_all_snapshots(db: Session) -> int:
+    reps = db.query(MedicalRep).filter(MedicalRep.is_active == True).all()  # noqa: E712
+    for rep in reps:
+        upsert_snapshot(db, rep.id, compute_rep_completeness(db, rep.id))
+    return len(reps)
+
+
+def pct(n: int, total: int) -> float:
+    return round(100.0 * n / total, 1) if total else 0.0

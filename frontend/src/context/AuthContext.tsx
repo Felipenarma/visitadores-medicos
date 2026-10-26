@@ -35,8 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Heartbeat: cada 5 min actualizar sesión activa
   useEffect(() => {
     if (!user?.rep_id) return;
-    const sessionId = localStorage.getItem(SESSION_KEY);
-    if (!sessionId) return;
+    const repId = user.rep_id;
+
+    // Si la app (p. ej. recién instalada) abre con usuario guardado pero sin
+    // sesión de seguimiento, iniciar una para que el visitador sea rastreado.
+    if (!localStorage.getItem(SESSION_KEY)) {
+      getGeoPosition().catch(() => null).then(geo => {
+        sessionsApi.start(repId, geo?.latitude, geo?.longitude)
+          .then(res => { if (res.session_id) localStorage.setItem(SESSION_KEY, String(res.session_id)); })
+          .catch(() => {});
+      });
+    }
 
     const sendHeartbeat = async (sid: string) => {
       const geo = await getGeoPosition().catch(() => null);
@@ -44,7 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     heartbeatRef.current = setInterval(() => {
-      sendHeartbeat(sessionId);
+      const sid = localStorage.getItem(SESSION_KEY);
+      if (sid) sendHeartbeat(sid);
     }, HEARTBEAT_INTERVAL);
 
     // También enviar heartbeat (con ubicación) al volver a la pestaña

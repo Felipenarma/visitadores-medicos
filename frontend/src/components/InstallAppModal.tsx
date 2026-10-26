@@ -86,6 +86,9 @@ export default function InstallAppModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} className="text-gray-500" /></button>
         </div>
         {content}
+        <p className="mt-4 text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          Al abrir la app instalada por primera vez se te pedirá <strong>permitir la ubicación</strong>. Acéptalo para que tus visitas y recorrido queden registrados.
+        </p>
         <button onClick={copyLink} className="mt-5 w-full flex items-center justify-center gap-2 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
           {copied ? <><Check size={16} className="text-green-600" /> Enlace copiado</> : <><Copy size={16} /> Copiar enlace de la app</>}
         </button>

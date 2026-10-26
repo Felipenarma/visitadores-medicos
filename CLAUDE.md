@@ -89,6 +89,7 @@ visitadores-medicos/
 | `CardexUpload` | `cardex_uploads` | Tracking de cada carga masiva de médicos |
 | `KnowledgeEntry` | `knowledge_entries` | Base de conocimiento: título, categoría, contenido extraído, línea de negocio |
 | `ImageFile` | `image_files` | Imágenes/QR almacenados como binario en DB con categoría y línea de negocio |
+| `DoctorCompletenessSnapshot` | `doctor_completeness_snapshots` | Foto diaria por visitador de cuántos médicos tienen teléfono/correo/centro médico (único por rep+fecha) |
 
 ### Migraciones en caliente (`main.py → run_migrations`)
 
@@ -159,6 +160,8 @@ Se ejecutan automáticamente al arrancar. Agregan columnas si no existen:
 | `GET` | `/api/dashboard/new-doctors-range?start_month=&start_year=&end_month=&end_year=` | Médicos nuevos entre dos meses (inclusive) — usado por el export Excel |
 | `GET` | `/api/dashboard/sales-by-doctor?month=&year=&top=` | Mes actual vs anterior por médico |
 | `GET` | `/api/dashboard/rep-commissions?month=&year=` | Comisiones por rep |
+| `GET` | `/api/dashboard/rep/{id}/data-completeness?days=90` | % médicos con info completa (teléfono+correo+centro médico), variación 7/30 días, historial diario y lista de incompletos |
+| `GET` | `/api/dashboard/data-completeness` | Resumen de completitud de todos los visitadores activos |
 
 ### Otros routers
 - `/api/reps` — CRUD de visitadores
@@ -269,6 +272,15 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 ### Visitador (Rep)
 - Dashboard personal, Calendario personal, Mis médicos
 - **Agente IA** — gestión de visitas + consulta de base de conocimiento + compartir QR/imágenes
+
+---
+
+## Completitud de datos de médicos (`completeness.py`)
+
+- Médico **completo** = teléfono + correo (con `@`) + centro médico. Valores de relleno (`-`, `sin dato`, `n/a`, `0`…) cuentan como vacíos. El mismo criterio está duplicado en `RepDetail.tsx` (`doctorMissingFields`) — mantener ambos sincronizados.
+- Se guarda una foto por visitador y día: APScheduler a las 23:50 hora Chile, al arrancar el backend, y cada vez que se consulta el endpoint (el punto de hoy siempre está actualizado).
+- El historial parte desde el primer deploy de esta función (no hay forma de reconstruir fechas pasadas).
+- UI: tarjeta "Información completa de médicos" en el detalle del visitador + filtro "Incompletos" y chips de campos faltantes en el listado + Excel de pendientes.
 
 ---
 

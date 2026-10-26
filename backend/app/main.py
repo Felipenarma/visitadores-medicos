@@ -7,7 +7,7 @@ import random
 
 from .database import engine, get_db, Base
 from .models import BusinessLine, MedicalRep, Doctor, Visit, Sale
-from .routers import business_lines, reps, doctors, visits, sales, cardex, dashboard, ai_agent, images, mike, knowledge, sessions
+from .routers import business_lines, reps, doctors, visits, sales, cardex, dashboard, ai_agent, images, mike, knowledge, sessions, export
 
 # Create tables (checkfirst=True avoids errors if tables already exist)
 Base.metadata.create_all(bind=engine, checkfirst=True)
@@ -95,6 +95,7 @@ app.include_router(images.router)
 app.include_router(mike.router)
 app.include_router(knowledge.router)
 app.include_router(sessions.router)
+app.include_router(export.router)
 
 
 def seed_business_lines(db: Session):
@@ -129,6 +130,19 @@ def run_weekly_report_job():
         pass
 
 
+def run_completeness_snapshot_job():
+    """Guarda la foto diaria de completitud de datos de médicos por visitador."""
+    from .database import SessionLocal
+    from .completeness import record_all_snapshots
+    db = SessionLocal()
+    try:
+        record_all_snapshots(db)
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 # APScheduler setup
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -144,6 +158,11 @@ try:
         run_weekly_report_job,
         CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=chile_tz)
     )
+    # Foto diaria de completitud de datos de médicos (23:50 hora Chile)
+    scheduler.add_job(
+        run_completeness_snapshot_job,
+        CronTrigger(hour=23, minute=50, timezone=chile_tz)
+    )
 except ImportError:
     scheduler = None
 
@@ -155,6 +174,9 @@ def startup_event():
         seed_business_lines(db)
     finally:
         db.close()
+
+    # Foto inicial del día (el historial de completitud parte desde el primer arranque)
+    run_completeness_snapshot_job()
 
     if scheduler is not None:
         scheduler.start()

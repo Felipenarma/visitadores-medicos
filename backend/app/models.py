@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, LargeBinary, Table
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, ForeignKey, Text, LargeBinary, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -242,3 +242,20 @@ class ImageFile(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     business_line = relationship("BusinessLine")
+
+
+class DoctorCompletenessSnapshot(Base):
+    """Foto diaria de cuántos médicos de cada visitador tienen información completa
+    (teléfono, correo y centro médico). Permite ver la evolución en el tiempo."""
+    __tablename__ = "doctor_completeness_snapshots"
+    __table_args__ = (UniqueConstraint("rep_id", "snapshot_date", name="uq_completeness_rep_date"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    rep_id = Column(Integer, ForeignKey("medical_reps.id", ondelete="CASCADE"), nullable=False, index=True)
+    snapshot_date = Column(Date, nullable=False, index=True)
+    total = Column(Integer, nullable=False, default=0)
+    with_phone = Column(Integer, nullable=False, default=0)
+    with_email = Column(Integer, nullable=False, default=0)
+    with_center = Column(Integer, nullable=False, default=0)
+    complete = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

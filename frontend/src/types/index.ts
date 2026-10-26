@@ -210,3 +210,34 @@ export interface User {
   role: 'admin' | 'rep';
   rep_id?: number;
 }
+
+export type DoctorInfoField = 'phone' | 'email' | 'medical_center';
+
+export interface DataCompletenessPoint {
+  date: string;
+  total: number;
+  complete: number;
+  pct_complete: number;
+  pct_phone: number;
+  pct_email: number;
+  pct_center: number;
+}
+
+export interface RepDataCompleteness {
+  rep_id: number;
+  as_of: string;
+  total: number;
+  complete: number;
+  pct_complete: number;
+  with_phone: number;
+  with_email: number;
+  with_center: number;
+  pct_phone: number;
+  pct_email: number;
+  pct_center: number;
+  change_7d: number | null;
+  change_30d: number | null;
+  tracking_since: string;
+  history: DataCompletenessPoint[];
+  incomplete: { id: number; name: string; missing: DoctorInfoField[] }[];
+}
