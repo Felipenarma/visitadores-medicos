@@ -134,6 +134,7 @@ class VisitOut(VisitBase):
     doctor_specialty: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    origin: Optional[str] = None
 
     class Config:
         from_attributes = True

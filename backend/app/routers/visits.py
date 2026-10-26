@@ -248,3 +248,17 @@ def schedule_by_sales(data: ScheduleBySalesRequest, db: Session = Depends(get_db
     )
     return result
 
+
+
+@router.post("/schedule-low-sales")
+def schedule_low_sales(
+    rep_id: Optional[int] = Query(None),
+    dry_run: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Agenda visitas a médicos prescriptores que llevan menos unidades que a la misma
+    fecha del mes anterior. dry_run=true muestra qué haría sin guardar nada.
+    Corre solo cada día a las 7:00 (hora Chile) y después de cada carga de ventas."""
+    from ..low_sales import schedule_low_sales_visits
+    r = schedule_low_sales_visits(db, rep_id=rep_id, dry_run=dry_run)
+    return r

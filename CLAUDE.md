@@ -287,6 +287,16 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ---
 
+## Visitas automáticas por venta baja (`low_sales.py`)
+
+- **Venta baja** = el médico (activo, con visitador) lleva menos unidades (nº de ventas) este mes que a la misma fecha del mes anterior. La "fecha" es la última venta cargada (`max(sale_date)`), no el reloj; si aún no hay ventas del mes en curso, no hace nada.
+- Agenda una visita (`origin='low_sales'`, nota "Venta baja: X uds este mes vs Y…") desde mañana 9:00, en el primer día hábil con cupo (`MAX_VISITS_PER_DAY`), dentro de 10 días.
+- No agenda si ya tiene visita `scheduled` en los próximos 7 días (la etiqueta como `low_sales`) ni si tuvo visita completada en los últimos 7 días. Si una visita `low_sales` quedó vencida sin hacerse, la re-agenda en vez de duplicar. Las notas del visitador se conservan.
+- Corre: diario 7:00 Chile (APScheduler), al arrancar, y tras cada `upload-consolidado` (background). Manual: `POST /api/visits/schedule-low-sales?rep_id=&dry_run=true`. Consulta: `GET /api/dashboard/rep/{id}/low-sales`.
+- `Visit.origin` (nuevo, migración en caliente). UI visitador: badge `LowSalesBadge` en visitas de hoy y "Próximas Visitas (7 días)" (el endpoint `rep/{id}/stats` ahora devuelve 7 días en vez de la semana calendario), y "▼" en el calendario.
+
+---
+
 ## Autenticación
 
 - Portales separados: `/admin-login` y `/visitador`

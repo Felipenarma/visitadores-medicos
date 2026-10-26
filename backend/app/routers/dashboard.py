@@ -250,7 +250,7 @@ def get_rep_stats(rep_id: int, db: Session = Depends(get_db)):
     upcoming = db.query(Visit).filter(
         Visit.rep_id == rep_id,
         Visit.scheduled_date >= today_start,
-        Visit.scheduled_date < week_end,
+        Visit.scheduled_date < today_start + timedelta(days=8),  # próximos 7 días
         Visit.status == "scheduled"
     ).order_by(Visit.scheduled_date.asc()).all()
 
@@ -258,10 +258,13 @@ def get_rep_stats(rep_id: int, db: Session = Depends(get_db)):
     for v in upcoming:
         upcoming_list.append({
             "visit_id": v.id,
+            "doctor_id": v.doctor_id,
             "doctor_name": v.doctor.name if v.doctor else "N/A",
             "doctor_specialty": v.doctor.specialty if v.doctor else None,
             "scheduled_date": v.scheduled_date.isoformat() if v.scheduled_date else None,
-            "status": v.status
+            "status": v.status,
+            "origin": getattr(v, "origin", None),
+            "notes": v.notes,
         })
 
     return {
@@ -1720,3 +1723,13 @@ def get_all_reps_data_completeness(db: Session = Depends(get_db)):
                     "complete": s["complete"], "pct_complete": pct(s["complete"], s["total"])})
     out.sort(key=lambda r: -r["pct_complete"])
     return out
+
+
+@router.get("/rep/{rep_id}/low-sales")
+def get_rep_low_sales(rep_id: int, db: Session = Depends(get_db)):
+    """Médicos prescriptores del visitador con menos unidades que a la misma fecha del mes anterior."""
+    from ..low_sales import find_low_sales_doctors
+    r = find_low_sales_doctors(db, rep_id)
+    for d in r["doctors"]:
+        d.pop("doctor", None)
+    return r

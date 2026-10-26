@@ -576,6 +576,9 @@ async def upload_consolidado(
 
     # Normalización automática en background (no bloquea la respuesta)
     background_tasks.add_task(_run_normalization, db)
+    # Luego, agendar visitas a prescriptores con venta baja vs mes anterior
+    from ..low_sales import run_low_sales_job
+    background_tasks.add_task(run_low_sales_job)
 
     new_doctors_alert = None
     if new_doctors_count > 0:

@@ -49,6 +49,7 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS ix_location_pings_recorded_at ON location_pings (recorded_at)",
         "ALTER TABLE doctor_completeness_snapshots ADD COLUMN IF NOT EXISTS with_specialty INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS info_completed_at TIMESTAMP",
+        "ALTER TABLE visits ADD COLUMN IF NOT EXISTS origin VARCHAR(30)",
     ]
     for stmt in migrations:
         try:
@@ -160,6 +161,12 @@ try:
         run_weekly_report_job,
         CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=chile_tz)
     )
+    # Visitas automáticas a prescriptores con venta baja vs mes anterior (7:00 hora Chile)
+    from .low_sales import run_low_sales_job
+    scheduler.add_job(
+        run_low_sales_job,
+        CronTrigger(hour=7, minute=0, timezone=chile_tz)
+    )
     # Foto diaria de completitud de datos de médicos (23:50 hora Chile)
     scheduler.add_job(
         run_completeness_snapshot_job,
@@ -179,6 +186,13 @@ def startup_event():
 
     # Foto inicial del día (el historial de completitud parte desde el primer arranque)
     run_completeness_snapshot_job()
+
+    # Revisión de venta baja al arrancar (idempotente: no duplica visitas)
+    try:
+        from .low_sales import run_low_sales_job
+        run_low_sales_job()
+    except Exception:
+        pass
 
     if scheduler is not None:
         scheduler.start()

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Calendar, CheckCircle, XCircle, Users, Clock, TrendingUp, AlertCircle, Target, ChevronLeft, ChevronRight } from 'lucide-react';
 import StatCard from '../../components/StatCard';
 import RepInfoGoalCard from '../../components/RepInfoGoalCard';
+import LowSalesBadge from '../../components/LowSalesBadge';
 import { missingLabel } from '../../utils/doctorInfo';
 import { dashboardApi, visitsApi, repsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -171,9 +172,12 @@ export default function RepDashboard() {
             {todayVisits.map(visit => (
               <div key={visit.id} className="bg-white rounded-lg px-4 py-3 flex items-center justify-between shadow-sm">
                 <div>
-                  <p className="font-medium text-gray-800 text-sm">{(visit as any).doctor_name || 'Doctor'}</p>
+                  <p className="font-medium text-gray-800 text-sm flex items-center gap-2 flex-wrap">
+                    {(visit as any).doctor_name || 'Doctor'}
+                    {visit.origin === 'low_sales' && <LowSalesBadge notes={visit.notes} />}
+                  </p>
                   <p className="text-xs text-gray-400">{format(new Date(visit.scheduled_date), 'HH:mm')}</p>
-                  {visit.notes && <p className="text-xs text-gray-500 mt-0.5 italic">📝 {visit.notes}</p>}
+                  {visit.notes && visit.origin !== 'low_sales' && <p className="text-xs text-gray-500 mt-0.5 italic">📝 {visit.notes}</p>}
                   {missingByDoctor.has(visit.doctor_id) && (
                     <p className="text-xs text-red-500 mt-0.5">
                       Aprovecha de pedirle: {missingLabel(missingByDoctor.get(visit.doctor_id)!)}
@@ -348,13 +352,23 @@ export default function RepDashboard() {
       {/* Próximas visitas — solo mes actual */}
       {isCurrentMonth && (
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Próximas Visitas esta Semana</h2>
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold text-gray-900">Próximas Visitas (7 días)</h2>
+            {(() => {
+              const n = (stats?.upcoming_visits ?? []).filter(v => v.origin === 'low_sales').length;
+              return n > 0 ? (
+                <span className="text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded-lg">
+                  {n} agendada{n > 1 ? 's' : ''} por venta baja vs mes anterior
+                </span>
+              ) : null;
+            })()}
+          </div>
           {(stats?.upcoming_visits ?? []).length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-6">No hay visitas programadas esta semana</p>
+            <p className="text-gray-400 text-sm text-center py-6">No hay visitas programadas en los próximos 7 días</p>
           ) : (
             <div className="space-y-3">
               {stats?.upcoming_visits.map(v => (
-                <div key={v.visit_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors">
+                <div key={v.visit_id} className={`flex items-center justify-between p-3 rounded-lg transition-colors ${v.origin === 'low_sales' ? 'bg-orange-50/50 hover:bg-orange-50 border border-orange-100' : 'bg-gray-50 hover:bg-blue-50'}`}>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold text-sm">
                       {v.doctor_name.charAt(0)}
@@ -362,6 +376,7 @@ export default function RepDashboard() {
                     <div>
                       <p className="font-medium text-gray-900 text-sm">{v.doctor_name}</p>
                       <p className="text-xs text-gray-500">{v.doctor_specialty || 'Sin especialidad'}</p>
+                      {v.origin === 'low_sales' && <div className="mt-1"><LowSalesBadge notes={v.notes} /></div>}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

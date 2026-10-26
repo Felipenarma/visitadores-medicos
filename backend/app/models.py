@@ -82,6 +82,7 @@ class Visit(Base):
     actual_date = Column(DateTime, nullable=True)
     status = Column(String(20), default="scheduled")  # scheduled, completed, missed, cancelled
     notes = Column(Text, nullable=True)
+    origin = Column(String(30), nullable=True)  # None = manual; "low_sales" = agendada por venta baja
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

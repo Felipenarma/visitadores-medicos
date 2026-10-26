@@ -55,6 +55,7 @@ export interface Visit {
   actual_date?: string;
   status: 'scheduled' | 'completed' | 'missed' | 'cancelled';
   notes?: string;
+  origin?: string | null;  // 'low_sales' = agendada automáticamente por venta baja
   created_at?: string;
   doctor_name?: string;
   rep_name?: string;
@@ -118,10 +119,13 @@ export interface RepStats {
 
 export interface UpcomingVisit {
   visit_id: number;
+  doctor_id?: number;
   doctor_name: string;
   doctor_specialty?: string;
   scheduled_date: string;
   status: string;
+  origin?: string | null;
+  notes?: string | null;
 }
 
 export interface RepDetailVisit {

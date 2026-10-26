@@ -88,7 +88,7 @@ export default function RepCalendar() {
     .filter(v => v.status !== 'cancelled')
     .map(v => ({
       id: String(v.id),
-      title: v.doctor_name || 'Visita',
+      title: (v.origin === 'low_sales' && v.status === 'scheduled' ? '▼ ' : '') + (v.doctor_name || 'Visita'),
       start: v.scheduled_date,
       backgroundColor: STATUS_COLORS[v.status],
       borderColor: STATUS_COLORS[v.status],
@@ -231,6 +231,10 @@ export default function RepCalendar() {
             <span className="text-gray-600">{STATUS_LABELS[status]}</span>
           </div>
         ))}
+        <div className="flex items-center gap-1.5">
+          <span className="text-orange-600 font-bold text-xs">▼</span>
+          <span className="text-gray-600">Venta baja (automática)</span>
+        </div>
       </div>
 
       <div className="card p-4">
