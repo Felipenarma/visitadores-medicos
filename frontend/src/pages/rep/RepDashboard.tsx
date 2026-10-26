@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, CheckCircle, XCircle, Users, Clock, TrendingUp, AlertCircle, Target, ChevronLeft, ChevronRight } from 'lucide-react';
 import StatCard from '../../components/StatCard';
+import RepInfoGoalCard from '../../components/RepInfoGoalCard';
+import { missingLabel } from '../../utils/doctorInfo';
 import { dashboardApi, visitsApi, repsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import type { RepStats, Visit, RepDetail } from '../../types';
+import type { RepStats, Visit, RepDetail, RepDataCompleteness } from '../../types';
 import { format } from 'date-fns';
 import { getGeoPosition } from '../../utils/geo';
 import { es } from 'date-fns/locale';
@@ -25,6 +27,7 @@ export default function RepDashboard() {
   const [viewYear, setViewYear] = useState(nowDate.getFullYear());
   const [monthDetail, setMonthDetail] = useState<RepDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [infoData, setInfoData] = useState<RepDataCompleteness | null>(null);
 
   const isCurrentMonth = viewMonth === nowDate.getMonth() + 1 && viewYear === nowDate.getFullYear();
   const today = format(nowDate, 'yyyy-MM-dd');
@@ -57,6 +60,11 @@ export default function RepDashboard() {
   };
 
   useEffect(() => { loadData(); }, [user?.rep_id]);
+  useEffect(() => {
+    if (!user?.rep_id) return;
+    dashboardApi.getRepDataCompleteness(user.rep_id, 30).then(setInfoData).catch(() => setInfoData(null));
+  }, [user?.rep_id]);
+  const missingByDoctor = new Map((infoData?.incomplete ?? []).map(x => [x.id, x.missing]));
   useEffect(() => { loadMonthDetail(); }, [user?.rep_id, viewMonth, viewYear]);
 
   const prevMonth = () => {
@@ -166,6 +174,11 @@ export default function RepDashboard() {
                   <p className="font-medium text-gray-800 text-sm">{(visit as any).doctor_name || 'Doctor'}</p>
                   <p className="text-xs text-gray-400">{format(new Date(visit.scheduled_date), 'HH:mm')}</p>
                   {visit.notes && <p className="text-xs text-gray-500 mt-0.5 italic">📝 {visit.notes}</p>}
+                  {missingByDoctor.has(visit.doctor_id) && (
+                    <p className="text-xs text-red-500 mt-0.5">
+                      Aprovecha de pedirle: {missingLabel(missingByDoctor.get(visit.doctor_id)!)}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {statusBadge(justCompleted.has(visit.id) ? 'completed' : visit.status)}
@@ -184,6 +197,9 @@ export default function RepDashboard() {
           </div>
         </div>
       )}
+
+      {/* Información de mis médicos: meta semanal + sugerencias */}
+      {isCurrentMonth && infoData && infoData.total > 0 && <RepInfoGoalCard data={infoData} />}
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

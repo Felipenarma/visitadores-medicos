@@ -243,4 +243,16 @@ export interface RepDataCompleteness {
   tracking_since: string;
   history: DataCompletenessPoint[];
   incomplete: { id: number; name: string; missing: DoctorInfoField[] }[];
+  pending: number;
+  weekly_goal: number;
+  done_this_week: number;
+  done_this_week_names: string[];
+  suggestions: {
+    id: number;
+    name: string;
+    missing: DoctorInfoField[];
+    score: number;
+    reasons: ('visit' | 'sales' | 'quick' | 'recent')[];
+    next_visit: string | null;
+  }[];
 }

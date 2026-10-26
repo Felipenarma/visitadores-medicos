@@ -330,6 +330,8 @@ def create_doctor(data: DoctorCreate, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Línea de negocio no encontrada")
 
     doctor = Doctor(**data.model_dump())
+    from ..completeness import sync_completed_at
+    sync_completed_at(doctor, edited=True)
     db.add(doctor)
     db.commit()
     db.refresh(doctor)
@@ -343,6 +345,8 @@ def update_doctor(doctor_id: int, data: DoctorUpdate, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Médico no encontrado")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(doctor, key, value)
+    from ..completeness import sync_completed_at
+    sync_completed_at(doctor, edited=True)
     db.commit()
     db.refresh(doctor)
     return enrich_doctor(doctor, db)

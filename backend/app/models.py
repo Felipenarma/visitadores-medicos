@@ -62,6 +62,9 @@ class Doctor(Base):
     created_at = Column(DateTime, server_default=func.now())
     is_active = Column(Boolean, default=True)
     created_from = Column(String(50), nullable=True)  # ej. "auto_import" = creado automáticamente desde carga de ventas
+    # Momento en que el médico quedó con teléfono+correo+centro+especialidad tras una edición.
+    # 2000-01-01 = ya estaba completo antes de que existiera este seguimiento.
+    info_completed_at = Column(DateTime, nullable=True)
 
     business_line = relationship("BusinessLine", back_populates="doctors")
     rep = relationship("MedicalRep", back_populates="doctors")

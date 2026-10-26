@@ -7,12 +7,13 @@ import {
   Edit2, X, Building2, Hash, DollarSign, UserPlus, ClipboardCheck, Filter
 } from 'lucide-react';
 import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine, RepDataCompleteness, DoctorInfoField } from '../../types';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine, RepDataCompleteness } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
 } from 'recharts';
 import * as XLSX from 'xlsx';
+import { FIELD_LABELS, hasInfo, doctorMissingFields } from '../../utils/doctorInfo';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -663,29 +664,6 @@ function DoctorEditModal({ doctor, reps, businessLines, onClose, onSaved }: {
 
 // ─── completitud de datos de médicos ────────────────────────────────────────
 // Mismo criterio que backend/app/completeness.py
-
-const INFO_PLACEHOLDERS = new Set(['', '-', '--', '.', '0', 'na', 'n/a', 's/i', 'si', 'sin', 'sin dato', 'sin datos',
-  'sin info', 'no', 'no tiene', 'pendiente', 'x', 'null', 'none', 'nan']);
-
-const FIELD_LABELS: Record<DoctorInfoField, string> = {
-  phone: 'Teléfono',
-  email: 'Correo',
-  medical_center: 'Centro médico',
-  specialty: 'Especialidad',
-};
-
-function hasInfo(v?: string | null) {
-  return v != null && !INFO_PLACEHOLDERS.has(String(v).trim().toLowerCase());
-}
-
-function doctorMissingFields(d: Doctor): DoctorInfoField[] {
-  const miss: DoctorInfoField[] = [];
-  if (!hasInfo(d.phone)) miss.push('phone');
-  if (!hasInfo(d.email) || !String(d.email).includes('@')) miss.push('email');
-  if (!hasInfo(d.medical_center)) miss.push('medical_center');
-  if (!hasInfo(d.specialty)) miss.push('specialty');
-  return miss;
-}
 
 function fmtShortDate(iso: string) {
   const [y, m, d] = iso.split('-').map(Number);

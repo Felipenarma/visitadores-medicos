@@ -1585,6 +1585,7 @@ def get_rep_data_completeness(
     Cada consulta actualiza la foto del día, así que el último punto siempre está al día."""
     from ..completeness import (
         compute_rep_completeness, upsert_snapshot, missing_fields, today_chile, pct,
+        week_start_utc, weekly_goal, LEGACY_COMPLETED,
     )
     from ..models import DoctorCompletenessSnapshot
 
@@ -1626,6 +1627,59 @@ def get_rep_data_completeness(
             incomplete.append({"id": d.id, "name": d.name, "missing": miss})
     incomplete.sort(key=lambda x: (-len(x["missing"]), x["name"]))
 
+    # ── Meta semanal: médicos que pasaron a "completos" por edición desde el lunes ──
+    ws = week_start_utc()
+    done_week = [d for d in docs if d.info_completed_at and d.info_completed_at > LEGACY_COMPLETED
+                 and d.info_completed_at >= ws and not missing_fields(d)]
+    pending = stats["total"] - stats["complete"]
+    goal = weekly_goal(pending, len(done_week))
+
+    # ── Sugerencias: a quién completar primero ──
+    inc_ids = [x["id"] for x in incomplete]
+    next_visit = {}
+    with_sales = set()
+    last_visit = {}
+    if inc_ids:
+        now_utc = datetime.utcnow()
+        for v in db.query(Visit).filter(
+            Visit.doctor_id.in_(inc_ids), Visit.status == "scheduled",
+            Visit.scheduled_date >= now_utc - timedelta(hours=12),
+            Visit.scheduled_date <= now_utc + timedelta(days=7),
+        ).order_by(Visit.scheduled_date).all():
+            next_visit.setdefault(v.doctor_id, v.scheduled_date)
+        with_sales = {r[0] for r in db.query(Sale.doctor_id).filter(Sale.doctor_id.in_(inc_ids)).distinct().all()}
+        for doc_id, last in db.query(Visit.doctor_id, func.max(func.coalesce(Visit.actual_date, Visit.scheduled_date))).filter(
+            Visit.doctor_id.in_(inc_ids), Visit.status == "completed"
+        ).group_by(Visit.doctor_id).all():
+            last_visit[doc_id] = last
+
+    suggestions = []
+    for x in incomplete:
+        did = x["id"]
+        score, reasons = 0, []
+        if did in next_visit:
+            score += 100
+            reasons.append("visit")
+        if did in with_sales:
+            score += 40
+            reasons.append("sales")
+        n_miss = len(x["missing"])
+        if n_miss == 1:
+            score += 25
+            reasons.append("quick")
+        if did in last_visit and (datetime.utcnow() - last_visit[did]).days <= 30:
+            score += 10
+            reasons.append("recent")
+        score += (4 - n_miss) * 3
+        suggestions.append({
+            **x,
+            "score": score,
+            "reasons": reasons,
+            "next_visit": next_visit[did].isoformat() if did in next_visit else None,
+        })
+    suggestions.sort(key=lambda s: (-s["score"], s["name"]))
+    suggestions = suggestions[:5]
+
     return {
         "rep_id": rep_id,
         "as_of": today.isoformat(),
@@ -1645,6 +1699,11 @@ def get_rep_data_completeness(
         "tracking_since": history[0]["date"] if history else today.isoformat(),
         "history": history,
         "incomplete": incomplete,
+        "pending": pending,
+        "weekly_goal": goal,
+        "done_this_week": len(done_week),
+        "done_this_week_names": [d.name for d in done_week],
+        "suggestions": suggestions,
     }
 
 

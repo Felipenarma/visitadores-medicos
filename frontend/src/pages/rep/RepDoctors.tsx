@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar, Edit2, BarChart2, ChevronLeft, ChevronRight, Award } from 'lucide-react';
+import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar, Edit2, BarChart2, ChevronLeft, ChevronRight, Award, ClipboardCheck, AlertCircle, Trophy } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { doctorMissingFields, FIELD_LABELS, missingLabel } from '../../utils/doctorInfo';
 import { doctorsApi, businessLinesApi, visitsApi, dashboardApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
@@ -8,6 +10,9 @@ const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','A
 
 export default function RepDoctors() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [onlyIncomplete, setOnlyIncomplete] = useState(searchParams.get('filtro') === 'incompletos');
+  const [toast, setToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'lista' | 'analitica'>('lista');
   const [doctors, setDoctors] = useState<any[]>([]);
   const [businessLines, setBusinessLines] = useState<any[]>([]);
@@ -76,6 +81,22 @@ export default function RepDoctors() {
   };
 
   useEffect(() => { loadData(); }, [user?.rep_id]);
+
+  // Abrir directamente la edición de un médico sugerido (?completar=ID)
+  useEffect(() => {
+    const target = searchParams.get('completar');
+    if (!target || doctors.length === 0) return;
+    const doc = doctors.find(d => String(d.id) === target);
+    if (doc) openEdit(doc);
+    searchParams.delete('completar');
+    setSearchParams(searchParams, { replace: true });
+  }, [doctors]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
   useEffect(() => { if (activeTab === 'analitica') loadRanking(); }, [rankMonth, rankYear, activeTab, user?.rep_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -149,10 +170,21 @@ export default function RepDoctors() {
     setSavingEdit(true);
     setEditError('');
     try {
+      const wasIncomplete = doctorMissingFields(editDoctor).length > 0;
       await doctorsApi.update(editDoctor.id, {
         ...editForm,
         business_line_id: editForm.business_line_id ? parseInt(editForm.business_line_id) : undefined,
       });
+      const stillMissing = doctorMissingFields(editForm);
+      if (wasIncomplete && stillMissing.length === 0 && user?.rep_id) {
+        dashboardApi.getRepDataCompleteness(user.rep_id, 7)
+          .then(c => setToast(
+            c.weekly_goal > 0 && c.done_this_week >= c.weekly_goal
+              ? `¡${editForm.name} completo! Meta semanal cumplida (${c.done_this_week}/${c.weekly_goal}) 🎉`
+              : `¡${editForm.name} completo! Llevas ${c.done_this_week} de ${c.weekly_goal} esta semana.`
+          ))
+          .catch(() => setToast(`¡${editForm.name} quedó con información completa!`));
+      }
       setEditDoctor(null);
       loadData();
     } catch {
@@ -170,7 +202,9 @@ export default function RepDoctors() {
   const CIRC = 2 * Math.PI * RADIUS;
   const dash = (pct / 100) * CIRC;
 
+  const incompleteCount = doctors.filter(d => doctorMissingFields(d).length > 0).length;
   const filtered = doctors
+    .filter(d => !onlyIncomplete || doctorMissingFields(d).length > 0)
     .filter(d =>
       (!search || d.name.toLowerCase().includes(search.toLowerCase()) ||
       (d.medical_center || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -370,9 +404,19 @@ export default function RepDoctors() {
             </button>
           ))}
         </div>
-        {(filterBL || filterSales !== 'all') && (
+        {incompleteCount > 0 && (
           <button
-            onClick={() => { setFilterBL(''); setFilterSales('all'); }}
+            onClick={() => setOnlyIncomplete(v => !v)}
+            className={`text-sm px-3 py-1.5 rounded-lg border font-medium flex items-center gap-1.5 transition-colors ${
+              onlyIncomplete ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+            }`}
+          >
+            <ClipboardCheck size={14} /> Info incompleta ({incompleteCount})
+          </button>
+        )}
+        {(filterBL || filterSales !== 'all' || onlyIncomplete) && (
+          <button
+            onClick={() => { setFilterBL(''); setFilterSales('all'); setOnlyIncomplete(false); }}
             className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1 px-2"
           >
             <X size={14} /> Limpiar
@@ -443,6 +487,13 @@ export default function RepDoctors() {
                   {(doc.city || doc.commune) && <span className="flex items-center gap-1"><MapPin size={14} /> {[doc.city, doc.commune].filter(Boolean).join(', ')}</span>}
                   {doc.address && <span className="flex items-center gap-1">{doc.address}</span>}
                 </div>
+                {doctorMissingFields(doc).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {doctorMissingFields(doc).map(f => (
+                      <span key={f} className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">Falta {FIELD_LABELS[f].toLowerCase()}</span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
                 <div className="flex flex-wrap gap-1 justify-end">
@@ -454,12 +505,21 @@ export default function RepDoctors() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openEdit(doc)}
-                    className="text-xs px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1 font-medium"
-                  >
-                    <Edit2 size={13} /> Editar
-                  </button>
+                  {doctorMissingFields(doc).length > 0 ? (
+                    <button
+                      onClick={() => openEdit(doc)}
+                      className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1 font-medium"
+                    >
+                      <ClipboardCheck size={13} /> Completar datos
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => openEdit(doc)}
+                      className="text-xs px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1 font-medium"
+                    >
+                      <Edit2 size={13} /> Editar
+                    </button>
+                  )}
                   {visitSuccess === doc.id ? (
                     <span className="text-xs text-green-600 font-medium flex items-center gap-1">
                       <CheckCircle size={14} /> Registrada
@@ -522,6 +582,13 @@ export default function RepDoctors() {
         </div>
       )}
 
+      {/* Aviso al completar un médico */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 max-w-[90vw]">
+          <Trophy size={16} className="shrink-0" /> {toast}
+        </div>
+      )}
+
       {/* Edit Modal */}
       {editDoctor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -531,6 +598,19 @@ export default function RepDoctors() {
               <button onClick={() => setEditDoctor(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
             </div>
             <form onSubmit={handleEditSubmit} className="p-5 space-y-4">
+              {(() => {
+                const miss = doctorMissingFields(editForm);
+                return miss.length > 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800 flex items-start gap-2">
+                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                    <span>Para que quede completo falta: <strong>{missingLabel(miss)}</strong></span>
+                  </div>
+                ) : (
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-700 flex items-center gap-2">
+                    <CheckCircle size={16} /> Información completa
+                  </div>
+                );
+              })()}
               <div>
                 <label className="label">Nombre *</label>
                 <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="input w-full" required />

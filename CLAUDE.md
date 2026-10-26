@@ -281,6 +281,9 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 - Se guarda una foto por visitador y día: APScheduler a las 23:50 hora Chile, al arrancar el backend, y cada vez que se consulta el endpoint (el punto de hoy siempre está actualizado).
 - El historial parte desde el primer deploy de esta función (no hay forma de reconstruir fechas pasadas).
 - UI: tarjeta "Información completa de médicos" en el detalle del visitador + filtro "Incompletos" y chips de campos faltantes en el listado + Excel de pendientes.
+- `Doctor.info_completed_at`: se fija con la hora actual cuando una edición (PUT/POST `/api/doctors`) deja al médico completo; se borra si vuelve a quedar incompleto. Si ya estaba completo antes del seguimiento se marca `2000-01-01` y no cuenta como avance.
+- **Meta semanal del visitador**: médicos completados por edición desde el lunes (hora Chile). Meta = ¼ de lo pendiente al inicio de la semana (mín 3, máx 10). Endpoint devuelve `weekly_goal`, `done_this_week`, `suggestions` (top 5: visita agendada en 7 días > tiene ventas > le falta 1 dato > visitado hace poco).
+- Vista visitador: `RepInfoGoalCard` en RepDashboard (meta + sugerencias), recordatorio en visitas de hoy ("Aprovecha de pedirle…"), en RepDoctors filtro "Info incompleta", botón "Completar datos", `?completar=ID` abre la edición, `?filtro=incompletos`, y un aviso al completar. Criterio compartido en `frontend/src/utils/doctorInfo.ts`.
 
 ---
 

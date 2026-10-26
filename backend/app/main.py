@@ -48,6 +48,7 @@ def run_migrations():
         "CREATE INDEX IF NOT EXISTS ix_location_pings_rep_id ON location_pings (rep_id)",
         "CREATE INDEX IF NOT EXISTS ix_location_pings_recorded_at ON location_pings (recorded_at)",
         "ALTER TABLE doctor_completeness_snapshots ADD COLUMN IF NOT EXISTS with_specialty INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS info_completed_at TIMESTAMP",
     ]
     for stmt in migrations:
         try:
