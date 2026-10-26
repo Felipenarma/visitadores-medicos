@@ -1,6 +1,6 @@
 """Indicador de completitud de datos de médicos por visitador.
 
-Un médico tiene "información completa" cuando tiene teléfono, correo y centro médico.
+Un médico tiene "información completa" cuando tiene teléfono, correo, centro médico y especialidad.
 Se guarda una foto diaria por visitador (DoctorCompletenessSnapshot) para mostrar evolución.
 """
 from datetime import datetime, date
@@ -15,7 +15,7 @@ CHILE_TZ = pytz.timezone("America/Santiago")
 _PLACEHOLDERS = {"", "-", "--", ".", "0", "na", "n/a", "s/i", "si", "sin", "sin dato", "sin datos",
                  "sin info", "no", "no tiene", "pendiente", "x", "null", "none", "nan"}
 
-FIELDS = ("phone", "email", "medical_center")
+FIELDS = ("phone", "email", "medical_center", "specialty")
 
 
 def has_value(v) -> bool:
@@ -37,6 +37,8 @@ def missing_fields(doc: Doctor) -> list:
         missing.append("email")
     if not has_value(doc.medical_center):
         missing.append("medical_center")
+    if not has_value(doc.specialty):
+        missing.append("specialty")
     return missing
 
 
@@ -50,12 +52,14 @@ def compute_rep_completeness(db: Session, rep_id: int) -> dict:
     with_phone = sum(1 for d in docs if has_value(d.phone))
     with_email = sum(1 for d in docs if has_email(d.email))
     with_center = sum(1 for d in docs if has_value(d.medical_center))
+    with_specialty = sum(1 for d in docs if has_value(d.specialty))
     complete = sum(1 for d in docs if not missing_fields(d))
     return {
         "total": total,
         "with_phone": with_phone,
         "with_email": with_email,
         "with_center": with_center,
+        "with_specialty": with_specialty,
         "complete": complete,
         "_docs": docs,
     }
@@ -70,7 +74,7 @@ def upsert_snapshot(db: Session, rep_id: int, stats: dict, day: date = None) -> 
     if row is None:
         row = DoctorCompletenessSnapshot(rep_id=rep_id, snapshot_date=day)
         db.add(row)
-    for k in ("total", "with_phone", "with_email", "with_center", "complete"):
+    for k in ("total", "with_phone", "with_email", "with_center", "with_specialty", "complete"):
         setattr(row, k, stats[k])
     try:
         db.commit()

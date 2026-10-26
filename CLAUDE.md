@@ -160,7 +160,7 @@ Se ejecutan automáticamente al arrancar. Agregan columnas si no existen:
 | `GET` | `/api/dashboard/new-doctors-range?start_month=&start_year=&end_month=&end_year=` | Médicos nuevos entre dos meses (inclusive) — usado por el export Excel |
 | `GET` | `/api/dashboard/sales-by-doctor?month=&year=&top=` | Mes actual vs anterior por médico |
 | `GET` | `/api/dashboard/rep-commissions?month=&year=` | Comisiones por rep |
-| `GET` | `/api/dashboard/rep/{id}/data-completeness?days=90` | % médicos con info completa (teléfono+correo+centro médico), variación 7/30 días, historial diario y lista de incompletos |
+| `GET` | `/api/dashboard/rep/{id}/data-completeness?days=90` | % médicos con info completa (teléfono+correo+centro médico+especialidad), variación 7/30 días, historial diario y lista de incompletos |
 | `GET` | `/api/dashboard/data-completeness` | Resumen de completitud de todos los visitadores activos |
 
 ### Otros routers
@@ -277,7 +277,7 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ## Completitud de datos de médicos (`completeness.py`)
 
-- Médico **completo** = teléfono + correo (con `@`) + centro médico. Valores de relleno (`-`, `sin dato`, `n/a`, `0`…) cuentan como vacíos. El mismo criterio está duplicado en `RepDetail.tsx` (`doctorMissingFields`) — mantener ambos sincronizados.
+- Médico **completo** = teléfono + correo (con `@`) + centro médico + especialidad. Valores de relleno (`-`, `sin dato`, `n/a`, `0`…) cuentan como vacíos. El mismo criterio está duplicado en `RepDetail.tsx` (`doctorMissingFields`) — mantener ambos sincronizados.
 - Se guarda una foto por visitador y día: APScheduler a las 23:50 hora Chile, al arrancar el backend, y cada vez que se consulta el endpoint (el punto de hoy siempre está actualizado).
 - El historial parte desde el primer deploy de esta función (no hay forma de reconstruir fechas pasadas).
 - UI: tarjeta "Información completa de médicos" en el detalle del visitador + filtro "Incompletos" y chips de campos faltantes en el listado + Excel de pendientes.

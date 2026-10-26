@@ -1573,7 +1573,7 @@ def get_locations(
     return {"events": events, "total": len(events)}
 
 
-# ─── Completitud de datos de médicos (teléfono, correo, centro médico) ──────────
+# ─── Completitud de datos de médicos (teléfono, correo, centro médico, especialidad) ──
 
 @router.get("/rep/{rep_id}/data-completeness")
 def get_rep_data_completeness(
@@ -1607,6 +1607,7 @@ def get_rep_data_completeness(
         "pct_phone": pct(r.with_phone, r.total),
         "pct_email": pct(r.with_email, r.total),
         "pct_center": pct(r.with_center, r.total),
+        "pct_specialty": pct(r.with_specialty or 0, r.total),
     } for r in rows]
 
     def _pct_at(days_ago: int):
@@ -1634,9 +1635,11 @@ def get_rep_data_completeness(
         "with_phone": stats["with_phone"],
         "with_email": stats["with_email"],
         "with_center": stats["with_center"],
+        "with_specialty": stats["with_specialty"],
         "pct_phone": pct(stats["with_phone"], stats["total"]),
         "pct_email": pct(stats["with_email"], stats["total"]),
         "pct_center": pct(stats["with_center"], stats["total"]),
+        "pct_specialty": pct(stats["with_specialty"], stats["total"]),
         "change_7d": round(current_pct - ref_7, 1) if ref_7 is not None else None,
         "change_30d": round(current_pct - ref_30, 1) if ref_30 is not None else None,
         "tracking_since": history[0]["date"] if history else today.isoformat(),

@@ -246,7 +246,7 @@ class ImageFile(Base):
 
 class DoctorCompletenessSnapshot(Base):
     """Foto diaria de cuántos médicos de cada visitador tienen información completa
-    (teléfono, correo y centro médico). Permite ver la evolución en el tiempo."""
+    (teléfono, correo, centro médico y especialidad). Permite ver la evolución en el tiempo."""
     __tablename__ = "doctor_completeness_snapshots"
     __table_args__ = (UniqueConstraint("rep_id", "snapshot_date", name="uq_completeness_rep_date"),)
 
@@ -257,5 +257,6 @@ class DoctorCompletenessSnapshot(Base):
     with_phone = Column(Integer, nullable=False, default=0)
     with_email = Column(Integer, nullable=False, default=0)
     with_center = Column(Integer, nullable=False, default=0)
+    with_specialty = Column(Integer, nullable=False, default=0)
     complete = Column(Integer, nullable=False, default=0)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -47,6 +47,7 @@ def run_migrations():
         "CREATE TABLE IF NOT EXISTS location_pings (id SERIAL PRIMARY KEY, rep_id INTEGER REFERENCES medical_reps(id) ON DELETE CASCADE, session_id INTEGER REFERENCES user_sessions(id) ON DELETE SET NULL, latitude FLOAT NOT NULL, longitude FLOAT NOT NULL, recorded_at TIMESTAMP DEFAULT NOW())",
         "CREATE INDEX IF NOT EXISTS ix_location_pings_rep_id ON location_pings (rep_id)",
         "CREATE INDEX IF NOT EXISTS ix_location_pings_recorded_at ON location_pings (recorded_at)",
+        "ALTER TABLE doctor_completeness_snapshots ADD COLUMN IF NOT EXISTS with_specialty INTEGER NOT NULL DEFAULT 0",
     ]
     for stmt in migrations:
         try:

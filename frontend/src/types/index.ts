@@ -211,7 +211,7 @@ export interface User {
   rep_id?: number;
 }
 
-export type DoctorInfoField = 'phone' | 'email' | 'medical_center';
+export type DoctorInfoField = 'phone' | 'email' | 'medical_center' | 'specialty';
 
 export interface DataCompletenessPoint {
   date: string;
@@ -221,6 +221,7 @@ export interface DataCompletenessPoint {
   pct_phone: number;
   pct_email: number;
   pct_center: number;
+  pct_specialty: number;
 }
 
 export interface RepDataCompleteness {
@@ -232,9 +233,11 @@ export interface RepDataCompleteness {
   with_phone: number;
   with_email: number;
   with_center: number;
+  with_specialty: number;
   pct_phone: number;
   pct_email: number;
   pct_center: number;
+  pct_specialty: number;
   change_7d: number | null;
   change_30d: number | null;
   tracking_since: string;

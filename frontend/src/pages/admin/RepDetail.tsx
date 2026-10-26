@@ -671,6 +671,7 @@ const FIELD_LABELS: Record<DoctorInfoField, string> = {
   phone: 'Teléfono',
   email: 'Correo',
   medical_center: 'Centro médico',
+  specialty: 'Especialidad',
 };
 
 function hasInfo(v?: string | null) {
@@ -682,6 +683,7 @@ function doctorMissingFields(d: Doctor): DoctorInfoField[] {
   if (!hasInfo(d.phone)) miss.push('phone');
   if (!hasInfo(d.email) || !String(d.email).includes('@')) miss.push('email');
   if (!hasInfo(d.medical_center)) miss.push('medical_center');
+  if (!hasInfo(d.specialty)) miss.push('specialty');
   return miss;
 }
 
@@ -747,7 +749,7 @@ function DataCompletenessSection({ data, loading, onShowIncomplete, onExportInco
             <ClipboardCheck size={16} className="text-indigo-500" />
             Información completa de médicos
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">Completo = teléfono + correo + centro médico</p>
+          <p className="text-xs text-gray-400 mt-0.5">Completo = teléfono + correo + centro médico + especialidad</p>
         </div>
         <div className="flex gap-2">
           {pending > 0 && (
@@ -793,6 +795,7 @@ function DataCompletenessSection({ data, loading, onShowIncomplete, onExportInco
           <FieldBar label="Teléfono" count={data.with_phone} total={data.total} pct={data.pct_phone} />
           <FieldBar label="Correo" count={data.with_email} total={data.total} pct={data.pct_email} />
           <FieldBar label="Centro médico" count={data.with_center} total={data.total} pct={data.pct_center} />
+          <FieldBar label="Especialidad" count={data.with_specialty} total={data.total} pct={data.pct_specialty} />
         </div>
       </div>
 
@@ -808,6 +811,7 @@ function DataCompletenessSection({ data, loading, onShowIncomplete, onExportInco
             <Line type="monotone" dataKey="pct_phone" name="Teléfono" stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
             <Line type="monotone" dataKey="pct_email" name="Correo" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
             <Line type="monotone" dataKey="pct_center" name="Centro médico" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+            <Line type="monotone" dataKey="pct_specialty" name="Especialidad" stroke="#ec4899" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
           </LineChart>
         </ResponsiveContainer>
         <p className="text-xs text-gray-400 px-2 mt-1">
@@ -960,7 +964,7 @@ export default function RepDetail() {
     const aoa = [
       ['Médico', 'RUT', 'Especialidad', 'Teléfono', 'Correo', 'Centro médico', 'Falta completar'],
       ...rows.map(({ d, miss }) => [
-        d.name, d.rut || '', d.specialty || '',
+        d.name, d.rut || '', hasInfo(d.specialty) ? d.specialty : '',
         hasInfo(d.phone) ? d.phone : '', hasInfo(d.email) ? d.email : '', hasInfo(d.medical_center) ? d.medical_center : '',
         miss.map(f => FIELD_LABELS[f]).join(', '),
       ]),
