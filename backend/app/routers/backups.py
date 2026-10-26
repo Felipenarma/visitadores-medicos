@@ -33,6 +33,22 @@ def create_backup_now(send_email: bool = Query(True), db: Session = Depends(get_
     return _out(create_backup(db, trigger="manual", send_email=send_email))
 
 
+@router.get("/latest/download")
+def download_latest_backup(max_age_days: int = Query(6, ge=0, le=60), db: Session = Depends(get_db)):
+    """Descarga el respaldo más reciente. Si no hay uno de los últimos `max_age_days` días,
+    genera uno nuevo en el momento (sin enviar correo). Usado por la descarga automática en el Mac."""
+    from datetime import datetime, timedelta
+    from ..backup import create_backup
+    b = db.query(DataBackup).order_by(DataBackup.created_at.desc(), DataBackup.id.desc()).first()
+    if b is None or b.created_at is None or b.created_at < datetime.utcnow() - timedelta(days=max_age_days):
+        b = create_backup(db, trigger="manual", send_email=False)
+    return StreamingResponse(
+        io.BytesIO(b.data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{b.filename}"'},
+    )
+
+
 @router.get("/{backup_id}/download")
 def download_backup(backup_id: int, db: Session = Depends(get_db)):
     b = db.query(DataBackup).filter(DataBackup.id == backup_id).first()
