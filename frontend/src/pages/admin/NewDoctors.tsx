@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, AlertCircle, CheckCircle, Edit2, Trash2, X, Save, Download, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
 import type { BusinessLine } from '../../types';
 import { format } from 'date-fns';
@@ -21,6 +22,16 @@ interface NewDoctorItem {
   business_line_name: string | null;
   total_amount: number;
   sales_count: number;
+  email?: string | null;
+  phone?: string | null;
+}
+
+interface TrendPoint {
+  year: number;
+  month: number;
+  total: number;
+  con_visitador: number;
+  sin_visitador: number;
 }
 
 const ALL_CATEGORIES = [
@@ -96,6 +107,17 @@ interface EditForm {
 }
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// 'YYYY-MM' helpers para <input type="month">
+const toYM = (y: number, m: number) => `${y}-${String(m).padStart(2, '0')}`;
+const fromYM = (v: string) => { const [y, m] = v.split('-').map(Number); return { y, m }; };
+const shiftMonth = (y: number, m: number, delta: number) => {
+  const idx = y * 12 + (m - 1) + delta;
+  return { y: Math.floor(idx / 12), m: (idx % 12) + 1 };
+};
+
+type ExportPreset = 'month' | '3m' | '6m' | '12m' | 'ytd' | 'custom';
 
 export default function NewDoctors() {
   const [data, setData]       = useState<NewDoctorItem[]>([]);
@@ -112,6 +134,18 @@ export default function NewDoctors() {
   const [saving, setSaving]           = useState(false);
   const [deleting, setDeleting]       = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
+
+  // Tendencia 12 meses
+  const [trend, setTrend]             = useState<TrendPoint[]>([]);
+  const [trendLoading, setTrendLoading] = useState(true);
+
+  // Export por período
+  const [showExport, setShowExport]   = useState(false);
+  const [exportPreset, setExportPreset] = useState<ExportPreset>('month');
+  const [exportFrom, setExportFrom]   = useState('');
+  const [exportTo, setExportTo]       = useState('');
+  const [exporting, setExporting]     = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const _now = new Date();
   const isCurrentMonth = month === _now.getMonth() + 1 && year === _now.getFullYear();
@@ -135,7 +169,126 @@ export default function NewDoctors() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [month, year]);
+  const loadTrend = () => {
+    setTrendLoading(true);
+    (dashboardApi as any).getNewDoctorsTrend(month, year, 12)
+      .then((t: TrendPoint[]) => setTrend(t))
+      .catch(console.error)
+      .finally(() => setTrendLoading(false));
+  };
+
+  useEffect(() => { load(); loadTrend(); }, [month, year]);
+
+  // ── Export por período ──────────────────────────────────────────────────
+  const currentYM = toYM(_now.getFullYear(), _now.getMonth() + 1);
+
+  const applyPreset = (preset: ExportPreset) => {
+    setExportPreset(preset);
+    setExportError('');
+    const endY = year, endM = month;
+    let start = { y: endY, m: endM };
+    if (preset === '3m')  start = shiftMonth(endY, endM, -2);
+    if (preset === '6m')  start = shiftMonth(endY, endM, -5);
+    if (preset === '12m') start = shiftMonth(endY, endM, -11);
+    if (preset === 'ytd') start = { y: endY, m: 1 };
+    if (preset !== 'custom') {
+      setExportFrom(toYM(start.y, start.m));
+      setExportTo(toYM(endY, endM));
+    }
+  };
+
+  const openExport = () => {
+    applyPreset('month');
+    setShowExport(true);
+  };
+
+  const periodLabel = (from: string, to: string) => {
+    const a = fromYM(from), b = fromYM(to);
+    if (from === to) return `${MONTH_NAMES[a.m - 1]} ${a.y}`;
+    return `${MONTH_SHORT[a.m - 1]} ${a.y} – ${MONTH_SHORT[b.m - 1]} ${b.y}`;
+  };
+
+  const downloadExcel = async () => {
+    if (!exportFrom || !exportTo) { setExportError('Selecciona el mes de inicio y de término.'); return; }
+    if (exportFrom > exportTo) { setExportError('El mes "desde" debe ser anterior o igual al mes "hasta".'); return; }
+    setExporting(true);
+    setExportError('');
+    try {
+      const a = fromYM(exportFrom), b = fromYM(exportTo);
+      const rowsData: NewDoctorItem[] = await (dashboardApi as any).getNewDoctorsRange(a.m, a.y, b.m, b.y);
+      if (rowsData.length === 0) { setExportError('No hay médicos nuevos en el período seleccionado.'); return; }
+
+      const rows = rowsData.map(d => {
+        const fv = d.primera_venta ? new Date(d.primera_venta) : null;
+        return {
+          'Mes de ingreso': fv ? `${MONTH_NAMES[fv.getMonth()]} ${fv.getFullYear()}` : '',
+          'Médico':         d.doctor_name,
+          'RUT':            d.rut_doctor || '',
+          'Especialidad':   d.specialty || '',
+          'Email':          d.email || '',
+          'Teléfono':       d.phone || '',
+          'Primera Venta':  fv ? format(fv, 'dd/MM/yyyy', { locale: es }) : '',
+          'Visitador':      d.rep_name || 'Sin asignar',
+          'Línea':          d.business_line_name || (d.categorias || []).join(', '),
+          'Productos':      (d.productos || []).join(', '),
+          'Recetas en el período': d.sales_count,
+        };
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 12 }];
+
+      // Resumen mensual
+      const summary: Record<string, { label: string; total: number; con: number; sin: number }> = {};
+      for (let ym = exportFrom; ym <= exportTo; ) {
+        const { y, m } = fromYM(ym);
+        summary[ym] = { label: `${MONTH_NAMES[m - 1]} ${y}`, total: 0, con: 0, sin: 0 };
+        const n = shiftMonth(y, m, 1); ym = toYM(n.y, n.m);
+      }
+      rowsData.forEach(d => {
+        if (!d.primera_venta) return;
+        const fv = new Date(d.primera_venta);
+        const k = toYM(fv.getFullYear(), fv.getMonth() + 1);
+        if (!summary[k]) return;
+        summary[k].total += 1;
+        if (d.rep_name) summary[k].con += 1; else summary[k].sin += 1;
+      });
+      const summaryRows = Object.values(summary).map(s => ({
+        'Mes': s.label, 'Médicos nuevos': s.total, 'Con visitador': s.con, 'Sin visitador': s.sin,
+      }));
+      summaryRows.push({
+        'Mes': 'TOTAL',
+        'Médicos nuevos': summaryRows.reduce((acc, r) => acc + r['Médicos nuevos'], 0),
+        'Con visitador':  summaryRows.reduce((acc, r) => acc + r['Con visitador'], 0),
+        'Sin visitador':  summaryRows.reduce((acc, r) => acc + r['Sin visitador'], 0),
+      });
+      const ws2 = XLSX.utils.json_to_sheet(summaryRows);
+      ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Médicos Nuevos');
+      XLSX.utils.book_append_sheet(wb, ws2, 'Resumen mensual');
+      const fname = exportFrom === exportTo
+        ? `medicos_nuevos_${MONTH_NAMES[a.m - 1]}_${a.y}.xlsx`
+        : `medicos_nuevos_${exportFrom}_a_${exportTo}.xlsx`;
+      XLSX.writeFile(wb, fname);
+      setShowExport(false);
+    } catch (e) {
+      console.error(e);
+      setExportError('Error al generar el Excel. Intenta nuevamente.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Datos para el gráfico
+  const chartData = trend.map(t => ({
+    ...t,
+    label: `${MONTH_SHORT[t.month - 1]} ${String(t.year).slice(2)}`,
+    selected: t.month === month && t.year === year,
+  }));
+  const trendTotal = trend.reduce((acc, t) => acc + t.total, 0);
+  const trendAvg = trend.length ? trendTotal / trend.length : 0;
+  const trendMax = trend.reduce((best, t) => (t.total > (best?.total ?? -1) ? t : best), null as TrendPoint | null);
 
   const openEdit = (item: NewDoctorItem) => {
     setEditItem(item);
@@ -168,6 +321,7 @@ export default function NewDoctors() {
       });
       setEditItem(null);
       load();
+      loadTrend();
     } catch {
       setErrorMsg('Error al guardar. Intenta nuevamente.');
     } finally {
@@ -182,6 +336,7 @@ export default function NewDoctors() {
       await doctorsApi.delete(deleteItem.doctor_id);
       setDeleteItem(null);
       load();
+      loadTrend();
     } catch {
       setErrorMsg('Error al eliminar.');
     } finally {
@@ -191,24 +346,6 @@ export default function NewDoctors() {
 
   const withRep    = data.filter(d => d.rep_name);
   const withoutRep = data.filter(d => !d.rep_name);
-
-  const downloadExcel = () => {
-    const rows = data.map(d => ({
-      'Médico':          d.doctor_name,
-      'RUT':             d.rut_doctor || '',
-      'Especialidad':    d.specialty || '',
-      'Primera Venta':   d.primera_venta ? format(new Date(d.primera_venta), 'dd/MM/yyyy', { locale: es }) : '',
-      'Visitador':       d.rep_name || 'Sin asignar',
-      'Productos':       d.productos.join(', '),
-      'Recetas':         d.sales_count,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    // Ancho de columnas
-    ws['!cols'] = [{ wch: 30 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 50 }, { wch: 14 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Médicos Nuevos');
-    XLSX.writeFile(wb, `medicos_nuevos_${MONTH_NAMES[month - 1]}_${year}.xlsx`);
-  };
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
@@ -244,11 +381,11 @@ export default function NewDoctors() {
           >
             <ChevronRight size={18} />
           </button>
-          {data.length > 0 && (
+          {(
             <button
-              onClick={downloadExcel}
+              onClick={openExport}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors ml-2"
-              title="Descargar Excel"
+              title="Descargar Excel por período"
             >
               <Download size={15} />
               Excel
@@ -280,6 +417,77 @@ export default function NewDoctors() {
           </div>
         </div>
       )}
+
+      {/* Tendencia últimos 12 meses */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 lg:p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={18} style={{ color: '#4BA5C3' }} />
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Médicos nuevos por mes</h2>
+              <p className="text-xs text-gray-500">Últimos 12 meses hasta {MONTH_NAMES[month - 1]} {year} · haz clic en una barra para ver ese mes</p>
+            </div>
+          </div>
+          {!trendLoading && trend.length > 0 && (
+            <div className="flex gap-4 text-right">
+              <div>
+                <p className="text-xs text-gray-500">Total 12 meses</p>
+                <p className="text-lg font-bold" style={{ color: '#0F1E2D' }}>{trendTotal}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Promedio mensual</p>
+                <p className="text-lg font-bold" style={{ color: '#0F1E2D' }}>{trendAvg.toFixed(1)}</p>
+              </div>
+              {trendMax && trendMax.total > 0 && (
+                <div className="hidden sm:block">
+                  <p className="text-xs text-gray-500">Mejor mes</p>
+                  <p className="text-lg font-bold" style={{ color: '#0F1E2D' }}>
+                    {MONTH_SHORT[trendMax.month - 1]} {String(trendMax.year).slice(2)} <span className="text-sm font-medium text-gray-500">({trendMax.total})</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {trendLoading ? (
+          <div className="h-64 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#4BA5C3' }} />
+          </div>
+        ) : (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                onClick={(e: any) => {
+                  const p = e?.activePayload?.[0]?.payload;
+                  if (p) { setMonth(p.month); setYear(p.year); }
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(75,165,195,0.08)' }}
+                  formatter={(value: number, name: string) => [value, name]}
+                  labelFormatter={(_l: string, payload: any[]) => {
+                    const p = payload?.[0]?.payload;
+                    return p ? `${MONTH_NAMES[p.month - 1]} ${p.year} · ${p.total} nuevos` : '';
+                  }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 12 }}
+                />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="con_visitador" name="Con visitador" stackId="a" fill="#0F1E2D" cursor="pointer">
+                  {chartData.map((d, i) => <Cell key={i} fillOpacity={d.selected ? 1 : 0.55} />)}
+                </Bar>
+                <Bar dataKey="sin_visitador" name="Sin visitador" stackId="a" fill="#4BA5C3" radius={[4, 4, 0, 0]} cursor="pointer">
+                  {chartData.map((d, i) => <Cell key={i} fillOpacity={d.selected ? 1 : 0.55} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
 
       {/* Table */}
       {loading ? (
@@ -387,6 +595,88 @@ export default function NewDoctors() {
               <span>{withoutRep.length} médico(s) nuevo(s) sin visitador asignado — oportunidad de gestión</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExport && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Descargar médicos nuevos</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Elige el período a exportar</p>
+              </div>
+              <button onClick={() => setShowExport(false)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {([
+                  ['month', `${MONTH_SHORT[month - 1]} ${year}`],
+                  ['3m', 'Últimos 3 meses'],
+                  ['6m', 'Últimos 6 meses'],
+                  ['12m', 'Últimos 12 meses'],
+                  ['ytd', `Año ${year}`],
+                  ['custom', 'Personalizado'],
+                ] as [ExportPreset, string][]).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => applyPreset(key)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                      exportPreset === key ? 'text-white border-transparent' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                    style={exportPreset === key ? { backgroundColor: '#0F1E2D' } : undefined}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+                  <input
+                    type="month"
+                    max={currentYM}
+                    value={exportFrom}
+                    onChange={e => { setExportFrom(e.target.value); setExportPreset('custom'); setExportError(''); }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+                  <input
+                    type="month"
+                    max={currentYM}
+                    value={exportTo}
+                    onChange={e => { setExportTo(e.target.value); setExportPreset('custom'); setExportError(''); }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              </div>
+              {exportFrom && exportTo && exportFrom <= exportTo && (
+                <p className="text-xs text-gray-500">
+                  Período: <span className="font-semibold text-gray-700">{periodLabel(exportFrom, exportTo)}</span>.
+                  El archivo incluye el detalle por médico y una hoja de resumen mensual.
+                </p>
+              )}
+              {exportError && <p className="text-sm text-red-500">{exportError}</p>}
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-6">
+              <button onClick={() => setShowExport(false)} className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button
+                onClick={downloadExcel}
+                disabled={exporting}
+                className="px-4 py-2 text-sm rounded-lg text-white font-semibold flex items-center gap-2 disabled:opacity-50 bg-green-600 hover:bg-green-700"
+              >
+                <Download size={15} />
+                {exporting ? 'Generando…' : 'Descargar Excel'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

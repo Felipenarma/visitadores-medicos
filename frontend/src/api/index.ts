@@ -134,6 +134,14 @@ export const dashboardApi = {
     api.get('/dashboard/doctor-ranking', { params: { month, year, ...(rep_id ? { rep_id } : {}) } }).then(r => r.data),
   getNewDoctors: (month: number, year: number) =>
     api.get('/dashboard/new-doctors', { params: { month, year } }).then(r => r.data),
+  getNewDoctorsTrend: (endMonth: number, endYear: number, months = 12) =>
+    api.get<{ year: number; month: number; total: number; con_visitador: number; sin_visitador: number }[]>(
+      '/dashboard/new-doctors-trend', { params: { end_month: endMonth, end_year: endYear, months } }
+    ).then(r => r.data),
+  getNewDoctorsRange: (startMonth: number, startYear: number, endMonth: number, endYear: number) =>
+    api.get('/dashboard/new-doctors-range', {
+      params: { start_month: startMonth, start_year: startYear, end_month: endMonth, end_year: endYear }
+    }).then(r => r.data),
   getRepCommissions: (month: number, year: number) =>
     api.get('/dashboard/rep-commissions', { params: { month, year } }).then(r => r.data),
   getCommissionsComparison: (month?: number, year?: number) => api.get<{

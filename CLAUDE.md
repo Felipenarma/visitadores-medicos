@@ -155,6 +155,8 @@ Se ejecutan automáticamente al arrancar. Agregan columnas si no existen:
 | `GET` | `/api/dashboard/rep/{id}/detail` | Detalle semana + mes de un rep |
 | `GET` | `/api/dashboard/doctor-ranking?month=&year=` | Ranking médicos por unidades vendidas |
 | `GET` | `/api/dashboard/new-doctors?month=&year=` | Médicos que prescriben por primera vez |
+| `GET` | `/api/dashboard/new-doctors-trend?end_month=&end_year=&months=12` | Cantidad de médicos nuevos por mes (con/sin visitador), últimos N meses |
+| `GET` | `/api/dashboard/new-doctors-range?start_month=&start_year=&end_month=&end_year=` | Médicos nuevos entre dos meses (inclusive) — usado por el export Excel |
 | `GET` | `/api/dashboard/sales-by-doctor?month=&year=&top=` | Mes actual vs anterior por médico |
 | `GET` | `/api/dashboard/rep-commissions?month=&year=` | Comisiones por rep |
 

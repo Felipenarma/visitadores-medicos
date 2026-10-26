@@ -347,96 +347,180 @@ def get_doctor_ranking(
     return result
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Médicos nuevos — lógica compartida (tabla mensual, tendencia y export por rango)
+# Un médico es "nuevo" en el período si su PRIMERA venta histórica cae dentro de él.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _first_sale_maps(db: Session):
+    """Devuelve (primera venta por doctor_id, primera venta por RUT sin doctor_id, ruts con ficha)."""
+    first_by_doc = {
+        doc_id: d for doc_id, d in db.query(Sale.doctor_id, func.min(Sale.sale_date))
+        .filter(Sale.doctor_id.isnot(None), Sale.sale_date.isnot(None))
+        .group_by(Sale.doctor_id).all() if d
+    }
+    first_by_rut = {
+        rut: d for rut, d in db.query(Sale.rut_doctor, func.min(Sale.sale_date))
+        .filter(Sale.rut_doctor.isnot(None), Sale.rut_doctor != "", Sale.sale_date.isnot(None))
+        .group_by(Sale.rut_doctor).all() if d
+    }
+    # RUTs que ya están vinculados a una ficha de médico (se cuentan vía doctor_id)
+    ruts_with_doc = {
+        r for (r,) in db.query(Sale.rut_doctor).filter(
+            Sale.doctor_id.isnot(None), Sale.rut_doctor.isnot(None)
+        ).distinct().all()
+    }
+    return first_by_doc, first_by_rut, ruts_with_doc
+
+
+def _new_doctor_keys(db: Session, start: datetime, end: datetime):
+    """Claves de médicos cuya primera venta cae en [start, end]."""
+    first_by_doc, first_by_rut, ruts_with_doc = _first_sale_maps(db)
+    inactive = {d.id for d in db.query(Doctor.id).filter(Doctor.is_active == False).all()}  # noqa: E712
+    doc_keys = {
+        doc_id: d for doc_id, d in first_by_doc.items()
+        if start <= d <= end and doc_id not in inactive
+    }
+    rut_keys = {
+        rut: d for rut, d in first_by_rut.items()
+        if start <= d <= end and rut not in ruts_with_doc
+    }
+    return doc_keys, rut_keys
+
+
+def _build_new_doctors(db: Session, start: datetime, end: datetime):
+    """Lista detallada de médicos nuevos en [start, end] (ventas del período agregadas)."""
+    doc_keys, rut_keys = _new_doctor_keys(db, start, end)
+    if not doc_keys and not rut_keys:
+        return []
+
+    period_sales = db.query(Sale).filter(Sale.sale_date >= start, Sale.sale_date <= end).all()
+    all_doctors = {d.id: d for d in db.query(Doctor).all()}
+    all_reps = {r.id: r for r in db.query(MedicalRep).all()}
+    all_blines = {bl.id: bl for bl in db.query(BusinessLine).all()}
+
+    grouped: dict = {}
+    for s in period_sales:
+        if s.doctor_id and s.doctor_id in doc_keys:
+            key = ("d", s.doctor_id)
+        elif not s.doctor_id and s.rut_doctor and s.rut_doctor in rut_keys:
+            key = ("r", s.rut_doctor)
+        else:
+            continue
+        grouped.setdefault(key, []).append(s)
+
+    result = []
+    for (kind, kval), doc_sales in grouped.items():
+        doctor = all_doctors.get(kval) if kind == "d" else None
+        first = doc_keys[kval] if kind == "d" else rut_keys[kval]
+        rep = all_reps.get(doctor.rep_id) if doctor and doctor.rep_id else None
+        bl = all_blines.get(doctor.business_line_id) if doctor and doctor.business_line_id else None
+        raw_name = next((x.doctor_name_raw for x in doc_sales if x.doctor_name_raw), None)
+        raw_rut = next((x.rut_doctor for x in doc_sales if x.rut_doctor), None)
+        result.append({
+            "doctor_id": doctor.id if doctor else None,
+            "rut_doctor": (doctor.rut if doctor and doctor.rut else None) or raw_rut or "",
+            "doctor_name": doctor.name if doctor else (raw_name or "Sin nombre"),
+            "specialty": doctor.specialty if doctor else None,
+            "email": doctor.email if doctor else None,
+            "phone": doctor.phone if doctor else None,
+            "primera_venta": first.isoformat() if first else None,
+            "rep_name": rep.name if rep else None,
+            "rep_id": rep.id if rep else None,
+            "productos": sorted(set(x.product for x in doc_sales if x.product)),
+            "categorias": sorted(set(x.categoria for x in doc_sales if x.categoria)),
+            "business_line_id": doctor.business_line_id if doctor else None,
+            "business_line_name": bl.name if bl else None,
+            "total_amount": sum(safe_float(x.amount) for x in doc_sales),
+            "sales_count": len(doc_sales),
+        })
+
+    result.sort(key=lambda x: x["primera_venta"] or "")
+    return result
+
+
 @router.get("/new-doctors")
 def get_new_doctors(
     month: int = Query(default=None),
     year: int = Query(default=None),
     db: Session = Depends(get_db)
 ):
-    """Médicos que prescriben por primera vez en el período indicado."""
+    """Médicos que prescriben por primera vez en el mes indicado."""
+    from calendar import monthrange
     now = datetime.utcnow()
     month = month or now.month
     year = year or now.year
-
-    from calendar import monthrange
     _, last_day = monthrange(year, month)
-    period_start = datetime(year, month, 1)
-    period_end = datetime(year, month, last_day, 23, 59, 59)
+    return _build_new_doctors(db, datetime(year, month, 1), datetime(year, month, last_day, 23, 59, 59))
 
-    # Ventas del período
-    period_sales = db.query(Sale).filter(
-        Sale.sale_date >= period_start,
-        Sale.sale_date <= period_end
-    ).all()
 
-    # Pre-cargar doctors, reps y líneas de negocio en memoria
-    all_doctors = {d.id: d for d in db.query(Doctor).all()}
-    all_reps = {r.id: r for r in db.query(MedicalRep).all()}
-    all_blines = {bl.id: bl for bl in db.query(BusinessLine).all()}
+@router.get("/new-doctors-range")
+def get_new_doctors_range(
+    start_month: int = Query(...),
+    start_year: int = Query(...),
+    end_month: int = Query(...),
+    end_year: int = Query(...),
+    db: Session = Depends(get_db)
+):
+    """Médicos nuevos (primera prescripción) entre dos meses, ambos inclusive."""
+    from calendar import monthrange
+    start = datetime(start_year, start_month, 1)
+    _, last_day = monthrange(end_year, end_month)
+    end = datetime(end_year, end_month, last_day, 23, 59, 59)
+    if end < start:
+        start, end = datetime(end_year, end_month, 1), datetime(start_year, start_month, monthrange(start_year, start_month)[1], 23, 59, 59)
+    return _build_new_doctors(db, start, end)
 
-    result = []
-    seen_keys = set()
 
-    for s in period_sales:
-        # Clave principal: doctor_id, luego rut_doctor
-        key = s.doctor_id or s.rut_doctor or s.doctor_name_raw
-        if not key or key in seen_keys:
-            continue
-        seen_keys.add(key)
+@router.get("/new-doctors-trend")
+def get_new_doctors_trend(
+    months: int = Query(default=12, ge=1, le=36),
+    end_month: int = Query(default=None),
+    end_year: int = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """Cantidad de médicos nuevos por mes en los últimos N meses (terminando en end_month/end_year)."""
+    from calendar import monthrange
+    now = datetime.utcnow()
+    end_month = end_month or now.month
+    end_year = end_year or now.year
 
-        # Verificar si tuvo ventas antes del período (usando doctor_id como principal)
-        if s.doctor_id:
-            prior = db.query(Sale).filter(
-                Sale.doctor_id == s.doctor_id,
-                Sale.sale_date < period_start
-            ).first()
-        elif s.rut_doctor:
-            prior = db.query(Sale).filter(
-                Sale.rut_doctor == s.rut_doctor,
-                Sale.sale_date < period_start
-            ).first()
-        else:
-            continue
+    # Lista de (año, mes) desde el más antiguo al más reciente
+    periods = []
+    y, m = end_year, end_month
+    for _ in range(months):
+        periods.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    periods.reverse()
 
-        if prior:
-            continue  # No es nuevo
+    start = datetime(periods[0][0], periods[0][1], 1)
+    _, last_day = monthrange(end_year, end_month)
+    end = datetime(end_year, end_month, last_day, 23, 59, 59)
 
-        doctor = all_doctors.get(s.doctor_id) if s.doctor_id else None
-        # Si el médico fue eliminado (is_active=False), no mostrarlo
-        if doctor and not doctor.is_active:
-            continue
-        rep = all_reps.get(doctor.rep_id) if doctor and doctor.rep_id else None
+    doc_keys, rut_keys = _new_doctor_keys(db, start, end)
+    doc_rep = {d.id: d.rep_id for d in db.query(Doctor.id, Doctor.rep_id).filter(Doctor.id.in_(list(doc_keys.keys()))).all()} if doc_keys else {}
 
-        # Todas las ventas de este médico en el período
-        if s.doctor_id:
-            doc_sales = [x for x in period_sales if x.doctor_id == s.doctor_id]
-        else:
-            doc_sales = [x for x in period_sales if x.rut_doctor == s.rut_doctor]
+    buckets = {p: {"con_visitador": 0, "sin_visitador": 0} for p in periods}
+    for doc_id, d in doc_keys.items():
+        b = buckets.get((d.year, d.month))
+        if b is not None:
+            b["con_visitador" if doc_rep.get(doc_id) else "sin_visitador"] += 1
+    for _rut, d in rut_keys.items():
+        b = buckets.get((d.year, d.month))
+        if b is not None:
+            b["sin_visitador"] += 1
 
-        first_sale_date = min((x.sale_date for x in doc_sales if x.sale_date), default=None)
-        productos = list(set(x.product for x in doc_sales if x.product))
-        categorias = list(set(x.categoria for x in doc_sales if x.categoria))
-        total = sum(safe_float(x.amount) for x in doc_sales)
-
-        bl = all_blines.get(doctor.business_line_id) if doctor and doctor.business_line_id else None
-        result.append({
-            "doctor_id": doctor.id if doctor else None,
-            "rut_doctor": (doctor.rut if doctor and doctor.rut else None) or s.rut_doctor or "",
-            "doctor_name": doctor.name if doctor else (s.doctor_name_raw or "Sin nombre"),
-            "specialty": doctor.specialty if doctor else None,
-            "primera_venta": first_sale_date.isoformat() if first_sale_date else None,
-            "rep_name": rep.name if rep else None,
-            "rep_id": rep.id if rep else None,
-            "productos": productos,
-            "categorias": categorias,
-            "business_line_id": doctor.business_line_id if doctor else None,
-            "business_line_name": bl.name if bl else None,
-            "total_amount": total,
-            "sales_count": len(doc_sales),
-        })
-
-    result.sort(key=lambda x: x["primera_venta"] or "")
-    return result
+    return [
+        {
+            "year": y, "month": m,
+            "total": buckets[(y, m)]["con_visitador"] + buckets[(y, m)]["sin_visitador"],
+            "con_visitador": buckets[(y, m)]["con_visitador"],
+            "sin_visitador": buckets[(y, m)]["sin_visitador"],
+        }
+        for (y, m) in periods
+    ]
 
 
 @router.get("/sales-by-doctor")
