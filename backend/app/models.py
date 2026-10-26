@@ -264,3 +264,18 @@ class DoctorCompletenessSnapshot(Base):
     with_specialty = Column(Integer, nullable=False, default=0)
     complete = Column(Integer, nullable=False, default=0)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class DataBackup(Base):
+    """Respaldo semanal (Excel) de médicos, ventas y visitas. Sin datos de pacientes."""
+    __tablename__ = "data_backups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+    filename = Column(String(200), nullable=False)
+    size_bytes = Column(Integer, default=0)
+    data = Column(LargeBinary, nullable=False)
+    trigger = Column(String(20), default="manual")   # semanal | manual
+    summary = Column(Text, nullable=True)            # JSON con conteos
+    emailed = Column(Boolean, default=False)
+    email_error = Column(Text, nullable=True)

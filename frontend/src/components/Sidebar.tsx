@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Briefcase, Upload, TrendingUp,
   Calendar, Bot, Activity, LogOut, Stethoscope, BookOpen, Menu, X, QrCode,
-  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search, MapPin, Radar, Download
+  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search, MapPin, Radar, Download, DatabaseBackup
 } from 'lucide-react';
 import { useInstallPrompt } from '../utils/pwaInstall';
 import InstallAppModal from './InstallAppModal';
@@ -35,6 +35,7 @@ const adminNav: NavItem[] = [
   { to: '/admin/agent', icon: <Bot size={20} />, label: 'Agente IA' },
   { to: '/admin/knowledge', icon: <BookOpen size={20} />, label: 'Base de Conocimiento' },
   { to: '/admin/images', icon: <QrCode size={20} />, label: 'Imagenes y QR' },
+  { to: '/admin/backups', icon: <DatabaseBackup size={20} />, label: 'Respaldos' },
 ];
 
 const repNav: NavItem[] = [

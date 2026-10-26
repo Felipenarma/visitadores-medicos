@@ -7,7 +7,7 @@ import random
 
 from .database import engine, get_db, Base
 from .models import BusinessLine, MedicalRep, Doctor, Visit, Sale
-from .routers import business_lines, reps, doctors, visits, sales, cardex, dashboard, ai_agent, images, mike, knowledge, sessions, export
+from .routers import business_lines, reps, doctors, visits, sales, cardex, dashboard, ai_agent, images, mike, knowledge, sessions, export, backups
 
 # Create tables (checkfirst=True avoids errors if tables already exist)
 Base.metadata.create_all(bind=engine, checkfirst=True)
@@ -99,6 +99,7 @@ app.include_router(mike.router)
 app.include_router(knowledge.router)
 app.include_router(sessions.router)
 app.include_router(export.router)
+app.include_router(backups.router)
 
 
 def seed_business_lines(db: Session):
@@ -160,6 +161,12 @@ try:
     scheduler.add_job(
         run_weekly_report_job,
         CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=chile_tz)
+    )
+    # Respaldo semanal de médicos + ventas (lunes 6:00 hora Chile)
+    from .backup import run_weekly_backup_job
+    scheduler.add_job(
+        run_weekly_backup_job,
+        CronTrigger(day_of_week="mon", hour=6, minute=0, timezone=chile_tz)
     )
     # Visitas automáticas a prescriptores con venta baja vs mes anterior (7:00 hora Chile)
     from .low_sales import run_low_sales_job

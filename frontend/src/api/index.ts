@@ -309,3 +309,21 @@ export const seedApi = {
 };
 
 export default api;
+
+// Respaldos semanales
+export interface BackupItem {
+  id: number;
+  filename: string;
+  size_bytes: number;
+  created_at: string | null;
+  trigger: 'semanal' | 'manual';
+  emailed: boolean;
+  email_error: string | null;
+  summary: { medicos?: number; ventas?: number; visitas?: number; visitadores?: number };
+}
+
+export const backupsApi = {
+  list: () => api.get<BackupItem[]>('/backups').then(r => r.data),
+  create: () => api.post<BackupItem>('/backups', null, { timeout: 300000 }).then(r => r.data),
+  download: (id: number) => api.get(`/backups/${id}/download`, { responseType: 'blob', timeout: 300000 }).then(r => r.data as Blob),
+};

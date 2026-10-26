@@ -297,6 +297,14 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ---
 
+## Respaldos semanales (`backup.py`, `/api/backups`)
+
+- Cada lunes 6:00 Chile (APScheduler) se genera un Excel: hojas Medicos (todos los campos + totales de venta), Ventas (historial completo), Ventas_por_medico_mes, Visitas, Visitadores, Resumen. **Sin `rut_paciente` ni `nombre_paciente`.**
+- Se guarda en la tabla `data_backups` (binario; se conservan los últimos 26) y se envía por correo con las mismas variables SMTP del reporte de Mike: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`; destinatario `BACKUP_EMAIL` (o `REPORT_EMAIL`; acepta varios separados por coma). Si el archivo supera 20 MB no se adjunta.
+- Endpoints: `GET /api/backups`, `POST /api/backups` (manual), `GET /api/backups/{id}/download`. UI: Admin → Respaldos (`pages/admin/Backups.tsx`).
+
+---
+
 ## Autenticación
 
 - Portales separados: `/admin-login` y `/visitador`
