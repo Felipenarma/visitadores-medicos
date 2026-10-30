@@ -13,7 +13,8 @@ from datetime import datetime, timedelta
 from ..database import get_db
 from ..models import Doctor, MedicalRep, Visit, Sale, BusinessLine, AgentConversationMessage, UserSession, LocationPing
 from ..schemas import DashboardStats, RepStats
-from ..constants import MAX_VISITS_PER_DAY, count_weekdays
+from ..constants import MAX_VISITS_PER_DAY, count_weekdays, to_net
+from ..sales_goals import sales_goal, net_sales_trend
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -736,44 +737,12 @@ def get_rep_monthly_trend(
 @router.get("/rep/{rep_id}/sales-trend")
 def get_rep_sales_trend(
     rep_id: int,
-    months: int = Query(default=6),
+    months: int = Query(default=6, ge=1, le=36),
     db: Session = Depends(get_db)
 ):
-    """Tendencia mensual de unidades vendidas (recetas) de un visitador en los últimos N meses."""
-    from calendar import monthrange
-
-    now = datetime.utcnow()
-    LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-
-    result = []
-    for i in range(months - 1, -1, -1):
-        m = now.month - i
-        y = now.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        _, last_day = monthrange(y, m)
-        start = datetime(y, m, 1)
-        end   = datetime(y, m, last_day, 23, 59, 59)
-
-        row = db.query(
-            func.count(Sale.id).label("units"),
-            func.coalesce(func.sum(Sale.amount), 0).label("total_amount")
-        ).join(Doctor, Sale.doctor_id == Doctor.id)\
-         .filter(
-             Doctor.rep_id == rep_id,
-             Doctor.is_active == True,
-             Sale.sale_date >= start,
-             Sale.sale_date <= end
-         ).first()
-
-        result.append({
-            "month": m, "year": y,
-            "label": LABELS[m - 1],
-            "units": row.units if row else 0,
-            "total_amount": float(row.total_amount) if row else 0.0,
-        })
-    return result
+    """Tendencia mensual de venta (bruta con IVA, neta sin IVA y unidades) de un visitador,
+    con la meta de cada mes (venta neta del mes anterior + SALES_GROWTH_TARGET)."""
+    return net_sales_trend(db, rep_id, months)
 
 
 @router.get("/rep/{rep_id}/detail")
@@ -945,6 +914,7 @@ def get_rep_detail(
 
     commissions = {
         "total_amount": round(commission_total_amount, 2),
+        "net_amount": round(to_net(commission_total_amount), 0),
         "sales_count": len(commission_sales),
         "doctors_with_sales": len(commission_doctors_with_sales_ids),
         "new_doctors_count": len(commission_new_doctors),
@@ -983,6 +953,7 @@ def get_rep_detail(
         },
         "doctor_ranking": doctor_ranking,
         "commissions": commissions,
+        "sales_goal": sales_goal(db, rep_id, query_year, query_month),
     }
 
 
@@ -1233,6 +1204,12 @@ def get_rep_commissions(
                     for v in uc_doc_map.values()
                 ],
             })
+
+    # Monto neto (sin IVA) para cada grupo y médico
+    for g in result:
+        g["net_amount"] = round(to_net(g["total_amount"]), 0)
+        for d in g.get("doctors_detail", []):
+            d["net_amount"] = round(to_net(d.get("amount", 0)), 0)
 
     return result
 

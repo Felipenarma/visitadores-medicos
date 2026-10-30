@@ -297,6 +297,17 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ---
 
+## Venta neta y meta de venta por visitador (`sales_goals.py`)
+
+- `Sale.amount` es precio al público **con IVA**. Venta neta = `amount / 1.19` (`constants.IVA_RATE`, helper `to_net`).
+- Meta mensual de venta neta = venta neta del mes anterior × (1 + `SALES_GROWTH_TARGET`=0.15). Sin ventas el mes anterior → sin meta.
+- Base de ventas = médicos del visitador incluidos inactivos (mismo criterio que comisiones).
+- Mes en curso: "esperado a la fecha" y proyección de cierre usan como corte la última venta cargada.
+- `/rep/{id}/detail` devuelve `sales_goal` y `commissions.net_amount`; `/rep/{id}/sales-trend` devuelve `net_amount` y `goal_net_amount` por mes; `/rep-commissions` agrega `net_amount` por grupo y médico.
+- UI admin RepDetail: bloque Objetivo con visitas + meta de venta neta, gráfico de venta neta 12 meses con línea de meta, comisiones muestran neto (bruto como referencia).
+
+---
+
 ## Respaldos semanales (`backup.py`, `/api/backups`)
 
 - Cada lunes 6:00 Chile (APScheduler) se genera un Excel: hojas Medicos (todos los campos + totales de venta), Ventas (historial completo), Ventas_por_medico_mes, Visitas, Visitadores, Resumen. **Sin `rut_paciente` ni `nombre_paciente`.**

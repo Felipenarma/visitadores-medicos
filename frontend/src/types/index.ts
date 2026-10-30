@@ -173,7 +173,8 @@ export interface RepEffectiveness {
 }
 
 export interface RepCommissionsSummary {
-  total_amount: number;
+  total_amount: number;   // con IVA
+  net_amount?: number;    // sin IVA
   sales_count: number;
   doctors_with_sales: number;
   new_doctors_count: number;
@@ -200,6 +201,33 @@ export interface RepDetail {
   month: RepDetailPeriod;
   doctor_ranking: RepDoctorRanking[];
   commissions?: RepCommissionsSummary;
+  sales_goal?: RepSalesGoal;
+}
+
+export interface RepSalesGoal {
+  net_amount: number;
+  gross_amount: number;
+  units: number;
+  prev_net_amount: number;
+  growth_target_pct: number;
+  goal_net_amount: number | null;
+  pct_of_goal: number | null;
+  growth_vs_prev_pct: number | null;
+  is_current_month: boolean;
+  days_elapsed: number;
+  days_in_month: number;
+  expected_to_date: number | null;
+  projection_net_amount: number | null;
+}
+
+export interface RepSalesTrendPoint {
+  month: number;
+  year: number;
+  label: string;
+  units: number;
+  total_amount: number;
+  net_amount: number;
+  goal_net_amount: number | null;
 }
 
 export interface AgentMessage {

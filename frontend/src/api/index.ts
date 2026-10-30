@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type {
   BusinessLine, MedicalRep, Doctor, Visit, Sale, SalesSummaryItem,
-  DashboardStats, TodayVisit, RepStats, RepDetail, AgentMessage, RepDataCompleteness
+  DashboardStats, TodayVisit, RepStats, RepDetail, AgentMessage, RepDataCompleteness, RepSalesTrendPoint
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -187,7 +187,7 @@ export const dashboardApi = {
       `/dashboard/rep/${rep_id}/monthly-trend`, { params: { months } }
     ).then(r => r.data),
   getRepSalesTrend: (rep_id: number, months = 6) =>
-    api.get<{ month: number; year: number; label: string; units: number; total_amount: number }[]>(
+    api.get<RepSalesTrendPoint[]>(
       `/dashboard/rep/${rep_id}/sales-trend`, { params: { months } }
     ).then(r => r.data),
   getRepDataCompleteness: (rep_id: number, days = 90) =>

@@ -7,7 +7,7 @@ import {
   Edit2, X, Building2, Hash, DollarSign, UserPlus, ClipboardCheck, Filter
 } from 'lucide-react';
 import { dashboardApi, doctorsApi, repsApi, businessLinesApi } from '../../api';
-import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine, RepDataCompleteness } from '../../types';
+import type { RepDetail, RepDetailPeriod, RepDetailVisit, RepDoctorRanking, RepEffectiveness, RepCommissionsSummary, Doctor, MedicalRep, BusinessLine, RepDataCompleteness, RepSalesGoal, RepSalesTrendPoint } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
@@ -46,6 +46,80 @@ function fmtDateRange(start: string, end: string) {
   const e = new Date(end);
   const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
   return `${s.toLocaleDateString('es-CL', opts)} – ${e.toLocaleDateString('es-CL', opts)}`;
+}
+
+function fmtMillions(n: number) {
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toLocaleString('es-CL', { maximumFractionDigits: 1 })}M`;
+  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000).toLocaleString('es-CL')}k`;
+  return `$${Math.round(n)}`;
+}
+
+function SalesGoalRow({ g, monthLabel }: { g: RepSalesGoal; monthLabel: string }) {
+  if (g.goal_net_amount === null) {
+    return (
+      <div className="pt-4 mt-4 border-t border-gray-100">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-gray-700 flex items-center gap-2">
+            <DollarSign size={15} className="text-emerald-500" /> Meta de venta neta
+          </span>
+          <span className="text-gray-500">{fmtAmount(g.net_amount)} neto</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">Sin meta: el mes anterior no tuvo ventas para calcular el +{g.growth_target_pct}%.</p>
+      </div>
+    );
+  }
+  const goal = g.goal_net_amount;
+  const pct = Math.min(100, Math.round((g.net_amount / goal) * 100));
+  const reached = g.net_amount >= goal;
+  // Ritmo: en mes en curso se compara contra lo esperado a la fecha; en meses cerrados contra la meta
+  const onTrack = g.is_current_month
+    ? (g.expected_to_date ?? 0) <= g.net_amount
+    : reached;
+  const barColor = reached ? 'bg-green-500' : onTrack ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+  const expectedPct = g.is_current_month && g.expected_to_date !== null
+    ? Math.min(100, (g.expected_to_date / goal) * 100) : null;
+
+  return (
+    <div className="pt-4 mt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+        <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <DollarSign size={15} className="text-emerald-500" />
+          Meta de venta neta {monthLabel}
+          <span className="text-xs font-normal text-gray-400">(+{g.growth_target_pct}% vs mes anterior)</span>
+        </span>
+        <span className="text-sm text-gray-500">
+          {fmtAmount(g.net_amount)} / {fmtAmount(goal)}
+          <span className={`ml-2 font-bold ${reached ? 'text-green-600' : 'text-gray-700'}`}>{Math.round((g.net_amount / goal) * 100)}%</span>
+        </span>
+      </div>
+      <div className="relative h-2.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+        {expectedPct !== null && !reached && (
+          <div className="absolute top-0 h-full w-0.5 bg-gray-500/60" style={{ left: `${expectedPct}%` }} title="Lo esperado a la fecha" />
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500">
+        <span>Mes anterior: <span className="font-medium text-gray-700">{fmtAmount(g.prev_net_amount)}</span></span>
+        {g.growth_vs_prev_pct !== null && (
+          <span>Crecimiento: <span className={`font-medium ${g.growth_vs_prev_pct >= g.growth_target_pct ? 'text-green-600' : g.growth_vs_prev_pct >= 0 ? 'text-gray-700' : 'text-red-500'}`}>
+            {g.growth_vs_prev_pct > 0 ? '+' : ''}{g.growth_vs_prev_pct}%
+          </span></span>
+        )}
+        {g.is_current_month && !reached && (
+          <>
+            {g.expected_to_date !== null && (
+              <span>Esperado al día {g.days_elapsed}: <span className={`font-medium ${onTrack ? 'text-green-600' : 'text-red-500'}`}>{fmtAmount(g.expected_to_date)}</span></span>
+            )}
+            {g.projection_net_amount !== null && (
+              <span>Proyección cierre: <span className={`font-medium ${g.projection_net_amount >= goal ? 'text-green-600' : 'text-amber-600'}`}>{fmtAmount(g.projection_net_amount)}</span></span>
+            )}
+            <span>Falta: <span className="font-medium text-gray-700">{fmtAmount(goal - g.net_amount)}</span></span>
+          </>
+        )}
+        {reached && <span className="text-green-600 font-medium">¡Meta cumplida!</span>}
+      </div>
+    </div>
+  );
 }
 
 function fmtAmount(n: number) {
@@ -207,8 +281,9 @@ function CommissionsSection({ commissions, monthLabel }: { commissions?: RepComm
 
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 bg-gray-50">
         <div className="flex flex-col items-center justify-center py-4 px-2">
-          <span className="text-xl font-bold text-emerald-700">{fmtAmount(commissions.total_amount)}</span>
-          <span className="text-xs text-gray-500 mt-0.5 text-center">Monto total</span>
+          <span className="text-xl font-bold text-emerald-700">{fmtAmount(commissions.net_amount ?? commissions.total_amount / 1.19)}</span>
+          <span className="text-xs text-gray-500 mt-0.5 text-center">Venta neta (sin IVA)</span>
+          <span className="text-[11px] text-gray-400 mt-0.5">Bruto c/IVA: {fmtAmount(commissions.total_amount)}</span>
         </div>
         <div className="flex flex-col items-center justify-center py-4 px-2">
           <span className="text-xl font-bold text-gray-800">{commissions.sales_count}</span>
@@ -912,7 +987,7 @@ export default function RepDetail() {
 
   // Monthly trend state
   const [monthlyTrend, setMonthlyTrend] = useState<{ label: string; completed: number; missed: number; total: number }[]>([]);
-  const [salesTrend, setSalesTrend] = useState<{ label: string; units: number; total_amount: number }[]>([]);
+  const [salesTrend, setSalesTrend] = useState<RepSalesTrendPoint[]>([]);
   const [loadingTrend, setLoadingTrend] = useState(false);
 
   // Completitud de datos de médicos
@@ -1050,7 +1125,7 @@ export default function RepDetail() {
     setLoadingTrend(true);
     Promise.all([
       dashboardApi.getRepMonthlyTrend(Number(id), 12),
-      (dashboardApi as any).getRepSalesTrend(Number(id), 12),
+      dashboardApi.getRepSalesTrend(Number(id), 12),
     ])
       .then(([visits, sales]) => { setMonthlyTrend(visits); setSalesTrend(sales); })
       .catch(() => {})
@@ -1143,12 +1218,13 @@ export default function RepDetail() {
         const pct = targetVisits > 0 ? Math.min(100, Math.round((completadas / targetVisits) * 100)) : 0;
         const barColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-blue-500' : 'bg-orange-400';
         return (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4 flex items-center gap-6">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4">
+          <div className="flex items-center gap-6">
             <div className="flex-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                   <TrendingUp size={15} className="text-blue-500" />
-                  Objetivo {monthLabel}
+                  Objetivo de visitas {monthLabel}
                 </span>
                 <span className="text-sm text-gray-500">
                   {completadas} / {targetVisits > 0 ? targetVisits : '—'} visitas completadas
@@ -1190,6 +1266,8 @@ export default function RepDetail() {
               )}
             </div>
           </div>
+          {data.sales_goal && <SalesGoalRow g={data.sales_goal} monthLabel={monthLabel} />}
+          </div>
         );
       })()}
 
@@ -1201,13 +1279,13 @@ export default function RepDetail() {
         onExportIncomplete={handleExportIncomplete}
       />
 
-      {/* Tendencia mensual — unidades vendidas (gráfico principal) */}
+      {/* Tendencia mensual — venta neta en pesos (gráfico principal) */}
       {(salesTrend.length > 0 || loadingTrend) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <TrendingUp size={16} className="text-emerald-500" />
-              Unidades Vendidas — Últimos 6 meses
+              Venta neta (sin IVA) — Últimos 12 meses
             </h2>
           </div>
           {loadingTrend ? (
@@ -1217,18 +1295,23 @@ export default function RepDetail() {
           ) : (
             <div className="p-4">
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={salesTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <LineChart data={salesTrend} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip formatter={(value: number) => [value.toLocaleString('es-CL'), 'Unidades']} />
-                  <Line type="monotone" dataKey="units" name="Unidades" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => fmtMillions(v)} width={56} />
+                  <Tooltip formatter={(value: number, name: string) => [fmtAmount(value), name]} />
+                  <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="net_amount" name="Venta neta" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="goal_net_amount" name={`Meta (+15% mes anterior)`} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
               {salesTrend.length > 0 && (
                 <div className="mt-2 flex gap-6 px-2 text-xs text-gray-400">
-                  <span>Total período: <span className="font-semibold text-gray-700">{salesTrend.reduce((s, r) => s + r.units, 0).toLocaleString('es-CL')} uds.</span></span>
-                  <span>Venta: <span className="font-semibold text-gray-700">${salesTrend.reduce((s, r) => s + r.total_amount, 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span></span>
+                  <span>Venta neta 12 meses: <span className="font-semibold text-gray-700">{fmtAmount(salesTrend.reduce((s, r) => s + r.net_amount, 0))}</span></span>
+                  <span>Unidades: <span className="font-semibold text-gray-700">{salesTrend.reduce((s, r) => s + r.units, 0).toLocaleString('es-CL')}</span></span>
+                  <span>Meses con meta cumplida: <span className="font-semibold text-gray-700">
+                    {salesTrend.filter(r => r.goal_net_amount !== null && r.net_amount >= (r.goal_net_amount ?? 0)).length} de {salesTrend.filter(r => r.goal_net_amount !== null).length}
+                  </span></span>
                 </div>
               )}
             </div>
