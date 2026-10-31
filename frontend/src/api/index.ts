@@ -37,6 +37,7 @@ export const doctorsApi = {
   getAll: (params?: {
     rep_id?: number;
     business_line_id?: number;
+    no_business_line?: boolean;
     specialty?: string;
     is_active?: boolean;
     has_sales?: boolean;
@@ -51,6 +52,7 @@ export const doctorsApi = {
   exportExcel: (params?: {
     rep_id?: number;
     business_line_id?: number;
+    no_business_line?: boolean;
     specialty?: string;
     is_active?: boolean;
     search?: string;

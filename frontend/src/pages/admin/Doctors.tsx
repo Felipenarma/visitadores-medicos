@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Stethoscope, Search, UserCheck, BarChart2, UserPlus, ChevronLeft, ChevronRight, GitMerge, AlertTriangle, Download, TrendingUp, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Modal from '../../components/Modal';
+import BusinessLineQuickAssign from '../../components/BusinessLineQuickAssign';
 import { doctorsApi, repsApi, businessLinesApi, dashboardApi, visitsApi } from '../../api';
 import type { Doctor, MedicalRep, BusinessLine, Visit } from '../../types';
 import { format } from 'date-fns';
@@ -105,7 +106,8 @@ export default function Doctors() {
     try {
       const params: any = { is_active: true };
       if (filters.rep_id && filters.rep_id !== 'none') params.rep_id = parseInt(filters.rep_id);
-      if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
+      if (filters.business_line_id === 'none') params.no_business_line = true;
+      else if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
       if (filters.search) params.search = filters.search;
       if (filters.sales_month) params.sales_month = parseInt(filters.sales_month);
       if (filters.sales_year) params.sales_year = parseInt(filters.sales_year);
@@ -246,7 +248,8 @@ export default function Doctors() {
     try {
       const params: any = { is_active: true };
       if (filters.rep_id && filters.rep_id !== 'none') params.rep_id = parseInt(filters.rep_id);
-      if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
+      if (filters.business_line_id === 'none') params.no_business_line = true;
+      else if (filters.business_line_id) params.business_line_id = parseInt(filters.business_line_id);
       if (filters.search) params.search = filters.search;
       if (filters.has_sales !== '') params.has_sales = filters.has_sales === 'true';
       const blob = await doctorsApi.exportExcel(params);
@@ -324,6 +327,7 @@ export default function Doctors() {
               </select>
               <select className="input" value={filters.business_line_id} onChange={e => setFilters({ ...filters, business_line_id: e.target.value })}>
                 <option value="">Todas las líneas</option>
+                <option value="none">⚠️ Sin línea asignada</option>
                 {businessLines.map(bl => <option key={bl.id} value={bl.id}>{bl.name}</option>)}
               </select>
             </div>
@@ -498,7 +502,13 @@ export default function Doctors() {
                         <td className="py-3 px-4">
                           {doc.business_line_name ? (
                             <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium">{doc.business_line_name}</span>
-                          ) : '—'}
+                          ) : (
+                            <BusinessLineQuickAssign
+                              doctor={doc}
+                              businessLines={businessLines}
+                              onSaved={updated => setDoctors(prev => prev.map(d => d.id === updated.id ? { ...d, ...updated } : d))}
+                            />
+                          )}
                         </td>
                         <td className="py-3 px-4 text-gray-600">{doc.rep_name || <span className="text-red-400 text-xs">Sin asignar</span>}</td>
                         <td className="py-3 px-4 text-gray-600 text-center">{doc.visit_frequency || 30}</td>

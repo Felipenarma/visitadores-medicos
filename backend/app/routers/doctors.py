@@ -125,6 +125,7 @@ def _enrich_batch(doctors: list, db: Session, sales_month: Optional[int] = None,
 def get_doctors(
     rep_id: Optional[int] = Query(None),
     business_line_id: Optional[int] = Query(None),
+    no_business_line: Optional[bool] = Query(None, description="true = solo médicos sin línea de negocio"),
     specialty: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     has_sales: Optional[bool] = Query(None),
@@ -141,6 +142,8 @@ def get_doctors(
         query = query.filter(Doctor.rep_id == rep_id)
     if business_line_id is not None:
         query = query.filter(Doctor.business_line_id == business_line_id)
+    if no_business_line:
+        query = query.filter(Doctor.business_line_id.is_(None))
     if specialty is not None:
         query = query.filter(Doctor.specialty.ilike(f"%{specialty}%"))
     if is_active is not None:
@@ -178,6 +181,7 @@ def get_doctors(
 def export_doctors(
     rep_id: Optional[int] = Query(None),
     business_line_id: Optional[int] = Query(None),
+    no_business_line: Optional[bool] = Query(None, description="true = solo médicos sin línea de negocio"),
     specialty: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     has_sales: Optional[bool] = Query(None),
@@ -193,6 +197,8 @@ def export_doctors(
         query = query.filter(Doctor.rep_id == rep_id)
     if business_line_id is not None:
         query = query.filter(Doctor.business_line_id == business_line_id)
+    if no_business_line:
+        query = query.filter(Doctor.business_line_id.is_(None))
     if specialty is not None:
         query = query.filter(Doctor.specialty.ilike(f"%{specialty}%"))
     if is_active is not None:

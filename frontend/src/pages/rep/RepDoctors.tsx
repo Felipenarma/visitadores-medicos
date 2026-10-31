@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Stethoscope, Phone, Mail, MapPin, X, Building2, CheckCircle, Calendar, Edit2, BarChart2, ChevronLeft, ChevronRight, Award, ClipboardCheck, AlertCircle, Trophy } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { doctorMissingFields, FIELD_LABELS, missingLabel } from '../../utils/doctorInfo';
+import BusinessLineQuickAssign from '../../components/BusinessLineQuickAssign';
 import { doctorsApi, businessLinesApi, visitsApi, dashboardApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
@@ -209,7 +210,7 @@ export default function RepDoctors() {
       (!search || d.name.toLowerCase().includes(search.toLowerCase()) ||
       (d.medical_center || '').toLowerCase().includes(search.toLowerCase()) ||
       (d.rut || '').includes(search)) &&
-      (!filterBL || String(d.business_line_id) === filterBL) &&
+      (!filterBL || (filterBL === 'none' ? !d.business_line_id : String(d.business_line_id) === filterBL)) &&
       (filterSales === 'all' || (filterSales === 'con' ? d.has_sales : !d.has_sales))
     )
     .sort((a, b) => {
@@ -389,6 +390,7 @@ export default function RepDoctors() {
           className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">Todas las líneas</option>
+          <option value="none">⚠️ Sin línea ({doctors.filter(d => !d.business_line_id).length})</option>
           {businessLines.map(bl => (
             <option key={bl.id} value={String(bl.id)}>{bl.name}</option>
           ))}
@@ -497,8 +499,14 @@ export default function RepDoctors() {
               </div>
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
                 <div className="flex flex-wrap gap-1 justify-end">
-                  {doc.business_line_name && (
+                  {doc.business_line_name ? (
                     <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">{doc.business_line_name}</span>
+                  ) : (
+                    <BusinessLineQuickAssign
+                      doctor={doc}
+                      businessLines={businessLines}
+                      onSaved={updated => setDoctors(prev => prev.map(d => d.id === updated.id ? { ...d, ...updated } : d))}
+                    />
                   )}
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${doc.has_sales ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
                     {doc.has_sales ? '✓ Con venta' : 'Sin venta'}
