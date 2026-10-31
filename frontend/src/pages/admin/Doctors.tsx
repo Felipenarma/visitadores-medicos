@@ -357,6 +357,27 @@ export default function Doctors() {
               {/* Separador */}
               <div className="h-4 w-px bg-gray-200" />
 
+              {/* Filtro sin línea de negocio */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 font-medium">Línea:</span>
+                {([['', 'Todas'], ['none', 'Sin línea']] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setFilters(f => ({ ...f, business_line_id: val }))}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                      (val === '' ? filters.business_line_id !== 'none' : filters.business_line_id === 'none')
+                        ? val === 'none' ? 'bg-amber-500 text-white border-amber-500' : 'bg-gray-700 text-white border-gray-700'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Separador */}
+              <div className="h-4 w-px bg-gray-200" />
+
               {/* Filtro período */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500 font-medium">Período:</span>

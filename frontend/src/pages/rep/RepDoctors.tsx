@@ -406,6 +406,16 @@ export default function RepDoctors() {
             </button>
           ))}
         </div>
+        {doctors.some(d => !d.business_line_id) && (
+          <button
+            onClick={() => setFilterBL(v => v === 'none' ? '' : 'none')}
+            className={`text-sm px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+              filterBL === 'none' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
+            }`}
+          >
+            ⚠️ Sin línea ({doctors.filter(d => !d.business_line_id).length})
+          </button>
+        )}
         {incompleteCount > 0 && (
           <button
             onClick={() => setOnlyIncomplete(v => !v)}
