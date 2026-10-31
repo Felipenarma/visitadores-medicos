@@ -1710,3 +1710,21 @@ def get_rep_low_sales(rep_id: int, db: Session = Depends(get_db)):
     for d in r["doctors"]:
         d.pop("doctor", None)
     return r
+
+
+@router.get("/recetas-por-medico/export")
+def export_recetas_por_medico(
+    desde: str = Query(default=None, pattern=r"^\d{4}-\d{2}$", description="YYYY-MM (opcional)"),
+    hasta: str = Query(default=None, pattern=r"^\d{4}-\d{2}$", description="YYYY-MM (opcional)"),
+    db: Session = Depends(get_db),
+):
+    """Excel 'Recetas por médico según visitador'. Sin desde/hasta = histórico completo."""
+    import io
+    from fastapi.responses import StreamingResponse
+    from ..recetas_export import build_recetas_xlsx
+    data, filename = build_recetas_xlsx(db, desde, hasta)
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

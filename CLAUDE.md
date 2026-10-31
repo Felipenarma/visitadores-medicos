@@ -308,6 +308,14 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ---
 
+## Excel "Recetas por médico según visitador" (`recetas_export.py`)
+
+- `GET /api/dashboard/recetas-por-medico/export?desde=YYYY-MM&hasta=YYYY-MM` (ambos opcionales; sin ellos = histórico). Botón "Recetas por médico" en Admin → Comisiones (`components/RecetasExportButton.tsx`).
+- Hojas: Resumen_grupo, Resumen_visitador, Detalle_medicos (médicos activos, visitador actual, recetas, venta neta y con IVA), Notas.
+- Grupos: "Cuentas grandes" = médicos del visitador en `CUENTAS_GRANDES_REPS` ({"felipe"}); "Visitador en terreno" = otros visitadores; "Sin visitador".
+
+---
+
 ## Respaldos semanales (`backup.py`, `/api/backups`)
 
 - Cada lunes 6:00 Chile (APScheduler) se genera un Excel: hojas Medicos (todos los campos + totales de venta), Ventas (historial completo), Ventas_por_medico_mes, Visitas, Visitadores, Resumen. **Sin `rut_paciente` ni `nombre_paciente`.**

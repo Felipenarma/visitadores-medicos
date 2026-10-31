@@ -196,6 +196,15 @@ export const dashboardApi = {
     api.get<{ rep_id: number; rep_name: string; total: number; complete: number; pct_complete: number }[]>(
       '/dashboard/data-completeness'
     ).then(r => r.data),
+  exportRecetasPorMedico: async (desde?: string, hasta?: string) => {
+    const r = await api.get('/dashboard/recetas-por-medico/export', {
+      params: { ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) },
+      responseType: 'blob', timeout: 300000,
+    });
+    const cd = String(r.headers['content-disposition'] || '');
+    const m = cd.match(/filename="?([^";]+)"?/);
+    return { blob: r.data as Blob, filename: m ? m[1] : 'Recetas_por_medico_segun_visitador.xlsx' };
+  },
   getSalesByDoctor: (month: number, year: number, top = 20) =>
     api.get<{ doctor_name: string; rut: string; rep_name: string; units_current: number; units_prev: number; amount_current: number; amount_prev: number }[]>(
       '/dashboard/sales-by-doctor', { params: { month, year, top } }

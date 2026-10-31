@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, UserPlus, Users, Chev
 import { dashboardApi, repsApi, doctorsApi } from '../../api';
 import * as XLSX from 'xlsx';
 import CommissionsComparison from '../../components/CommissionsComparison';
+import RecetasExportButton from '../../components/RecetasExportButton';
 
 interface CategoryBreakdown {
   [key: string]: number;
@@ -419,7 +420,8 @@ export default function RepCommissions() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <RecetasExportButton />
           {/* Export button */}
           {data.length > 0 && (
             <button
