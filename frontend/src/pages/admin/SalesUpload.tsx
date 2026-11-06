@@ -44,7 +44,11 @@ export default function SalesUpload() {
       loadSummary();
       loadLastUpload();
     } catch (e: any) {
-      setError(e.response?.data?.detail || 'Error al cargar el archivo');
+      const status = e.response?.status;
+      const detail = e.response?.data?.detail;
+      if (detail) setError(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      else if (status) setError(`Error al cargar el archivo (código ${status}${typeof e.response?.data === 'string' && e.response.data.length < 200 ? `: ${e.response.data}` : ''})`);
+      else setError('El servidor no respondió (se cortó la conexión o tardó demasiado). Revisa en unos minutos en "Archivos de Ventas" si la carga quedó registrada antes de reintentar.');
     } finally {
       setUploading(false);
     }

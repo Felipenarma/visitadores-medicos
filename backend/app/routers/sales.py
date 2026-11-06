@@ -232,8 +232,29 @@ async def upload_consolidado(
     file: UploadFile = File(...),
     ref_month: Optional[int] = Form(None),
     ref_year: Optional[int] = Form(None),
-    cap_dates: Optional[str] = Form(None),  # "true" para limitar fechas al mes de referencia
+    cap_dates: Optional[str] = Form(None),
     db: Session = Depends(get_db)
+):
+    """Carga el archivo consolidado de ventas. Si algo falla, devuelve el motivo en `detail`
+    (en vez de un 500 sin explicación) para poder diagnosticarlo desde la pantalla."""
+    import logging, traceback
+    try:
+        return await _upload_consolidado_impl(background_tasks, file, ref_month, ref_year, cap_dates, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.getLogger("sales").error("upload-consolidado falló:\n%s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error procesando el archivo: {type(e).__name__}: {str(e)[:400]}")
+
+
+async def _upload_consolidado_impl(
+    background_tasks: BackgroundTasks,
+    file: UploadFile,
+    ref_month: Optional[int],
+    ref_year: Optional[int],
+    cap_dates: Optional[str],
+    db: Session,
 ):
     """Carga el archivo consolidado de ventas con RUT doctor/paciente y categoría."""
     if not file.filename:
