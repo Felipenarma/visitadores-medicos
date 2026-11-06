@@ -50,6 +50,7 @@ def run_migrations():
         "ALTER TABLE doctor_completeness_snapshots ADD COLUMN IF NOT EXISTS with_specialty INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS info_completed_at TIMESTAMP",
         "ALTER TABLE visits ADD COLUMN IF NOT EXISTS origin VARCHAR(30)",
+        "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS has_commission BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     for stmt in migrations:
         try:

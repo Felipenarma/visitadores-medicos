@@ -45,6 +45,31 @@ export interface Doctor {
   visits_count?: number;
   has_sales?: boolean;
   created_from?: string;
+  has_commission?: boolean;
+}
+
+export interface DoctorCommissionRow {
+  doctor_id: number;
+  name: string;
+  rut?: string | null;
+  specialty?: string | null;
+  medical_center?: string | null;
+  rep_name?: string | null;
+  business_line?: string | null;
+  is_active: boolean;
+  units: number;
+  gross_amount: number;
+  net_amount: number;
+  prev_units: number;
+  prev_net_amount: number;
+  change_pct: number | null;
+}
+
+export interface DoctorCommissionsResponse {
+  month: number;
+  year: number;
+  doctors: DoctorCommissionRow[];
+  totals: { doctors: number; with_sales: number; units: number; net_amount: number; gross_amount: number; prev_net_amount: number };
 }
 
 export interface Visit {

@@ -316,6 +316,14 @@ Se ejecuta en background automáticamente tras cada `upload-consolidado`.
 
 ---
 
+## Comisiones de médicos (`doctor_commissions.py`)
+
+- `Doctor.has_commission` (bool, migración en caliente). Se marca en la ficha del médico (Admin → Médicos, "Tiene comisión") o desde Admin → Comisiones Médicos ("Agregar médico"). El visitador no lo ve ni lo edita.
+- `GET /api/dashboard/doctor-commissions?month=&year=`: médicos con comisión, recetas, venta neta/bruta del mes y del mes anterior. Ventas sumadas por RUT normalizado (incluye fichas duplicadas/inactivas y ventas sin ficha con ese RUT); una fila por RUT.
+- UI: `pages/admin/DoctorCommissions.tsx` (`/admin/doctor-commissions`), con navegación por mes, totales, quitar/agregar y export Excel.
+
+---
+
 ## Respaldos semanales (`backup.py`, `/api/backups`)
 
 - Cada lunes 6:00 Chile (APScheduler) se genera un Excel: hojas Medicos (todos los campos + totales de venta), Ventas (historial completo), Ventas_por_medico_mes, Visitas, Visitadores, Resumen. **Sin `rut_paciente` ni `nombre_paciente`.**

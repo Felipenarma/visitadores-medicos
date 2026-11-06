@@ -29,6 +29,7 @@ import Mike from './pages/admin/Mike';
 import LocationMap from './pages/admin/LocationMap';
 import LiveTracking from './pages/admin/LiveTracking';
 import Backups from './pages/admin/Backups';
+import DoctorCommissions from './pages/admin/DoctorCommissions';
 
 function PrivateRoute({ children, role }: { children: React.ReactNode; role?: 'admin' | 'rep' }) {
   const { user } = useAuth();
@@ -71,6 +72,7 @@ function AppRoutes() {
               <Route path="locations" element={<LocationMap />} />
               <Route path="live-tracking" element={<LiveTracking />} />
               <Route path="backups" element={<Backups />} />
+              <Route path="doctor-commissions" element={<DoctorCommissions />} />
             </Routes>
           </Layout>
         </PrivateRoute>

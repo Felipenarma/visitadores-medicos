@@ -1728,3 +1728,15 @@ def export_recetas_por_medico(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/doctor-commissions")
+def get_doctor_commissions(
+    month: int = Query(default=None, ge=1, le=12),
+    year: int = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Médicos con comisión (has_commission) y su venta neta del mes (vs mes anterior)."""
+    from ..doctor_commissions import doctor_commissions
+    now = datetime.utcnow()
+    return doctor_commissions(db, year or now.year, month or now.month)

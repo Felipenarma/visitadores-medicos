@@ -75,6 +75,7 @@ class DoctorBase(BaseModel):
     city: Optional[str] = None
     commune: Optional[str] = None
     created_from: Optional[str] = None
+    has_commission: Optional[bool] = False
 
 
 class DoctorCreate(DoctorBase):

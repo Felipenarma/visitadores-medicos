@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type {
   BusinessLine, MedicalRep, Doctor, Visit, Sale, SalesSummaryItem,
-  DashboardStats, TodayVisit, RepStats, RepDetail, AgentMessage, RepDataCompleteness, RepSalesTrendPoint
+  DashboardStats, TodayVisit, RepStats, RepDetail, AgentMessage, RepDataCompleteness, RepSalesTrendPoint, DoctorCommissionsResponse
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -198,6 +198,8 @@ export const dashboardApi = {
     api.get<{ rep_id: number; rep_name: string; total: number; complete: number; pct_complete: number }[]>(
       '/dashboard/data-completeness'
     ).then(r => r.data),
+  getDoctorCommissions: (month: number, year: number) =>
+    api.get<DoctorCommissionsResponse>('/dashboard/doctor-commissions', { params: { month, year } }).then(r => r.data),
   exportRecetasPorMedico: async (desde?: string, hasta?: string) => {
     const r = await api.get('/dashboard/recetas-por-medico/export', {
       params: { ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) },

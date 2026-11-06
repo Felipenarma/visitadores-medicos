@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Briefcase, Upload, TrendingUp,
   Calendar, Bot, Activity, LogOut, Stethoscope, BookOpen, Menu, X, QrCode,
-  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search, MapPin, Radar, Download, DatabaseBackup
+  BarChart2, UserPlus, DollarSign, FolderOpen, Sparkles, Search, MapPin, Radar, Download, DatabaseBackup, BadgePercent
 } from 'lucide-react';
 import { useInstallPrompt } from '../utils/pwaInstall';
 import InstallAppModal from './InstallAppModal';
@@ -29,6 +29,7 @@ const adminNav: NavItem[] = [
   { to: '/admin/sales-ranking', icon: <BarChart2 size={20} />, label: 'Ranking Médicos' },
   { to: '/admin/new-doctors', icon: <UserPlus size={20} />, label: 'Médicos Nuevos' },
   { to: '/admin/commissions', icon: <DollarSign size={20} />, label: 'Comisiones' },
+  { to: '/admin/doctor-commissions', icon: <BadgePercent size={20} />, label: 'Comisiones Médicos' },
   { to: '/admin/locations', icon: <MapPin size={20} />, label: 'Mapa de Actividad' },
   { to: '/admin/live-tracking', icon: <Radar size={20} />, label: 'Seguimiento en Vivo' },
   { to: '/admin/mike', icon: <Sparkles size={20} />, label: 'Mike (IA Admin)' },

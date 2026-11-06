@@ -503,6 +503,11 @@ export default function Doctors() {
                         <td className="py-3 px-4">
                           <div className="font-medium text-gray-900 group-hover:text-blue-700 flex items-center gap-1.5">
                             {doc.name}
+                            {doc.has_commission && (
+                              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full shrink-0" title="Médico con comisión">
+                                Comisión
+                              </span>
+                            )}
                             {doc.created_from === 'auto_import' && (
                               <span
                                 className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0"
@@ -784,6 +789,18 @@ export default function Doctors() {
             <div className="col-span-2">
               <label className="label">Productos que prescribe</label>
               <input className="input" value={form.prescribes_products || ''} onChange={e => setForm({ ...form, prescribes_products: e.target.value })} placeholder="Producto A, Producto B..." />
+            </div>
+            <div className="col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={!!form.has_commission}
+                  onChange={e => setForm({ ...form, has_commission: e.target.checked })}
+                  className="w-4 h-4 accent-emerald-600"
+                />
+                <span className="text-sm font-medium text-gray-700">Tiene comisión</span>
+                <span className="text-xs text-gray-400">(aparece en Comisiones Médicos)</span>
+              </label>
             </div>
             <div className="col-span-2">
               <label className="label">Notas</label>

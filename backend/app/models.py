@@ -65,6 +65,8 @@ class Doctor(Base):
     # Momento en que el médico quedó con teléfono+correo+centro+especialidad tras una edición.
     # 2000-01-01 = ya estaba completo antes de que existiera este seguimiento.
     info_completed_at = Column(DateTime, nullable=True)
+    # Médico con comisión por sus recetas (se ve en Admin → Comisiones Médicos)
+    has_commission = Column(Boolean, default=False, nullable=False, server_default="false")
 
     business_line = relationship("BusinessLine", back_populates="doctors")
     rep = relationship("MedicalRep", back_populates="doctors")
