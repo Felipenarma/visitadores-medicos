@@ -50,8 +50,11 @@ def sales_goal(db: Session, rep_id: int, year: int, month: int, now: Optional[da
     py, pm = _shift(year, month, -1)
     data = rep_monthly_sales(db, rep_id, (py, pm), (year, month))
     cur_gross, cur_units = data.get((year, month), (0.0, 0))
-    prev_gross, _ = data.get((py, pm), (0.0, 0))
+    prev_gross, prev_units = data.get((py, pm), (0.0, 0))
     cur_net, prev_net = net(cur_gross), net(prev_gross)
+    # Ticket promedio = venta neta / recetas
+    ticket = round(cur_net / cur_units) if cur_units else None
+    prev_ticket = round(prev_net / prev_units) if prev_units else None
     goal = round(prev_net * (1 + SALES_GROWTH_TARGET), 0) if prev_net > 0 else None
 
     days_in_month = monthrange(year, month)[1]
@@ -72,6 +75,10 @@ def sales_goal(db: Session, rep_id: int, year: int, month: int, now: Optional[da
         "net_amount": cur_net,
         "gross_amount": round(cur_gross, 0),
         "units": cur_units,
+        "prev_units": prev_units,
+        "avg_ticket_net": ticket,
+        "prev_avg_ticket_net": prev_ticket,
+        "avg_ticket_change_pct": round(100 * (ticket - prev_ticket) / prev_ticket, 1) if ticket and prev_ticket else None,
         "prev_net_amount": prev_net,
         "growth_target_pct": round(SALES_GROWTH_TARGET * 100, 1),
         "goal_net_amount": goal,
@@ -100,6 +107,7 @@ def net_sales_trend(db: Session, rep_id: int, months: int, now: Optional[datetim
         out.append({
             "month": m, "year": y, "label": f"{labels[m - 1]} {str(y)[2:]}",
             "units": units, "total_amount": round(gross, 0), "net_amount": net(gross),
+            "avg_ticket_net": round(net(gross) / units) if units else None,
             "goal_net_amount": round(pnet * (1 + SALES_GROWTH_TARGET), 0) if pnet > 0 else None,
         })
     return out

@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { FIELD_LABELS, hasInfo, doctorMissingFields } from '../../utils/doctorInfo';
+import AvgTicket from '../../components/AvgTicket';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -1267,6 +1268,15 @@ export default function RepDetail() {
             </div>
           </div>
           {data.sales_goal && <SalesGoalRow g={data.sales_goal} monthLabel={monthLabel} />}
+          {data.sales_goal && (
+            <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <TrendingUp size={15} className="text-indigo-500" /> Ticket promedio {monthLabel}
+                <span className="text-xs font-normal text-gray-400">(venta neta / receta)</span>
+              </span>
+              <AvgTicket g={data.sales_goal} />
+            </div>
+          )}
           </div>
         );
       })()}
@@ -1298,11 +1308,13 @@ export default function RepDetail() {
                 <LineChart data={salesTrend} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => fmtMillions(v)} width={56} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickFormatter={(v: number) => fmtMillions(v)} width={56} />
+                  <YAxis yAxisId="ticket" orientation="right" tick={{ fontSize: 10, fill: '#6366f1' }} tickFormatter={(v: number) => fmtMillions(v)} width={48} />
                   <Tooltip formatter={(value: number, name: string) => [fmtAmount(value), name]} />
                   <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="net_amount" name="Venta neta" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="goal_net_amount" name={`Meta (+15% mes anterior)`} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                  <Line yAxisId="left" type="monotone" dataKey="net_amount" name="Venta neta" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="avg_ticket_net" name="Ticket promedio" stroke="#6366f1" strokeWidth={1.5} dot={{ r: 2 }} yAxisId="ticket" />
+                  <Line yAxisId="left" type="monotone" dataKey="goal_net_amount" name={`Meta (+15% mes anterior)`} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
               {salesTrend.length > 0 && (

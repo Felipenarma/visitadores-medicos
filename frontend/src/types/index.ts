@@ -233,6 +233,10 @@ export interface RepSalesGoal {
   net_amount: number;
   gross_amount: number;
   units: number;
+  prev_units?: number;
+  avg_ticket_net?: number | null;
+  prev_avg_ticket_net?: number | null;
+  avg_ticket_change_pct?: number | null;
   prev_net_amount: number;
   growth_target_pct: number;
   goal_net_amount: number | null;
@@ -253,6 +257,7 @@ export interface RepSalesTrendPoint {
   total_amount: number;
   net_amount: number;
   goal_net_amount: number | null;
+  avg_ticket_net?: number | null;
 }
 
 export interface AgentMessage {

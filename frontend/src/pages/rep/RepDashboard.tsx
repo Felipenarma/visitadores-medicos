@@ -3,6 +3,7 @@ import { Calendar, CheckCircle, XCircle, Users, Clock, TrendingUp, AlertCircle, 
 import StatCard from '../../components/StatCard';
 import RepInfoGoalCard from '../../components/RepInfoGoalCard';
 import LowSalesBadge from '../../components/LowSalesBadge';
+import AvgTicket from '../../components/AvgTicket';
 import { missingLabel } from '../../utils/doctorInfo';
 import { dashboardApi, visitsApi, repsApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -215,6 +216,28 @@ export default function RepDashboard() {
         <StatCard title={isCurrentMonth ? 'Esta Semana' : 'Completadas'} value={isCurrentMonth ? (stats?.visits_this_week ?? 0) : monthCompleted} icon={<Clock size={24} />} color="orange" />
         <StatCard title="Tasa de Cumplimiento" value={`${completionPct}%`} icon={<CheckCircle size={24} />} color="green" />
       </div>
+
+      {/* Mis ventas del mes: venta neta y ticket promedio */}
+      {monthDetail?.sales_goal && monthDetail.sales_goal.units > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <p className="text-sm text-gray-500 mb-1">Mi venta neta del mes (sin IVA)</p>
+            <p className="text-2xl font-bold text-emerald-700">
+              {monthDetail.sales_goal.net_amount.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })}
+            </p>
+            {monthDetail.sales_goal.goal_net_amount != null && (
+              <p className="text-xs text-gray-500 mt-1">
+                Meta: {monthDetail.sales_goal.goal_net_amount.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })}
+                {' '}({Math.round((monthDetail.sales_goal.net_amount / monthDetail.sales_goal.goal_net_amount) * 100)}%)
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">Mi ticket promedio (venta neta por receta)</p>
+            <AvgTicket g={monthDetail.sales_goal} compact />
+          </div>
+        </div>
+      )}
 
       {/* Progreso mensual */}
       {(monthTotal > 0 || targetVisits > 0) && (

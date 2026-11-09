@@ -28,6 +28,8 @@ interface RepCommissionItem {
   new_doctors_count: number;
   total_amount: number;
   sales_count: number;
+  net_amount?: number;
+  avg_ticket_net?: number | null;
   categories: CategoryBreakdown;
   doctors_detail: DoctorDetail[];
 }
@@ -517,6 +519,7 @@ export default function RepCommissions() {
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Visitador</th>
                     <th className="text-right px-4 py-2.5 text-gray-500 font-medium">Monto total</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Unidades</th>
+                    <th className="text-right px-4 py-2.5 text-gray-500 font-medium" title="Venta neta (sin IVA) / recetas">Ticket prom. neto</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos activos</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos nuevos</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium hidden md:table-cell">Vs. mes anterior</th>
@@ -530,6 +533,7 @@ export default function RepCommissions() {
                       <td className="px-4 py-3 font-semibold text-gray-900">{item.rep_name}</td>
                       <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(item.total_amount)}</td>
                       <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{item.sales_count}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-indigo-700">{item.avg_ticket_net != null ? formatCLP(item.avg_ticket_net) : '—'}</td>
                       <td className="px-4 py-3 text-center">{item.doctors_with_sales}</td>
                       <td className="px-4 py-3 text-center">
                         {item.new_doctors_count > 0 ? (
@@ -565,6 +569,7 @@ export default function RepCommissions() {
                       <td className="px-4 py-3 font-semibold text-amber-700">Sin visitador</td>
                       <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(unassignedData.total_amount)}</td>
                       <td className="px-4 py-3 text-center font-bold text-amber-700">{unassignedData.sales_count}</td>
+                      <td className="px-4 py-3 text-right text-amber-700">{unassignedData.avg_ticket_net != null ? formatCLP(unassignedData.avg_ticket_net) : '—'}</td>
                       <td className="px-4 py-3 text-center text-amber-600">{unassignedData.doctors_with_sales}</td>
                       <td className="px-4 py-3 text-center"><span className="text-gray-300">—</span></td>
                       <td className="px-4 py-3 hidden md:table-cell"></td>
@@ -579,6 +584,9 @@ export default function RepCommissions() {
                     <td colSpan={2} className="px-4 py-3 font-bold text-gray-700">TOTAL</td>
                     <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(totalAmount)}</td>
                     <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{totalUnits}</td>
+                    <td className="px-4 py-3 text-right font-bold text-indigo-700" title="Ticket promedio de todo el equipo">
+                      {totalUnits > 0 ? formatCLP(Math.round(data.reduce((s, r) => s + (r.net_amount ?? r.total_amount / 1.19), 0) / totalUnits)) : '—'}
+                    </td>
                     <td className="px-4 py-3 text-center font-bold text-gray-700">—</td>
                     <td className="px-4 py-3 text-center font-bold text-green-700">{totalNewDoctors}</td>
                     <td className="px-4 py-3 hidden md:table-cell"></td>
