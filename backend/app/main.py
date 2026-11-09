@@ -51,6 +51,10 @@ def run_migrations():
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS info_completed_at TIMESTAMP",
         "ALTER TABLE visits ADD COLUMN IF NOT EXISTS origin VARCHAR(30)",
         "ALTER TABLE doctors ADD COLUMN IF NOT EXISTS has_commission BOOLEAN NOT NULL DEFAULT FALSE",
+        # RUT/pasaporte de hasta 50 caracteres (antes 20: un pasaporte extranjero hacía fallar la carga de ventas)
+        "ALTER TABLE sales ALTER COLUMN rut_paciente TYPE VARCHAR(50)",
+        "ALTER TABLE sales ALTER COLUMN rut_doctor TYPE VARCHAR(50)",
+        "ALTER TABLE doctors ALTER COLUMN rut TYPE VARCHAR(50)",
     ]
     for stmt in migrations:
         try:

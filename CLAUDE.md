@@ -423,6 +423,7 @@ Crea 3 reps, 10 médicos y visitas para los últimos 3 meses y próximos 3 meses
 - **_export_store**: dict en RAM — los tokens de Excel se pierden si Railway reinicia el servidor. Si falla la descarga, pedir a Mike que regenere el Excel
 - **Búsqueda de RUT**: normalización Python con `re.sub(r'[\.\-\s]', '', rut).upper()` — funciona con y sin guión/puntos
 - **pypdf**: instalado en Railway para extracción de PDFs página por página
+- **RUT / pasaporte**: columnas `doctors.rut`, `sales.rut_doctor`, `sales.rut_paciente` son VARCHAR(50) (antes 20; un pasaporte tipo "A74161639 (Estados Unidos)" rompía la carga). `models.py` recorta con `@validates` cualquier valor que exceda el largo de la columna.
 
 ---
 

@@ -1,5 +1,15 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, ForeignKey, Text, LargeBinary, Table, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
+
+RUT_MAX = 50  # RUT o pasaporte (ej. 'A74161639 (Estados Unidos)')
+
+
+def _fit(value, size=RUT_MAX):
+    """Recorta textos que superan el largo de la columna para que una fila no haga fallar toda la carga."""
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value[:size] if len(value) > size else value
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -46,7 +56,7 @@ class Doctor(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(150), nullable=False)
-    rut = Column(String(20), nullable=True, index=True)
+    rut = Column(String(RUT_MAX), nullable=True, index=True)
     specialty = Column(String(100), nullable=True)
     medical_center = Column(String(200), nullable=True)
     city = Column(String(100), nullable=True)
@@ -70,6 +80,10 @@ class Doctor(Base):
 
     business_line = relationship("BusinessLine", back_populates="doctors")
     rep = relationship("MedicalRep", back_populates="doctors")
+
+    @validates("rut")
+    def _v_rut(self, key, value):
+        return _fit(value)
     visits = relationship("Visit", back_populates="doctor")
     sales = relationship("Sale", back_populates="doctor")
 
@@ -114,8 +128,8 @@ class Sale(Base):
     sale_date = Column(DateTime, nullable=True)
     upload_id = Column(Integer, ForeignKey("sales_uploads.id"), nullable=True)
     doctor_name_raw = Column(String(200), nullable=True)
-    rut_doctor = Column(String(20), nullable=True, index=True)
-    rut_paciente = Column(String(20), nullable=True)
+    rut_doctor = Column(String(RUT_MAX), nullable=True, index=True)
+    rut_paciente = Column(String(RUT_MAX), nullable=True)
     nombre_paciente = Column(String(200), nullable=True)
     categoria = Column(String(200), nullable=True)
     external_id = Column(String(200), nullable=True, unique=True, index=True)
@@ -123,6 +137,14 @@ class Sale(Base):
 
     doctor = relationship("Doctor", back_populates="sales")
     upload = relationship("SalesUpload", back_populates="sales")
+
+    @validates("rut_doctor", "rut_paciente")
+    def _v_ruts(self, key, value):
+        return _fit(value)
+
+    @validates("product", "doctor_name_raw", "nombre_paciente", "categoria", "external_id")
+    def _v_texts(self, key, value):
+        return _fit(value, 200)
 
 
 class CardexUpload(Base):
