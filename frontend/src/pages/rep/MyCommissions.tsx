@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import AvgTicket from '../../components/AvgTicket';
+import type { RepSalesGoal } from '../../types';
 import { ChevronLeft, ChevronRight, BarChart2, TrendingUp, TrendingDown, UserPlus, Users, ChevronDown, ChevronUp, DollarSign, AlertTriangle, Minus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -56,6 +58,7 @@ export default function MyCommissions() {
   const [comparison, setComparison] = useState<Awaited<ReturnType<typeof dashboardApi.getCommissionsComparison>> | null>(null);
   const [doctorComparison, setDoctorComparison] = useState<Awaited<ReturnType<typeof dashboardApi.getRepDoctorComparison>> | null>(null);
   const [showDoctorComparison, setShowDoctorComparison] = useState(true);
+  const [salesGoal, setSalesGoal] = useState<RepSalesGoal | null>(null);
 
   const now = new Date();
   const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
@@ -76,6 +79,15 @@ export default function MyCommissions() {
       .then(data => setTrend(data.map(d => ({ label: d.label, units: d.units }))))
       .catch(() => {});
   }, [user?.rep_id]);
+
+  // Ticket promedio del mes (venta neta / receta) y su comparación con el mes anterior
+  useEffect(() => {
+    if (!user?.rep_id) return;
+    setSalesGoal(null);
+    dashboardApi.getRepDetail(user.rep_id, month, year)
+      .then(d => setSalesGoal(d.sales_goal ?? null))
+      .catch(() => setSalesGoal(null));
+  }, [month, year, user?.rep_id]);
 
   useEffect(() => {
     if (!user?.rep_id) return;
@@ -144,7 +156,7 @@ export default function MyCommissions() {
       ) : (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="rounded-xl p-5 text-white shadow-sm" style={{ backgroundColor: '#0F1E2D' }}>
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp size={16} className="opacity-70" />
@@ -159,6 +171,18 @@ export default function MyCommissions() {
               </div>
               <p className="text-2xl font-bold text-emerald-600">{fmt(data.total_amount / 1.19)}</p>
               <p className="text-xs text-gray-400 mt-0.5">Bruta: {fmt(data.total_amount)}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp size={16} className="text-indigo-500" />
+                <p className="text-sm text-gray-500">Ticket promedio</p>
+              </div>
+              {salesGoal ? (
+                <AvgTicket g={salesGoal} compact />
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">{data.sales_count > 0 ? fmt(data.total_amount / 1.19 / data.sales_count) : '—'}</p>
+              )}
+              <p className="text-[11px] text-gray-400 mt-0.5">Venta neta por receta</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
