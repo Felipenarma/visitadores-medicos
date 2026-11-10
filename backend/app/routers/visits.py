@@ -262,3 +262,11 @@ def schedule_low_sales(
     from ..low_sales import schedule_low_sales_visits
     r = schedule_low_sales_visits(db, rep_id=rep_id, dry_run=dry_run)
     return r
+
+
+@router.post("/remove-duplicate-auto-visits")
+def remove_duplicate_auto(dry_run: bool = Query(False), db: Session = Depends(get_db)):
+    """Elimina visitas automáticas por venta baja que quedaron repetidas para un mismo médico.
+    No toca visitas manuales. También corre sola antes de cada revisión de venta baja."""
+    from ..low_sales import remove_duplicate_auto_visits
+    return remove_duplicate_auto_visits(db, dry_run=dry_run)
