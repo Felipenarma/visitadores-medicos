@@ -26,9 +26,10 @@ export interface CommissionsComparisonProps {
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-const fmtCLP = (v: number) => '$' + Math.round(v / 1.19).toLocaleString('es-CL');
+// Los montos ya vienen netos (sin IVA) desde el backend
+const fmtCLP = (v: number) => '$' + Math.round(v).toLocaleString('es-CL');
 const fmtCLPShort = (v: number) => {
-  const n = v / 1.19;
+  const n = v;
   return n >= 1000000 ? '$' + (n / 1000000).toFixed(1) + 'M' : '$' + Math.round(n / 1000) + 'K';
 };
 
@@ -109,8 +110,8 @@ export default function CommissionsComparison({
           <p className="text-xs text-gray-400 mt-1 mb-2">Mismo tramo mes anterior: {fmtCLP(previous.total_amount)}</p>
           <MiniComparisonChart
             label="Venta neta"
-            currentValue={current.total_amount / 1.19}
-            previousValue={previous.total_amount / 1.19}
+            currentValue={current.total_amount}
+            previousValue={previous.total_amount}
             formatter={(v) => '$' + Math.round(v).toLocaleString('es-CL')}
           />
         </div>

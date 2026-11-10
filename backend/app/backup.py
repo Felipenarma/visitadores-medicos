@@ -43,7 +43,7 @@ def build_backup_xlsx(db: Session) -> tuple:
     # Ventas agregadas por médico (para la hoja Médicos)
     agg = dict()
     for did, n, tot, first, last in db.query(
-        Sale.doctor_id, func.count(Sale.id), func.sum(Sale.amount), func.min(Sale.sale_date), func.max(Sale.sale_date)
+        Sale.doctor_id, func.count(Sale.id), func.sum(Sale.gross_amount), func.min(Sale.sale_date), func.max(Sale.sale_date)
     ).filter(Sale.doctor_id.isnot(None)).group_by(Sale.doctor_id).all():
         agg[did] = (n, float(tot or 0), first, last)
 
@@ -62,11 +62,11 @@ def build_backup_xlsx(db: Session) -> tuple:
 
     ws = wb.create_sheet("Ventas")
     ws.append(["ID", "Fecha venta", "Médico ID", "Médico", "RUT médico", "Nombre médico (archivo)",
-               "Producto", "Categoría", "Monto", "ID externo", "Carga ID", "Fecha registro"])
+               "Producto", "Categoría", "Monto con IVA", "Venta neta (sin IVA)", "ID externo", "Carga ID", "Fecha registro"])
     n_sales = 0
     for s in db.query(Sale).order_by(Sale.sale_date, Sale.id).yield_per(2000):
         ws.append([s.id, _fmt(s.sale_date), s.doctor_id, doc_names.get(s.doctor_id), s.rut_doctor,
-                   s.doctor_name_raw, s.product, s.categoria, s.amount, s.external_id, s.upload_id,
+                   s.doctor_name_raw, s.product, s.categoria, s.gross_amount, round(float(s.gross_amount or 0) / 1.19), s.external_id, s.upload_id,
                    _fmt(s.created_at)])
         n_sales += 1
     counts["ventas"] = n_sales
@@ -74,7 +74,7 @@ def build_backup_xlsx(db: Session) -> tuple:
     ws = wb.create_sheet("Ventas_por_medico_mes")
     ws.append(["Médico ID", "Médico", "Año", "Mes", "Unidades", "Monto"])
     rows = db.query(Sale.doctor_id, extract("year", Sale.sale_date), extract("month", Sale.sale_date),
-                    func.count(Sale.id), func.sum(Sale.amount)) \
+                    func.count(Sale.id), func.sum(Sale.gross_amount)) \
         .filter(Sale.doctor_id.isnot(None), Sale.sale_date.isnot(None)) \
         .group_by(Sale.doctor_id, extract("year", Sale.sale_date), extract("month", Sale.sale_date)) \
         .order_by(Sale.doctor_id, extract("year", Sale.sale_date), extract("month", Sale.sale_date)).all()

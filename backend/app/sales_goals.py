@@ -26,7 +26,7 @@ def rep_monthly_sales(db: Session, rep_id: int, start: tuple, end: tuple) -> dic
     p_start = datetime(start[0], start[1], 1)
     p_end = datetime(end[0], end[1], monthrange(end[0], end[1])[1], 23, 59, 59)
     y_, m_ = extract("year", Sale.sale_date), extract("month", Sale.sale_date)
-    rows = db.query(y_, m_, func.coalesce(func.sum(Sale.amount), 0), func.count(Sale.id)).filter(
+    rows = db.query(y_, m_, func.coalesce(func.sum(Sale.gross_amount), 0), func.count(Sale.id)).filter(
         Sale.doctor_id.in_(ids), Sale.sale_date >= p_start, Sale.sale_date <= p_end,
     ).group_by(y_, m_).all()
     out = {}

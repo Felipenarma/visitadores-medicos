@@ -282,9 +282,8 @@ function CommissionsSection({ commissions, monthLabel }: { commissions?: RepComm
 
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 bg-gray-50">
         <div className="flex flex-col items-center justify-center py-4 px-2">
-          <span className="text-xl font-bold text-emerald-700">{fmtAmount(commissions.net_amount ?? commissions.total_amount / 1.19)}</span>
+          <span className="text-xl font-bold text-emerald-700">{fmtAmount(commissions.net_amount ?? commissions.total_amount)}</span>
           <span className="text-xs text-gray-500 mt-0.5 text-center">Venta neta (sin IVA)</span>
-          <span className="text-[11px] text-gray-400 mt-0.5">Bruto c/IVA: {fmtAmount(commissions.total_amount)}</span>
         </div>
         <div className="flex flex-col items-center justify-center py-4 px-2">
           <span className="text-xl font-bold text-gray-800">{commissions.sales_count}</span>
@@ -1059,7 +1058,7 @@ export default function RepDetail() {
     if (!data) return;
     const ranking = data.doctor_ranking || [];
     const rows = [
-      ['Médico', 'RUT', 'Especialidad', 'Unidades', 'Monto ($)', 'Categorías'],
+      ['Médico', 'RUT', 'Especialidad', 'Unidades', 'Venta neta ($)', 'Categorías'],
       ...ranking.map(d => [
         d.doctor_name, d.rut || '', d.specialty || '', d.units, d.total_amount,
         (d.categorias || []).join(', '),

@@ -72,11 +72,11 @@ export default function DoctorCommissions() {
   const exportExcel = () => {
     if (!data) return;
     const aoa = [
-      ['Médico', 'RUT', 'Especialidad', 'Centro médico', 'Visitador', 'Línea de negocio', 'Recetas', 'Venta neta (sin IVA)', 'Venta con IVA', 'Venta neta mes anterior', 'Variación %'],
+      ['Médico', 'RUT', 'Especialidad', 'Centro médico', 'Visitador', 'Línea de negocio', 'Recetas', 'Venta neta (sin IVA)', 'Venta neta mes anterior', 'Variación %'],
       ...data.doctors.map(r => [r.name, r.rut || '', r.specialty || '', r.medical_center || '', r.rep_name || 'Sin visitador', r.business_line || '',
-        r.units, r.net_amount, r.gross_amount, r.prev_net_amount, r.change_pct ?? '']),
+        r.units, r.net_amount, r.prev_net_amount, r.change_pct ?? '']),
       [],
-      ['TOTAL', '', '', '', '', '', data.totals.units, data.totals.net_amount, data.totals.gross_amount, data.totals.prev_net_amount, ''],
+      ['TOTAL', '', '', '', '', '', data.totals.units, data.totals.net_amount, data.totals.prev_net_amount, ''],
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 22 }, { wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 9 }, { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 11 }];
@@ -186,8 +186,9 @@ export default function DoctorCommissions() {
             <p className="text-2xl font-bold text-gray-800 mt-1">{t.units.toLocaleString('es-CL')}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">Venta con IVA</p>
-            <p className="text-2xl font-bold text-gray-500 mt-1">{clp(t.gross_amount)}</p>
+            <p className="text-xs text-gray-500">Ticket promedio</p>
+            <p className="text-2xl font-bold text-gray-800 mt-1">{t.units > 0 ? clp(Math.round(t.net_amount / t.units)) : '—'}</p>
+            <p className="text-xs text-gray-400 mt-1">Venta neta por receta</p>
           </div>
         </div>
       )}
@@ -264,7 +265,7 @@ export default function DoctorCommissions() {
         )}
       </div>
       <p className="text-xs text-gray-400">
-        La venta de cada médico suma todas sus fichas con el mismo RUT (incluidas duplicadas o inactivas). Venta neta = monto con IVA / 1,19.
+        La venta de cada médico suma todas sus fichas con el mismo RUT (incluidas duplicadas o inactivas). Todos los montos son venta neta (sin IVA).
       </p>
     </div>
   );

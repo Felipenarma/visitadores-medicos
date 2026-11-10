@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/mike", tags=["mike"])
 _export_store: dict = {}
 
 MIKE_SYSTEM_PROMPT = """Eres Mike, el asistente de IA ejecutivo del laboratorio Narma para el administrador Felipe.
+IMPORTANTE: todos los montos de venta que entregan tus herramientas son VENTAS NETAS (sin IVA). Infórmalos siempre como "venta neta".
 
 Tu rol principal es:
 - Analizar y gestionar el desempeño de los visitadores médicos (visitas, tasa de cumplimiento, comportamiento, tendencias)

@@ -104,7 +104,7 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
       </div>
 
       <div className="px-4 pb-3 pt-3 flex gap-2 flex-wrap">
-        <StatPill label="Monto total" value={formatCLPShort(item.total_amount)} color="bg-emerald-50 text-emerald-700" />
+        <StatPill label="Venta neta" value={formatCLPShort(item.total_amount)} color="bg-emerald-50 text-emerald-700" />
         <StatPill label="Unidades" value={item.sales_count} color="bg-amber-50 text-amber-700" />
         <StatPill label="Médicos" value={item.doctors_with_sales} color="bg-orange-50 text-orange-700" />
       </div>
@@ -156,7 +156,7 @@ function UnassignedCard({ item, reps, onAssigned }: { item: RepCommissionItem; r
                   <thead>
                     <tr className="bg-amber-50 border-b border-amber-100">
                       <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[240px]">Médico</th>
-                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Monto</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Venta neta</th>
                       <th className="text-center px-4 py-2 text-gray-500 font-medium">Uds.</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[200px]">Asignar visitador</th>
                     </tr>
@@ -236,7 +236,7 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
 
       {/* Stats row */}
       <div className="px-4 pb-3 flex gap-2 flex-wrap">
-        <StatPill label="Monto total" value={formatCLPShort(item.total_amount)} color="bg-emerald-50 text-emerald-700" />
+        <StatPill label="Venta neta" value={formatCLPShort(item.total_amount)} color="bg-emerald-50 text-emerald-700" />
         <StatPill label="Unidades" value={item.sales_count} color="bg-blue-50 text-blue-700" />
         <StatPill label="Médicos activos" value={item.doctors_with_sales} color="bg-indigo-50 text-indigo-700" />
         <StatPill
@@ -279,7 +279,7 @@ function RepCard({ item, rank, totalUnits }: { item: RepCommissionItem; rank: nu
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left px-4 py-2 text-gray-500 font-medium min-w-[220px]">Médico</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium hidden sm:table-cell">Especialidad</th>
-                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Monto</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Venta neta</th>
                       <th className="text-center px-4 py-2 text-gray-500 font-medium">Unidades</th>
                       <th className="text-left px-4 py-2 text-gray-500 font-medium">Categorías</th>
                     </tr>
@@ -378,7 +378,7 @@ export default function RepCommissions() {
 
     // Hoja 1: Resumen por visitador
     const resumenRows = [
-      ['Visitador', 'Monto Total ($)', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...allCats],
+      ['Visitador', 'Venta neta ($)', 'Unidades', 'Médicos con ventas', 'Médicos nuevos', ...allCats],
       ...data.map(r => [
         r.rep_name, r.total_amount, r.sales_count, r.doctors_with_sales, r.new_doctors_count,
         ...allCats.map(cat => r.categories[cat] || 0),
@@ -392,7 +392,7 @@ export default function RepCommissions() {
 
     // Hoja 2: Detalle por médico
     const detalleRows = [
-      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Monto ($)', 'Unidades', 'Médico Nuevo', ...allCats],
+      ['Visitador', 'Médico', 'RUT', 'Especialidad', 'Venta neta ($)', 'Unidades', 'Médico Nuevo', ...allCats],
       ...data.flatMap(r =>
         (r.doctors_detail || []).map(d => [
           r.rep_name, d.doctor_name, d.rut || '', d.specialty || '', d.amount, d.units,
@@ -458,7 +458,7 @@ export default function RepCommissions() {
           <div className="rounded-xl p-4 text-white shadow-sm" style={{ backgroundColor: '#0F1E2D' }}>
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp size={16} className="opacity-70" />
-              <p className="text-sm opacity-70">Venta total del mes</p>
+              <p className="text-sm opacity-70">Venta neta del mes</p>
             </div>
             <p className="text-2xl font-bold">{formatCLPShort(totalAmount)}</p>
             <p className="text-xs opacity-50 mt-0.5">{totalUnits.toLocaleString('es-CL')} unidades</p>
@@ -517,7 +517,7 @@ export default function RepCommissions() {
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">#</th>
                     <th className="text-left px-4 py-2.5 text-gray-500 font-medium">Visitador</th>
-                    <th className="text-right px-4 py-2.5 text-gray-500 font-medium">Monto total</th>
+                    <th className="text-right px-4 py-2.5 text-gray-500 font-medium">Venta neta</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Unidades</th>
                     <th className="text-right px-4 py-2.5 text-gray-500 font-medium" title="Venta neta (sin IVA) / recetas">Ticket prom. neto</th>
                     <th className="text-center px-4 py-2.5 text-gray-500 font-medium">Médicos activos</th>
@@ -585,7 +585,7 @@ export default function RepCommissions() {
                     <td className="px-4 py-3 text-right font-bold text-emerald-700">{formatCLP(totalAmount)}</td>
                     <td className="px-4 py-3 text-center font-bold" style={{ color: '#0F1E2D' }}>{totalUnits}</td>
                     <td className="px-4 py-3 text-right font-bold text-indigo-700" title="Ticket promedio de todo el equipo">
-                      {totalUnits > 0 ? formatCLP(Math.round(data.reduce((s, r) => s + (r.net_amount ?? r.total_amount / 1.19), 0) / totalUnits)) : '—'}
+                      {totalUnits > 0 ? formatCLP(Math.round(data.reduce((s, r) => s + (r.net_amount ?? r.total_amount), 0) / totalUnits)) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-gray-700">—</td>
                     <td className="px-4 py-3 text-center font-bold text-green-700">{totalNewDoctors}</td>

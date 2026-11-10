@@ -12,7 +12,7 @@ from ..schemas import AgentChatRequest, AgentChatResponse, AgentMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
-SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuticos del laboratorio Narma. Tu rol es ayudar a los visitadores médicos a:
+SYSTEM_PROMPT = """Eres un asistente de IA para visitadores médicos farmacéuticos del laboratorio Narma. Todos los montos de venta que entregan tus herramientas son ventas netas (sin IVA). Tu rol es ayudar a los visitadores médicos a:
 - Gestionar su agenda de visitas
 - Consultar información de sus médicos asignados
 - Registrar visitas realizadas

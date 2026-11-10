@@ -81,7 +81,7 @@ def build_recetas_xlsx(db: Session, desde: Optional[str] = None, hasta: Optional
     lines = {b.id: b.name for b in db.query(BusinessLine).all()}
     doctors = db.query(Doctor).filter(Doctor.is_active == True).all()  # noqa: E712
 
-    q = db.query(Sale.doctor_id, func.count(Sale.id), func.coalesce(func.sum(Sale.amount), 0)) \
+    q = db.query(Sale.doctor_id, func.count(Sale.id), func.coalesce(func.sum(Sale.gross_amount), 0)) \
         .filter(Sale.doctor_id.isnot(None))
     if start:
         q = q.filter(Sale.sale_date >= start)
@@ -121,15 +121,15 @@ def build_recetas_xlsx(db: Session, desde: Optional[str] = None, hasta: Optional
     ws.append([])
     _header(ws, ["Grupo", "Médicos que recetan", "Recetas totales", "Promedio recetas por médico",
                  "Mediana recetas por médico", "Venta neta total (CLP, sin IVA)", "Venta neta promedio por médico (CLP)",
-                 "% de las recetas", "Venta total con IVA (CLP)"], [26, 14, 14, 16, 16, 20, 20, 12, 20])
+                 "% de las recetas"], [26, 14, 14, 16, 16, 20, 20, 12])
     by_group = {g: _stats([(x["rec"], x["net"], x["gross"]) for x in prescribers if x["group"] == g]) for g in GROUPS}
     total = _stats([(x["rec"], x["net"], x["gross"]) for x in prescribers])
     for g in GROUPS + ["Total"]:
         s = total if g == "Total" else by_group[g]
         ws.append([g, s["n"], s["rec"], round(s["avg"], 1), s["med"], s["net"], round(s["avg_net"]),
-                   (s["rec"] / total["rec"]) if total["rec"] else 0, s["gross"]])
+                   (s["rec"] / total["rec"]) if total["rec"] else 0])
         r = ws.max_row
-        for col in "FGI":
+        for col in "FG":
             ws[f"{col}{r}"].number_format = CLP
         ws[f"H{r}"].number_format = "0.0%"
         if g == "Total":
@@ -147,7 +147,7 @@ def build_recetas_xlsx(db: Session, desde: Optional[str] = None, hasta: Optional
     ws = wb.create_sheet("Resumen_visitador")
     _header(ws, ["Visitador", "Grupo", "Médicos asignados (activos)", "Médicos que recetan", "Recetas totales",
                  "Promedio recetas por médico", "Mediana recetas por médico", "Venta neta total (CLP, sin IVA)",
-                 "Venta neta promedio por médico (CLP)", "Venta total con IVA (CLP)"], [24, 20, 14, 14, 14, 16, 16, 20, 20, 20])
+                 "Venta neta promedio por médico (CLP)"], [24, 20, 14, 14, 14, 16, 16, 20, 20])
     rep_rows = []
     for rep_name in sorted({x["rep"] for x in detail}):
         assigned = [x for x in detail if x["rep"] == rep_name]
@@ -155,22 +155,21 @@ def build_recetas_xlsx(db: Session, desde: Optional[str] = None, hasta: Optional
         rep_rows.append((rep_name, assigned[0]["group"], len(assigned), s))
     rep_rows.sort(key=lambda r: (r[0] == "Sin asignar", -r[3]["net"]))
     for rep_name, grp, n_assigned, s in rep_rows:
-        ws.append([rep_name, grp, n_assigned, s["n"], s["rec"], round(s["avg"], 1), s["med"], s["net"], round(s["avg_net"]), s["gross"]])
-        for col in "HIJ":
+        ws.append([rep_name, grp, n_assigned, s["n"], s["rec"], round(s["avg"], 1), s["med"], s["net"], round(s["avg_net"])])
+        for col in "HI":
             ws[f"{col}{ws.max_row}"].number_format = CLP
 
     # ── Detalle_medicos ──
     ws = wb.create_sheet("Detalle_medicos")
     _header(ws, ["ID médico", "Médico", "RUT", "Especialidad", "Visitador", "Grupo", "Línea de negocio", "Recetas",
-                 "Venta neta (CLP, sin IVA)", "Venta con IVA (CLP)", "Prescriptor"], [10, 34, 14, 22, 22, 20, 20, 10, 18, 18, 11])
+                 "Venta neta (CLP, sin IVA)", "Prescriptor"], [10, 34, 14, 22, 22, 20, 20, 10, 18, 11])
     for x in detail:
         ws.append([x["id"], x["name"], x["rut"], x["spec"], x["rep"], x["group"], x["line"], x["rec"],
-                   x["net"], x["gross"], "Sí" if x["rec"] > 0 else "No"])
+                   x["net"], "Sí" if x["rec"] > 0 else "No"])
         r = ws.max_row
         ws[f"I{r}"].number_format = CLP
-        ws[f"J{r}"].number_format = CLP
     ws.freeze_panes = "C2"
-    ws.auto_filter.ref = f"A1:K{ws.max_row}"
+    ws.auto_filter.ref = f"A1:J{ws.max_row}"
 
     # ── Notas ──
     ws = wb.create_sheet("Notas")
@@ -183,7 +182,7 @@ def build_recetas_xlsx(db: Session, desde: Optional[str] = None, hasta: Optional
         ("Período", period_label),
         ("Universo", f"{len(detail)} médicos activos; los resúmenes consideran solo los {len(prescribers)} que recetaron {scope}."),
         ("Receta", "Cada venta registrada en la app asociada a la ficha del médico."),
-        ("Venta neta", f"Monto sin IVA = monto cargado / {1 + IVA_RATE:.2f}. Los montos cargados son precio al público con IVA."),
+        ("Venta neta", "Todos los montos son venta neta (sin IVA)."),
         ("Cuentas grandes", f"Médicos asignados a {', '.join(grandes) or 'Felipe'}, que lleva las cuentas grandes."),
         ("Visitador en terreno", f"Médicos asignados a {', '.join(terreno) or '—'}."),
         ("Sin visitador", "Médicos activos con ficha en el CRM y sin visitador asignado."),

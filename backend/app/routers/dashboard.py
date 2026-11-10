@@ -914,7 +914,8 @@ def get_rep_detail(
 
     commissions = {
         "total_amount": round(commission_total_amount, 2),
-        "net_amount": round(to_net(commission_total_amount), 0),
+        "net_amount": round(commission_total_amount, 0),
+        "gross_amount": round(commission_total_amount * 1.19, 0),
         "sales_count": len(commission_sales),
         "doctors_with_sales": len(commission_doctors_with_sales_ids),
         "new_doctors_count": len(commission_new_doctors),
@@ -1207,10 +1208,11 @@ def get_rep_commissions(
 
     # Monto neto (sin IVA) para cada grupo y médico
     for g in result:
-        g["net_amount"] = round(to_net(g["total_amount"]), 0)
+        g["net_amount"] = round(g["total_amount"], 0)
+        g["gross_amount"] = round(g["total_amount"] * 1.19, 0)
         g["avg_ticket_net"] = round(g["net_amount"] / g["sales_count"]) if g.get("sales_count") else None
         for d in g.get("doctors_detail", []):
-            d["net_amount"] = round(to_net(d.get("amount", 0)), 0)
+            d["net_amount"] = round(d.get("amount", 0) or 0, 0)
 
     return result
 

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, ForeignKey, Text, LargeBinary, Table, UniqueConstraint
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import relationship, validates, column_property
+from .constants import IVA_RATE
 
 RUT_MAX = 50  # RUT o pasaporte (ej. 'A74161639 (Estados Unidos)')
 
@@ -124,7 +125,10 @@ class Sale(Base):
     id = Column(Integer, primary_key=True, index=True)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     product = Column(String(200), nullable=True)
-    amount = Column(Float, default=0.0)
+    # Columna física 'amount' = monto tal como viene en el archivo (precio público CON IVA).
+    gross_amount = Column("amount", Float, default=0.0)
+    # Sale.amount = VENTA NETA (sin IVA), solo lectura. Todo lo que se informa en la plataforma usa este valor.
+    amount = column_property(gross_amount / (1 + IVA_RATE))
     sale_date = Column(DateTime, nullable=True)
     upload_id = Column(Integer, ForeignKey("sales_uploads.id"), nullable=True)
     doctor_name_raw = Column(String(200), nullable=True)

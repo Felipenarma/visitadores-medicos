@@ -169,8 +169,7 @@ export default function MyCommissions() {
                 <DollarSign size={16} className="text-emerald-500" />
                 <p className="text-sm text-gray-500">Venta Neta (sin IVA)</p>
               </div>
-              <p className="text-2xl font-bold text-emerald-600">{fmt(data.total_amount / 1.19)}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Bruta: {fmt(data.total_amount)}</p>
+              <p className="text-2xl font-bold text-emerald-600">{fmt(data.total_amount)}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
@@ -180,7 +179,7 @@ export default function MyCommissions() {
               {salesGoal ? (
                 <AvgTicket g={salesGoal} compact />
               ) : (
-                <p className="text-2xl font-bold text-gray-900">{data.sales_count > 0 ? fmt(data.total_amount / 1.19 / data.sales_count) : '—'}</p>
+                <p className="text-2xl font-bold text-gray-900">{data.sales_count > 0 ? fmt(data.total_amount / data.sales_count) : '—'}</p>
               )}
               <p className="text-[11px] text-gray-400 mt-0.5">Venta neta por receta</p>
             </div>
@@ -368,8 +367,7 @@ export default function MyCommissions() {
                           </td>
                           <td className="px-4 py-2.5 text-center font-bold text-gray-800">{doc.units}</td>
                           <td className="px-4 py-2.5 text-right font-semibold text-emerald-600 hidden md:table-cell">
-                            {fmt(doc.amount / 1.19)}
-                            <p className="text-[10px] text-gray-400 font-normal">Bruta: {fmt(doc.amount)}</p>
+                            {fmt(doc.amount)}
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="flex flex-wrap gap-1">

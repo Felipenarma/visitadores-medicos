@@ -202,7 +202,7 @@ async def upload_sales(file: UploadFile = File(...), db: Session = Depends(get_d
                 doctor_id=doctor.id if doctor else None,
                 doctor_name_raw=doctor_name,
                 product=product,
-                amount=amount,
+                gross_amount=amount,
                 sale_date=sale_date,
                 upload_id=upload.id
             )
@@ -527,8 +527,8 @@ async def _upload_consolidado_impl(
                     if sale_date and existing_sale.sale_date != sale_date:
                         existing_sale.sale_date = sale_date
                         changed = True
-                    if amount and existing_sale.amount != amount:
-                        existing_sale.amount = amount
+                    if amount and existing_sale.gross_amount != amount:
+                        existing_sale.gross_amount = amount
                         changed = True
                     if categoria and existing_sale.categoria != categoria:
                         existing_sale.categoria = categoria
@@ -576,7 +576,7 @@ async def _upload_consolidado_impl(
                 nombre_paciente=nombre_pac,
                 product=product,
                 categoria=categoria,
-                amount=amount,
+                gross_amount=amount,
                 sale_date=sale_date,
                 upload_id=upload.id,
                 external_id=ext_id,

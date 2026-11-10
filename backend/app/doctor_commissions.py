@@ -48,7 +48,7 @@ def doctor_commissions(db: Session, year: int, month: int) -> dict:
     def totals(y: int, m: int) -> dict:
         start, end = _month_range(y, m)
         out: dict = {}
-        for s in db.query(Sale.id, Sale.doctor_id, Sale.rut_doctor, Sale.amount).filter(
+        for s in db.query(Sale.id, Sale.doctor_id, Sale.rut_doctor, Sale.gross_amount.label("amount")).filter(
             Sale.sale_date >= start, Sale.sale_date <= end
         ).all():
             key = id_to_key.get(s.doctor_id) if s.doctor_id else None

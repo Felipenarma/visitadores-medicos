@@ -139,7 +139,7 @@ def sales(
         {
             "id": s.id, "doctor_id": s.doctor_id, "rut_doctor": s.rut_doctor,
             "doctor_name_raw": s.doctor_name_raw, "product": s.product,
-            "categoria": s.categoria, "amount": s.amount, "sale_date": _iso(s.sale_date),
+            "categoria": s.categoria, "amount": s.gross_amount, "net_amount": s.amount, "sale_date": _iso(s.sale_date),
             "external_id": s.external_id, "created_at": _iso(s.created_at),
         } for s in rows
     ]}
@@ -176,10 +176,10 @@ def build_tables(db: Session) -> dict:
     ventas = [["id", "medico_id", "rut_medico", "producto", "categoria", "monto", "fecha_venta"]]
     for s in db.query(Sale).order_by(Sale.id).all():
         ventas.append([s.id, s.doctor_id, s.rut_doctor, s.product, s.categoria,
-                       s.amount, _iso(s.sale_date)])
+                       s.gross_amount, _iso(s.sale_date)])
 
     agg = (db.query(Sale.doctor_id, extract("year", Sale.sale_date), extract("month", Sale.sale_date),
-                    func.count(Sale.id), func.sum(Sale.amount))
+                    func.count(Sale.id), func.sum(Sale.gross_amount))
            .filter(Sale.doctor_id.isnot(None), Sale.sale_date.isnot(None))
            .group_by(Sale.doctor_id, extract("year", Sale.sale_date), extract("month", Sale.sale_date))
            .order_by(Sale.doctor_id).all())
