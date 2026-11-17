@@ -7,6 +7,7 @@ import re
 import io
 from datetime import datetime
 from ..database import get_db
+from ..constants import IVA_RATE
 from ..models import Sale, SalesUpload, Doctor, Visit, MedicalRep
 from ..schemas import SaleOut, SalesSummaryItem
 
@@ -353,6 +354,15 @@ async def _upload_consolidado_impl(
     # Preferir fecha_pago (fecha real de pago) sobre fecha_y_hora (creación)
     if "fecha_pago" in df.columns and "fecha_y_hora" in df.columns:
         df = df.drop(columns=["fecha_y_hora"])
+    # Formato "análisis comercial": montos vienen NETOS (sin IVA), ej. "Monto facturado (neto)".
+    # Se usa el monto facturado; si no viene, el precio de la receta. La plataforma guarda montos
+    # con IVA (y los muestra netos ÷1,19), así que estos se convierten a bruto más abajo.
+    _amounts_are_net = False
+    _net_cols = [c for c in ("monto_facturado_(neto)", "precio_receta_(neto)") if c in df.columns]
+    if _net_cols:
+        _amounts_are_net = True
+        df = df.rename(columns={_net_cols[0]: "monto_facturado"})
+        df = df.drop(columns=[c for c in _net_cols[1:]] + [c for c in df.columns if c.startswith("costo_farmacia")], errors="ignore")
     # Preferir precio_total (con descuentos aplicados) sobre precio_productos
     if "precio_total" in df.columns and "precio_productos" in df.columns:
         df = df.drop(columns=["precio_productos"])
@@ -481,6 +491,8 @@ async def _upload_consolidado_impl(
             date_raw = row.get("fecha_venta", None)
 
             amount = _parse_monto(amount_raw)
+            if _amounts_are_net and amount:
+                amount = round(amount * (1 + IVA_RATE), 4)  # neto → bruto (se mostrará neto)
 
             sale_date = None
             if date_raw:
